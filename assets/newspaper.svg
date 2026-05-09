@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000" role="img" aria-label="Newspaper Front Page artefact placeholder">
+  <defs>
+    <linearGradient id="np-paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F4ECE3"/>
+      <stop offset="100%" stop-color="#E6DACB"/>
+    </linearGradient>
+    <radialGradient id="np-floor" cx="50%" cy="100%" r="80%">
+      <stop offset="0%" stop-color="#2a2a2a"/>
+      <stop offset="100%" stop-color="#1B1B1B"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="800" height="1000" fill="url(#np-floor)"/>
+  <ellipse cx="400" cy="930" rx="280" ry="14" fill="#000" opacity="0.45"/>
+
+  <!-- broadsheet sheet -->
+  <g transform="translate(80, 60)">
+    <rect width="640" height="860" fill="url(#np-paper)" stroke="#cdbfae" stroke-width="1"/>
+
+    <!-- masthead -->
+    <text x="320" y="78" text-anchor="middle"
+          font-family="Fraunces, Georgia, serif" font-weight="600"
+          font-size="44" fill="#1B1B1B" letter-spacing="-0.01em">The Quarterly Dispatch</text>
+    <line x1="40" y1="100" x2="600" y2="100" stroke="#1B1B1B" stroke-width="1.5"/>
+    <text x="40" y="124" font-family="Inter, sans-serif" font-size="11"
+          fill="#5a4a3a" letter-spacing="0.18em">VOL. I  ·  ONE OF ONE  ·  FOR [RECIPIENT NAME]</text>
+    <text x="600" y="124" text-anchor="end" font-family="Inter, sans-serif" font-size="11"
+          fill="#5a4a3a" letter-spacing="0.18em">£0.00</text>
+    <line x1="40" y1="138" x2="600" y2="138" stroke="#1B1B1B" stroke-width="1.5"/>
+
+    <!-- headline -->
+    <text x="40" y="206" font-family="Fraunces, Georgia, serif"
+          font-weight="600" font-size="44" fill="#1B1B1B" letter-spacing="-0.01em">[Company]</text>
+    <text x="40" y="252" font-family="Fraunces, Georgia, serif"
+          font-weight="600" font-size="44" fill="#1B1B1B" letter-spacing="-0.01em">declared most</text>
+    <text x="40" y="298" font-family="Fraunces, Georgia, serif"
+          font-weight="600" font-size="44" fill="#1B1B1B" letter-spacing="-0.01em">interesting</text>
+    <text x="40" y="344" font-family="Fraunces, Georgia, serif"
+          font-weight="600" font-size="44" fill="#C4724E" letter-spacing="-0.01em">post on the desk.</text>
+
+    <!-- byline -->
+    <text x="40" y="376" font-family="Inter, sans-serif" font-size="11"
+          fill="#5a4a3a" letter-spacing="0.18em">FILED BY THE SENDER  ·  PRINTED FOR ONE DESK</text>
+
+    <!-- body columns (placeholder rules) -->
+    <g stroke="#1B1B1B" stroke-width="1" opacity="0.78">
+      <g transform="translate(40, 410)">
+        <line x1="0" y1="0" x2="170" y2="0"/>
+        <line x1="0" y1="14" x2="170" y2="14"/>
+        <line x1="0" y1="28" x2="160" y2="28"/>
+        <line x1="0" y1="42" x2="170" y2="42"/>
+        <line x1="0" y1="56" x2="150" y2="56"/>
+        <line x1="0" y1="70" x2="170" y2="70"/>
+        <line x1="0" y1="84" x2="170" y2="84"/>
+        <line x1="0" y1="98" x2="140" y2="98"/>
+        <line x1="0" y1="112" x2="170" y2="112"/>
+        <line x1="0" y1="126" x2="170" y2="126"/>
+        <line x1="0" y1="140" x2="170" y2="140"/>
+        <line x1="0" y1="154" x2="155" y2="154"/>
+        <line x1="0" y1="168" x2="170" y2="168"/>
+      </g>
+      <g transform="translate(235, 410)">
+        <line x1="0" y1="0" x2="170" y2="0"/>
+        <line x1="0" y1="14" x2="170" y2="14"/>
+        <line x1="0" y1="28" x2="158" y2="28"/>
+        <line x1="0" y1="42" x2="170" y2="42"/>
+        <line x1="0" y1="56" x2="170" y2="56"/>
+        <line x1="0" y1="70" x2="142" y2="70"/>
+        <line x1="0" y1="84" x2="170" y2="84"/>
+        <line x1="0" y1="98" x2="170" y2="98"/>
+        <line x1="0" y1="112" x2="170" y2="112"/>
+        <line x1="0" y1="126" x2="160" y2="126"/>
+        <line x1="0" y1="140" x2="170" y2="140"/>
+        <line x1="0" y1="154" x2="170" y2="154"/>
+        <line x1="0" y1="168" x2="148" y2="168"/>
+      </g>
+      <g transform="translate(430, 410)">
+        <line x1="0" y1="0" x2="170" y2="0"/>
+        <line x1="0" y1="14" x2="170" y2="14"/>
+        <line x1="0" y1="28" x2="170" y2="28"/>
+        <line x1="0" y1="42" x2="158" y2="42"/>
+        <line x1="0" y1="56" x2="170" y2="56"/>
+        <line x1="0" y1="70" x2="170" y2="70"/>
+        <line x1="0" y1="84" x2="148" y2="84"/>
+        <line x1="0" y1="98" x2="170" y2="98"/>
+        <line x1="0" y1="112" x2="170" y2="112"/>
+        <line x1="0" y1="126" x2="170" y2="126"/>
+        <line x1="0" y1="140" x2="160" y2="140"/>
+        <line x1="0" y1="154" x2="170" y2="154"/>
+        <line x1="0" y1="168" x2="170" y2="168"/>
+      </g>
+    </g>
+
+    <!-- pull quote -->
+    <line x1="40" y1="640" x2="600" y2="640" stroke="#1B1B1B" stroke-width="1"/>
+    <text x="320" y="700" text-anchor="middle"
+          font-family="Fraunces, Georgia, serif" font-style="italic"
+          font-size="26" fill="#1B1B1B">"This is the post that</text>
+    <text x="320" y="734" text-anchor="middle"
+          font-family="Fraunces, Georgia, serif" font-style="italic"
+          font-size="26" fill="#1B1B1B">stopped the morning."</text>
+    <line x1="40" y1="770" x2="600" y2="770" stroke="#1B1B1B" stroke-width="1"/>
+
+    <!-- footer -->
+    <text x="40" y="822" font-family="Inter, sans-serif"
+          font-size="11" fill="#5a4a3a" letter-spacing="0.18em">A2 · FOAM CORE</text>
+    <text x="600" y="822" text-anchor="end" font-family="Inter, sans-serif"
+          font-size="11" fill="#5a4a3a" letter-spacing="0.18em">SENTRADA</text>
+  </g>
+</svg>

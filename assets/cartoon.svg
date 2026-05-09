@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1100" role="img" aria-label="Cartoon artefact placeholder">
+  <!-- background -->
+  <rect width="1600" height="1100" fill="#1B1B1B"/>
+
+  <!-- soft floor wash -->
+  <defs>
+    <radialGradient id="floor" cx="50%" cy="100%" r="80%">
+      <stop offset="0%" stop-color="#2a2a2a"/>
+      <stop offset="100%" stop-color="#1B1B1B"/>
+    </radialGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F4ECE3"/>
+      <stop offset="100%" stop-color="#E8DCCE"/>
+    </linearGradient>
+    <linearGradient id="frame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3a2820"/>
+      <stop offset="100%" stop-color="#1f130d"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="1100" fill="url(#floor)"/>
+
+  <!-- frame shadow -->
+  <ellipse cx="800" cy="980" rx="520" ry="22" fill="#000" opacity="0.45"/>
+
+  <!-- frame -->
+  <g transform="translate(330, 110)">
+    <rect width="940" height="860" rx="4" fill="url(#frame)"/>
+    <rect x="32" y="32" width="876" height="796" fill="url(#paper)"/>
+
+    <!-- cartoon scene -->
+    <g transform="translate(80, 110)">
+      <!-- desk line -->
+      <line x1="0" y1="640" x2="716" y2="640" stroke="#2a1810" stroke-width="3"/>
+
+      <!-- character: head -->
+      <g stroke="#1B1B1B" stroke-width="5" fill="none" stroke-linejoin="round" stroke-linecap="round">
+        <ellipse cx="380" cy="240" rx="120" ry="138" fill="#F2E9E1"/>
+        <!-- hair -->
+        <path d="M260 200 Q300 90 380 100 Q470 90 500 200 Q500 160 460 150 Q420 110 380 120 Q330 110 300 150 Q260 160 260 200 Z" fill="#1B1B1B"/>
+        <!-- glasses -->
+        <circle cx="340" cy="240" r="26" fill="#fff"/>
+        <circle cx="420" cy="240" r="26" fill="#fff"/>
+        <line x1="366" y1="240" x2="394" y2="240"/>
+        <!-- eyes -->
+        <circle cx="340" cy="240" r="4" fill="#1B1B1B" stroke="none"/>
+        <circle cx="420" cy="240" r="4" fill="#1B1B1B" stroke="none"/>
+        <!-- nose -->
+        <path d="M380 260 Q372 290 380 304"/>
+        <!-- smile -->
+        <path d="M340 320 Q380 348 420 320"/>
+        <!-- collar / suit -->
+        <path d="M260 380 L260 640 L500 640 L500 380 L440 380 L420 410 L380 430 L340 410 L320 380 Z" fill="#1B1B1B"/>
+        <!-- tie -->
+        <path d="M380 410 L368 460 L380 540 L392 460 Z" fill="#C4724E" stroke="#1B1B1B"/>
+      </g>
+
+      <!-- speech bubble -->
+      <g>
+        <path d="M520 100 L716 100 L716 240 L600 240 L560 290 L575 240 L520 240 Z"
+              fill="#fff" stroke="#1B1B1B" stroke-width="4" stroke-linejoin="round"/>
+        <text x="618" y="170" text-anchor="middle"
+              font-family="Fraunces, Georgia, serif" font-style="italic"
+              font-size="26" fill="#1B1B1B">Funny, I was</text>
+        <text x="618" y="202" text-anchor="middle"
+              font-family="Fraunces, Georgia, serif" font-style="italic"
+              font-size="26" fill="#1B1B1B">just thinking</text>
+        <text x="618" y="234" text-anchor="middle"
+              font-family="Fraunces, Georgia, serif" font-style="italic"
+              font-size="26" fill="#1B1B1B" font-weight="600">about you.</text>
+      </g>
+
+      <!-- caption rule -->
+      <line x1="0" y1="690" x2="716" y2="690" stroke="#1B1B1B" stroke-width="1.5"/>
+
+      <!-- caption -->
+      <text x="358" y="724" text-anchor="middle"
+            font-family="Fraunces, Georgia, serif" font-style="italic"
+            font-size="20" fill="#1B1B1B" letter-spacing="0.04em">
+        For [Recipient Name]. Built for one desk, one moment.
+      </text>
+    </g>
+
+    <!-- A2 mark -->
+    <text x="876" y="848" text-anchor="end"
+          font-family="Inter, sans-serif" font-size="13"
+          fill="#8a7a6c" letter-spacing="0.18em">A2 · FOAM CORE</text>
+  </g>
+</svg>
