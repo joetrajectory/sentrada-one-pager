@@ -27,7 +27,7 @@
 
   <header class="topbar" aria-label="Primary">
     <a href="#top" class="wordmark" aria-label="Sentrada home">
-      <img src="assets/logoonblack.png" alt="Sentrada" />
+      <img src="assets/logoonblack.webp" alt="Sentrada" width="600" height="200" />
     </a>
     <a class="topbar-cta" href="https://cal.com/sentrada/intro" data-cta="topbar" target="_blank" rel="noopener">Book a call</a>
   </header>
@@ -39,6 +39,8 @@
       <figure class="hero-figure reveal">
         <img
           src="assets/cartoon.webp"
+          srcset="assets/cartoon-sm.webp 800w, assets/cartoon.webp 1536w"
+          sizes="100vw"
           alt="Bespoke editorial cartoon of a senior buyer, printed at A2 on foam core, ready to be delivered to a single person's desk."
           width="1536" height="1024"
           fetchpriority="high"
@@ -75,6 +77,8 @@
         <figure class="piece reveal">
           <div class="piece-img">
             <img src="assets/newspaper.webp"
+                 srcset="assets/newspaper-sm.webp 533w, assets/newspaper.webp 1024w"
+                 sizes="(max-width: 880px) 100vw, 33vw"
                  alt="Newspaper Front Page artefact: a full broadsheet front page written and designed for one prospect."
                  width="1024" height="1536"
                  loading="lazy" decoding="async" />
@@ -92,6 +96,8 @@
         <figure class="piece reveal">
           <div class="piece-img">
             <img src="assets/cartoon.webp"
+                 srcset="assets/cartoon-sm.webp 800w, assets/cartoon.webp 1536w"
+                 sizes="(max-width: 880px) 100vw, 33vw"
                  alt="Cartoon artefact: a custom editorial cartoon of the prospect, framed and ready to hang."
                  width="1536" height="1024"
                  loading="lazy" decoding="async" />
@@ -109,6 +115,8 @@
         <figure class="piece reveal">
           <div class="piece-img">
             <img src="assets/postcard.webp"
+                 srcset="assets/postcard-sm.webp 800w, assets/postcard.webp 1492w"
+                 sizes="(max-width: 880px) 100vw, 33vw"
                  alt="Postcard from the Future artefact: a future-dated dispatch from a world where the prospect has chosen to work with you."
                  width="1492" height="1054"
                  loading="lazy" decoding="async" />
@@ -133,7 +141,7 @@
     <!-- 3. WHY THIS WORKS -->
     <section class="proof" aria-label="Why this works">
       <div class="prose reveal">
-        <p>
+        <p class="prose-lede">
           I read Stu Heinecke's <em>How to Get a Meeting with Anyone</em> nine years ago
           and have been practising Contact Marketing ever since. Heinecke documented
           response rates on personalised cartoons of between 30 and 100 per cent.
@@ -144,10 +152,17 @@
           Sentrada keeps the same size, the same substrate, and the same level of
           personalisation. We rebuild the format for one company at a time.
         </p>
+      </div>
+
+      <blockquote class="pullquote reveal" aria-hidden="false">
+        <p>Senior buyers see five hundred emails and one piece of physical mail.</p>
+        <cite>ANA / DMA data, restated plainly</cite>
+      </blockquote>
+
+      <div class="prose reveal">
         <p>
-          Physical mail still beats email by roughly 36 to 1 on response rates
-          (ANA and DMA data). The reason is uncluttered: senior buyers see five hundred
-          emails and one piece of physical mail. The maths is not subtle.
+          Physical mail still beats email by roughly 36 to 1 on response rates.
+          The maths is not subtle.
         </p>
         <div class="cta-row">
           <a class="cta primary" href="https://cal.com/sentrada/intro" data-cta="proof" target="_blank" rel="noopener">Let's talk</a>
@@ -179,12 +194,36 @@
 
     <!-- 5. FOUNDING PILOT OFFER -->
     <section id="book" class="offer" aria-label="Founding pilot offer">
-      <div class="offer-card reveal">
-        <p class="offer-headline display">
-          Name your 10 dream accounts. We will put something on their desk
-          they have never seen before. <span class="accent">£2,500. First 5 clients only.</span>
+      <article class="invitation reveal">
+        <header class="invitation-eyebrow">
+          <svg class="invitation-mark" viewBox="0 0 64 64" width="14" height="14" aria-hidden="true">
+            <defs>
+              <mask id="inv-cut">
+                <rect width="100%" height="100%" fill="white"/>
+                <rect x="-4" y="30" width="72" height="4" fill="black" transform="rotate(-32 32 32)"/>
+              </mask>
+            </defs>
+            <g fill="#1B1B1B" mask="url(#inv-cut)">
+              <text x="32" y="48" text-anchor="middle"
+                    font-family="Fraunces, 'Times New Roman', Georgia, serif"
+                    font-weight="500" font-size="56" letter-spacing="-0.01em">s</text>
+            </g>
+          </svg>
+          <span>Founding pilot · One of five</span>
+        </header>
+
+        <hr class="invitation-rule" />
+
+        <p class="invitation-headline">
+          Name your 10 dream accounts. We'll put something on their desk
+          they've never seen before.
         </p>
-        <div class="offer-body">
+
+        <p class="invitation-price">£2,500. <span class="invitation-price-em">First 5 clients only.</span></p>
+
+        <hr class="invitation-rule" />
+
+        <div class="invitation-body">
           <p>
             This is early. Founding pricing reflects that. The first five clients are
             helping me prove the format alongside their own pipeline, and they get the
@@ -196,11 +235,12 @@
             £2,500 buys ten of them, built and delivered.
           </p>
         </div>
-        <div class="cta-row">
-          <a class="cta primary large" href="https://cal.com/sentrada/intro" data-cta="offer" target="_blank" rel="noopener">Book a call</a>
+
+        <div class="invitation-cta">
+          <a class="cta inline-cta" href="https://cal.com/sentrada/intro" data-cta="offer" target="_blank" rel="noopener">Book a call</a>
+          <p class="invitation-foot">No deck required. A short conversation about your ten accounts.</p>
         </div>
-        <p class="offer-foot">No deck required. A short conversation about your ten accounts.</p>
-      </div>
+      </article>
     </section>
 
   </main>
@@ -208,7 +248,7 @@
   <!-- 6. FOOTER -->
   <footer class="footer">
     <a href="#top" class="footer-mark" aria-label="Sentrada">
-      <img src="assets/logoonblack.png" alt="Sentrada" />
+      <img src="assets/logoonblack.webp" alt="Sentrada" width="600" height="200" />
     </a>
     <div class="footer-meta">
       <span>sentrada.io</span>
@@ -216,6 +256,10 @@
       <a href="mailto:hello@sentrada.io">hello@sentrada.io</a>
     </div>
   </footer>
+
+  <a class="mobile-cta" href="https://cal.com/sentrada/intro" data-cta="mobile-sticky" target="_blank" rel="noopener" aria-label="Book a call">
+    Book a call
+  </a>
 
   <script src="script.js" defer></script>
 </body>

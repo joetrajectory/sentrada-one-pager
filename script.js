@@ -27,4 +27,40 @@
       }
     });
   });
+
+  // Sticky mobile CTA: visible once the user has scrolled past the hero,
+  // hidden again once the invitation's own CTA is on screen.
+  const mobileCta = document.querySelector(".mobile-cta");
+  const invitationCta = document.querySelector(".invitation-cta .cta");
+  if (mobileCta && invitationCta) {
+    let pastHero = false;
+    let invitationVisible = false;
+
+    const update = () => {
+      const shouldHide = !pastHero || invitationVisible;
+      mobileCta.classList.toggle("is-hidden", shouldHide);
+    };
+
+    if ("IntersectionObserver" in window) {
+      const heroSentinel = document.querySelector(".hero");
+      if (heroSentinel) {
+        new IntersectionObserver(([entry]) => {
+          pastHero = !entry.isIntersecting && entry.boundingClientRect.top < 0;
+          update();
+        }, { threshold: 0 }).observe(heroSentinel);
+      } else {
+        pastHero = true;
+      }
+
+      new IntersectionObserver(([entry]) => {
+        invitationVisible = entry.isIntersecting;
+        update();
+      }, { threshold: 0.25 }).observe(invitationCta);
+    } else {
+      pastHero = true;
+      update();
+    }
+
+    update();
+  }
 })();
