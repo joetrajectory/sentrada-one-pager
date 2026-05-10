@@ -162,6 +162,20 @@ h1.display {
 }
 .cta.large { padding: 18px 34px; font-size: 16px; }
 
+/* Trailing arrow on the in-flow CTAs. Slides on hover. */
+.cta::after {
+  content: "\2192"; /* → */
+  display: inline-block;
+  margin-left: 8px;
+  transform: translateX(0);
+  transition: transform .3s var(--ease);
+}
+.cta:hover::after { transform: translateX(4px); }
+@media (prefers-reduced-motion: reduce) {
+  .cta::after { transition: none; }
+  .cta:hover::after { transform: none; }
+}
+
 /* ---------- Hero ---------- */
 .hero {
   padding-top: 0;
@@ -248,7 +262,10 @@ section {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform .5s var(--ease), border-color .35s var(--ease);
+  overflow: hidden;
+  transition:
+    transform .6s var(--ease),
+    border-color .4s var(--ease);
 }
 .piece-img img {
   display: block;
@@ -256,10 +273,20 @@ section {
   height: auto;
   max-height: 540px;
   object-fit: contain;
+  transform: scale(1);
+  transition: transform 1.4s var(--ease);
 }
 .piece:hover .piece-img {
   border-color: rgba(242, 233, 225, 0.22);
   transform: translateY(-3px);
+}
+.piece:hover .piece-img img { transform: scale(1.025); }
+@media (prefers-reduced-motion: reduce) {
+  .piece-img,
+  .piece-img img {
+    transition: none !important;
+    transform: none !important;
+  }
 }
 .piece > figcaption { padding: 0 clamp(0px, 1vw, 8px); }
 .piece-title {
@@ -576,8 +603,95 @@ section {
   opacity: 1;
   transform: none;
 }
+
+/* Parents whose children stagger: parent itself does not animate. */
+.piece.reveal,
+.hook-statement.reveal,
+.pullquote.reveal {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
+
+/* Gallery rows: image reveals, caption follows. */
+.piece .piece-img,
+.piece > figcaption {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity .9s var(--ease),
+    transform .9s var(--ease);
+}
+.piece.is-visible .piece-img {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0ms;
+}
+.piece.is-visible > figcaption {
+  opacity: 1;
+  transform: none;
+  transition-delay: 240ms;
+}
+
+/* Hook: two lines reveal in sequence. */
+.hook-statement .hook-line {
+  display: block;
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 1s var(--ease),
+    transform 1s var(--ease);
+}
+.hook-statement.is-visible .hook-line:nth-child(1) {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0ms;
+}
+.hook-statement.is-visible .hook-line:nth-child(2) {
+  opacity: 1;
+  transform: none;
+  transition-delay: 320ms;
+}
+
+/* Pull quote: text rises first, the giant glyph fades in behind. */
+.pullquote::before {
+  opacity: 0;
+  transition: opacity 1.2s var(--ease);
+}
+.pullquote.is-visible::before {
+  opacity: 0.55;
+  transition-delay: 380ms;
+}
+.pullquote p,
+.pullquote cite {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 1s var(--ease),
+    transform 1s var(--ease);
+}
+.pullquote.is-visible p {
+  opacity: 1;
+  transform: none;
+}
+.pullquote.is-visible cite {
+  opacity: 1;
+  transform: none;
+  transition-delay: 220ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .reveal { opacity: 1; transform: none; transition: none; }
+  .reveal,
+  .piece .piece-img,
+  .piece > figcaption,
+  .hook-statement .hook-line,
+  .pullquote p,
+  .pullquote cite {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .pullquote::before { opacity: 0.55 !important; transition: none !important; }
 }
 
 /* ---------- Sticky mobile CTA ---------- */
