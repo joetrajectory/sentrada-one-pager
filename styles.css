@@ -52,27 +52,37 @@ a { color: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px var(--gutter);
-  background: rgba(27, 27, 27, 0.78);
+  padding: 12px var(--gutter);
+  /* Soft gradient overlay at the top of the page so the wordmark
+     reads cleanly over the cartoon without a heavy bar. */
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: 1px solid transparent;
+  transition: background-color .35s var(--ease), border-color .35s var(--ease), padding .25s var(--ease), backdrop-filter .35s var(--ease);
+}
+.topbar.scrolled {
+  background: rgba(27, 27, 27, 0.82);
   backdrop-filter: saturate(140%) blur(10px);
   -webkit-backdrop-filter: saturate(140%) blur(10px);
-  border-bottom: 1px solid var(--hairline);
+  border-bottom-color: var(--hairline);
 }
 .wordmark img {
-  height: 26px;
+  height: 22px;
   width: auto;
   display: block;
   mix-blend-mode: lighten;
 }
 .topbar-cta {
   font-family: var(--body);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   text-decoration: none;
-  color: var(--stone);
+  color: var(--clay);
   letter-spacing: 0.01em;
-  border: 1px solid var(--stone-faint);
-  padding: 9px 16px;
+  background: transparent;
+  border: 1.5px solid var(--clay);
+  padding: 8px 16px;
   border-radius: 999px;
   transition: background-color .25s var(--ease), color .25s var(--ease), border-color .25s var(--ease);
 }
@@ -133,24 +143,24 @@ h1.display {
   font-weight: 500;
   font-size: 15px;
   letter-spacing: 0.01em;
-  padding: 14px 26px;
+  padding: 14px 28px;
   border-radius: 999px;
-  border: 1px solid transparent;
+  border: 1.5px solid transparent;
   transition: transform .25s var(--ease), background-color .25s var(--ease), color .25s var(--ease), border-color .25s var(--ease);
   will-change: transform;
 }
 .cta.primary {
-  background: var(--clay);
-  color: var(--charcoal);
+  background: transparent;
+  color: var(--clay);
   border-color: var(--clay);
 }
 .cta.primary:hover {
-  background: var(--stone);
+  background: var(--clay);
   color: var(--charcoal);
-  border-color: var(--stone);
+  border-color: var(--clay);
   transform: translateY(-1px);
 }
-.cta.large { padding: 18px 32px; font-size: 16px; }
+.cta.large { padding: 18px 34px; font-size: 16px; }
 
 /* ---------- Hero ---------- */
 .hero {
@@ -215,58 +225,77 @@ section {
 .gallery {
   max-width: var(--max);
   margin: 0 auto;
-  display: grid;
-  gap: clamp(28px, 4vw, 56px);
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(72px, 10vw, 140px);
 }
-.piece { margin: 0; }
+.piece {
+  display: flex;
+  align-items: center;
+  gap: clamp(40px, 6vw, 96px);
+  margin: 0;
+}
+.piece:nth-child(even) { flex-direction: row-reverse; }
+.piece-img,
+.piece > figcaption {
+  flex: 1;
+  min-width: 0;
+}
 .piece-img {
   background: var(--charcoal-soft);
   border: 1px solid var(--hairline);
-  aspect-ratio: 3 / 4;
-  overflow: hidden;
+  padding: clamp(18px, 3vw, 40px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 14px;
-  transition: transform .5s var(--ease), border-color .25s var(--ease);
+  transition: transform .5s var(--ease), border-color .35s var(--ease);
 }
 .piece-img img {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
+  display: block;
+  width: 100%;
   height: auto;
+  max-height: 540px;
   object-fit: contain;
 }
 .piece:hover .piece-img {
   border-color: rgba(242, 233, 225, 0.22);
   transform: translateY(-3px);
 }
+.piece > figcaption { padding: 0 clamp(0px, 1vw, 8px); }
 .piece-title {
   font-family: var(--display);
   font-weight: 500;
-  font-size: 22px;
-  letter-spacing: -0.01em;
-  margin: 22px 0 8px;
+  font-size: clamp(26px, 3vw, 36px);
+  letter-spacing: -0.012em;
+  margin: 0 0 16px;
   color: var(--stone);
 }
 .piece-body {
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: 1.65;
   color: var(--stone-dim);
   margin: 0;
-  max-width: 38ch;
+  max-width: 42ch;
 }
 .companion {
-  max-width: var(--max);
-  margin: clamp(48px, 6vw, 80px) auto 0;
-  font-family: var(--display);
-  font-size: clamp(18px, 1.7vw, 22px);
-  line-height: 1.5;
-  color: var(--stone);
-  border-top: 1px solid var(--hairline);
-  padding-top: clamp(32px, 4vw, 48px);
   max-width: 56ch;
+  margin: clamp(40px, 5vw, 64px) auto 0;
+  font-family: var(--body);
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--stone-dim);
+  text-align: center;
+  letter-spacing: 0.01em;
+  border-top: none;
+  padding-top: 0;
+}
+.companion::before {
+  content: "+";
+  display: inline-block;
+  margin-right: 10px;
+  color: var(--clay);
+  font-family: var(--display);
+  font-style: italic;
 }
 
 /* ---------- Hook (the dream-accounts moment) ---------- */
@@ -408,7 +437,7 @@ section {
 /* ---------- Founding pilot offer (printed invitation) ---------- */
 .offer {
   padding-top: clamp(96px, 14vw, 200px);
-  padding-bottom: clamp(96px, 14vw, 200px);
+  padding-bottom: clamp(48px, 6vw, 88px);
   /* No top border. The invitation floats on charcoal. */
 }
 .invitation {
@@ -488,16 +517,16 @@ section {
 .invitation-body p:last-child { margin-bottom: 0; }
 .invitation-cta { margin-top: clamp(28px, 4vw, 40px); }
 .invitation-cta .cta.inline-cta {
-  background: var(--charcoal);
-  color: var(--stone);
+  background: transparent;
+  color: var(--charcoal);
   border-color: var(--charcoal);
-  padding: 16px 30px;
+  padding: 16px 32px;
   font-size: 15px;
 }
 .invitation-cta .cta.inline-cta:hover {
-  background: var(--clay);
-  color: var(--charcoal);
-  border-color: var(--clay);
+  background: var(--charcoal);
+  color: var(--stone);
+  border-color: var(--charcoal);
   transform: translateY(-1px);
 }
 .invitation-foot {
@@ -521,6 +550,7 @@ section {
 }
 .footer-mark img {
   height: 22px;
+  width: auto;
   opacity: 0.92;
   mix-blend-mode: lighten;
   display: block;
@@ -589,8 +619,16 @@ section {
 
 /* ---------- Mobile ---------- */
 @media (max-width: 880px) {
-  .gallery { grid-template-columns: 1fr; gap: 36px; }
-  .topbar { padding: 14px var(--gutter); }
+  .gallery { gap: 56px; }
+  .piece,
+  .piece:nth-child(even) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 24px;
+  }
+  .piece > figcaption { padding: 0; }
+  .piece-img img { max-height: 460px; }
+  .topbar { padding: 12px var(--gutter); }
   .topbar-cta { display: none; }
   .hero-copy { padding-top: 36px; }
   .hero-copy h1 { font-size: 38px; }

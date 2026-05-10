@@ -28,6 +28,16 @@
     });
   });
 
+  // Topbar: solidifies once the user has scrolled past the very top.
+  const topbar = document.querySelector(".topbar");
+  if (topbar) {
+    const setScrolled = () => {
+      topbar.classList.toggle("scrolled", window.scrollY > 60);
+    };
+    setScrolled();
+    window.addEventListener("scroll", setScrolled, { passive: true });
+  }
+
   // Sticky mobile CTA: visible once the user has scrolled past the hero,
   // hidden again once the invitation's own CTA is on screen.
   const mobileCta = document.querySelector(".mobile-cta");
