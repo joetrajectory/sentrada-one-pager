@@ -58,7 +58,12 @@ a { color: inherit; }
   -webkit-backdrop-filter: saturate(140%) blur(10px);
   border-bottom: 1px solid var(--hairline);
 }
-.wordmark img { height: 22px; width: auto; }
+.wordmark img {
+  height: 26px;
+  width: auto;
+  display: block;
+  mix-blend-mode: lighten;
+}
 .topbar-cta {
   font-family: var(--body);
   font-size: 14px;
@@ -156,16 +161,20 @@ h1.display {
   margin: 0;
   padding: 0;
   width: 100%;
-  background: var(--charcoal-soft);
+  background: var(--charcoal);
   border-bottom: 1px solid var(--hairline);
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .hero-figure img {
   width: 100%;
+  max-width: 1600px;
   height: auto;
+  max-height: 88vh;
   display: block;
-  aspect-ratio: 16 / 11;
-  object-fit: cover;
+  object-fit: contain;
 }
 .hero-copy {
   max-width: var(--max);
@@ -214,17 +223,20 @@ section {
 .piece-img {
   background: var(--charcoal-soft);
   border: 1px solid var(--hairline);
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 3 / 4;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 14px;
   transition: transform .5s var(--ease), border-color .25s var(--ease);
 }
 .piece-img img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 .piece:hover .piece-img {
   border-color: rgba(242, 233, 225, 0.22);
@@ -368,7 +380,12 @@ section {
   gap: 16px;
   flex-wrap: wrap;
 }
-.footer-mark img { height: 18px; opacity: 0.85; }
+.footer-mark img {
+  height: 22px;
+  opacity: 0.92;
+  mix-blend-mode: lighten;
+  display: block;
+}
 .footer-meta {
   display: flex;
   align-items: center;
