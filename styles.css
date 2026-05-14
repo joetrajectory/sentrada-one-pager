@@ -315,7 +315,7 @@ section {
   max-width: 42ch;
 }
 .companion {
-  max-width: 56ch;
+  max-width: 80ch;
   margin: clamp(40px, 5vw, 64px) auto 0;
   font-family: var(--body);
   font-size: 14px;
@@ -593,14 +593,6 @@ section {
   color: var(--stone);
   border-color: var(--charcoal);
   transform: translateY(-1px);
-}
-.invitation-foot {
-  font-family: var(--body);
-  margin-top: 18px;
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(27, 27, 27, 0.5);
 }
 
 /* ---------- Footer ---------- */
