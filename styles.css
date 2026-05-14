@@ -218,7 +218,17 @@ section {
   max-width: var(--max);
   margin: 0 auto;
 }
-.section-intro { padding-bottom: clamp(40px, 5vw, 68px); }
+.section-intro {
+  padding-bottom: clamp(40px, 5vw, 68px);
+}
+
+/* Centre the formats-section intro to match the proof/track prose */
+.formats .section-intro {
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .section-lede {
   font-family: var(--display);
   font-size: clamp(22px, 2.4vw, 30px);
