@@ -471,20 +471,20 @@ section {
 }
 .track .prose { margin-bottom: clamp(32px, 4vw, 56px); }
 .logo-grid {
-  max-width: 980px;
+  max-width: var(--max);
   margin: 0 auto;
-  padding: clamp(20px, 3vw, 40px) clamp(20px, 3vw, 48px);
+  padding: clamp(24px, 3.6vw, 48px) clamp(24px, 3.6vw, 64px);
   background: var(--stone);
   border-radius: 4px;
   box-shadow:
-    0 30px 70px rgba(0, 0, 0, 0.45),
-    0 4px 14px rgba(0, 0, 0, 0.25);
+    0 36px 90px rgba(0, 0, 0, 0.50),
+    0 6px 18px rgba(0, 0, 0, 0.28);
   position: relative;
 }
 .logo-grid::before {
   content: "";
   position: absolute;
-  inset: 10px;
+  inset: 12px;
   border: 1px solid rgba(27, 27, 27, 0.10);
   pointer-events: none;
 }
@@ -494,8 +494,8 @@ section {
   height: auto;
 }
 .logos-caption {
-  max-width: 980px;
-  margin: 22px auto 0;
+  max-width: var(--max);
+  margin: 24px auto 0;
   font-size: 13px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
