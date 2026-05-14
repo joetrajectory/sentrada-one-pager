@@ -435,20 +435,6 @@ section {
   text-align: center;
   position: relative;
 }
-.pullquote::before {
-  content: "\201C";
-  position: absolute;
-  top: -0.35em;
-  left: 50%;
-  transform: translateX(-50%);
-  font-family: var(--display);
-  font-style: italic;
-  font-size: clamp(80px, 10vw, 140px);
-  line-height: 1;
-  color: var(--clay);
-  opacity: 0.55;
-  pointer-events: none;
-}
 .pullquote p {
   font-family: var(--display);
   font-style: italic;
@@ -705,15 +691,7 @@ section {
   transition-delay: 320ms;
 }
 
-/* Pull quote: text rises first, the giant glyph fades in behind. */
-.pullquote::before {
-  opacity: 0;
-  transition: opacity 1.2s var(--ease);
-}
-.pullquote.is-visible::before {
-  opacity: 0.55;
-  transition-delay: 380ms;
-}
+/* Pull quote: text rises in two beats. */
 .pullquote p {
   opacity: 0;
   transform: translateY(14px);
@@ -741,7 +719,6 @@ section {
     transform: none !important;
     transition: none !important;
   }
-  .pullquote::before { opacity: 0.55 !important; transition: none !important; }
 }
 
 /* ---------- Sticky mobile CTA ---------- */
