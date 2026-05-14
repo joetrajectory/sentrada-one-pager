@@ -700,22 +700,21 @@ section {
   opacity: 0.55;
   transition-delay: 380ms;
 }
-.pullquote p,
-.pullquote cite {
+.pullquote p {
   opacity: 0;
   transform: translateY(14px);
   transition:
     opacity 1s var(--ease),
     transform 1s var(--ease);
 }
+.pullquote p + p { margin-top: 0.4em; }
+.pullquote-pivot { color: var(--clay); }
 .pullquote.is-visible p {
   opacity: 1;
   transform: none;
 }
-.pullquote.is-visible cite {
-  opacity: 1;
-  transform: none;
-  transition-delay: 220ms;
+.pullquote.is-visible p:nth-child(2) {
+  transition-delay: 280ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -723,8 +722,7 @@ section {
   .piece .piece-img,
   .piece > figcaption,
   .hook-statement .hook-line,
-  .pullquote p,
-  .pullquote cite {
+  .pullquote p {
     opacity: 1 !important;
     transform: none !important;
     transition: none !important;
