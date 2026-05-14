@@ -196,4 +196,4 @@ Domain: sentrada.io
 Redirect: nobodyresponds.com > sentrada.io
 Palette: Charcoal, Lisbon Clay (terracotta), Lisbon Stone, White
 Positioning: "Physical outreach built for one company at a time."
-Pain line: "Nobody responds to your cold emails. We fix that."
+Pain line: "Nobody responds to your cold outbound. We fix that."
