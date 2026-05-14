@@ -54,7 +54,7 @@ a { color: inherit; }
   justify-content: space-between;
   padding: 12px var(--gutter);
   /* Soft gradient overlay at the top of the page so the wordmark
-     reads cleanly over the hero artefact without a heavy bar. */
+     reads cleanly over the hero piece without a heavy bar. */
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
