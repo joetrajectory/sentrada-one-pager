@@ -266,7 +266,7 @@ section {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: auto auto;
   gap: 14px clamp(40px, 6vw, 96px);
-  align-items: center;
+  align-content: center;
   margin: 0;
 }
 .piece-img {
@@ -277,12 +277,10 @@ section {
 .piece-title {
   grid-column: 2;
   grid-row: 1;
-  align-self: end;
 }
 .piece-body {
   grid-column: 2;
   grid-row: 2;
-  align-self: start;
 }
 .piece:nth-child(even) .piece-img { grid-column: 2; }
 .piece:nth-child(even) .piece-title,
