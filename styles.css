@@ -262,17 +262,31 @@ section {
   gap: clamp(72px, 10vw, 140px);
 }
 .piece {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 14px clamp(40px, 6vw, 96px);
   align-items: center;
-  gap: clamp(40px, 6vw, 96px);
   margin: 0;
 }
-.piece:nth-child(even) { flex-direction: row-reverse; }
-.piece-img,
-.piece > figcaption {
-  flex: 1;
+.piece-img {
+  grid-column: 1;
+  grid-row: 1 / span 2;
   min-width: 0;
 }
+.piece-title {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+}
+.piece-body {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+}
+.piece:nth-child(even) .piece-img { grid-column: 2; }
+.piece:nth-child(even) .piece-title,
+.piece:nth-child(even) .piece-body { grid-column: 1; }
 .piece-img {
   background: var(--charcoal-soft);
   border: 1px solid var(--hairline);
@@ -306,13 +320,12 @@ section {
     transform: none !important;
   }
 }
-.piece > figcaption { padding: 0 clamp(0px, 1vw, 8px); }
 .piece-title {
   font-family: var(--display);
   font-weight: 500;
   font-size: clamp(26px, 3vw, 36px);
   letter-spacing: -0.012em;
-  margin: 0 0 16px;
+  margin: 0;
   color: var(--stone);
 }
 .piece-body {
@@ -652,9 +665,10 @@ section {
   transition: none;
 }
 
-/* Gallery rows: image reveals, caption follows. */
+/* Gallery rows: image reveals, title + body follow together. */
 .piece .piece-img,
-.piece > figcaption {
+.piece .piece-title,
+.piece .piece-body {
   opacity: 0;
   transform: translateY(20px);
   transition:
@@ -666,7 +680,8 @@ section {
   transform: none;
   transition-delay: 0ms;
 }
-.piece.is-visible > figcaption {
+.piece.is-visible .piece-title,
+.piece.is-visible .piece-body {
   opacity: 1;
   transform: none;
   transition-delay: 240ms;
@@ -713,7 +728,8 @@ section {
 @media (prefers-reduced-motion: reduce) {
   .reveal,
   .piece .piece-img,
-  .piece > figcaption,
+  .piece .piece-title,
+  .piece .piece-body,
   .hook-statement .hook-line,
   .pullquote p {
     opacity: 1 !important;
@@ -764,12 +780,12 @@ section {
   .gallery { gap: 56px; }
   .piece,
   .piece:nth-child(even) {
+    display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 24px;
+    gap: 14px;
   }
-  .piece > figcaption { padding: 0; }
-  .piece-img img { max-height: 460px; }
+  .piece-img img { max-height: 320px; }
   .topbar { padding: 12px var(--gutter); }
   .topbar-cta { display: none; }
   .hero-copy { padding-top: 36px; }
