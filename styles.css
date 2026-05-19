@@ -118,6 +118,12 @@ h1.display {
   margin: 0 0 18px 0;
 }
 
+/* Standalone formats kicker: alignment + breathing room before the gallery */
+.formats > .kicker {
+  max-width: var(--max);
+  margin: 0 auto clamp(40px, 5vw, 68px);
+}
+
 .lede {
   font-size: clamp(17px, 1.6vw, 20px);
   line-height: 1.55;
@@ -207,7 +213,7 @@ h1.display {
   margin: 0 auto;
   padding: clamp(40px, 7vw, 84px) var(--gutter) 0;
 }
-.hero-copy h1 { max-width: 20ch; }
+.hero-copy h1 { max-width: 32ch; }
 .hero-copy .lede { margin-top: 22px; }
 
 /* ---------- Section base ---------- */
