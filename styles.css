@@ -283,7 +283,7 @@ h1.display {
 .market-context-statement {
   font-family: var(--display);
   font-weight: 500;
-  font-size: clamp(30px, 5vw, 64px);
+  font-size: clamp(22px, 5vw, 64px);
   line-height: 1.15;
   letter-spacing: -0.018em;
   color: var(--stone);
