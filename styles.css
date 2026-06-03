@@ -121,7 +121,7 @@ h1.display {
 /* Standalone formats kicker: alignment + breathing room before the gallery */
 .formats > .kicker {
   max-width: var(--max);
-  margin: 0 auto clamp(40px, 5vw, 68px);
+  margin: 0 auto clamp(28px, 4vw, 48px);
 }
 
 .lede {
@@ -218,8 +218,8 @@ h1.display {
 
 /* ---------- Hero (text-only variant) ---------- */
 .hero.hero-text {
-  padding-top: clamp(120px, 20vw, 260px);
-  padding-bottom: clamp(120px, 20vw, 260px);
+  padding-top: clamp(40px, 6vw, 96px);
+  padding-bottom: clamp(60px, 8vw, 120px);
   padding-left: var(--gutter);
   padding-right: var(--gutter);
   text-align: center;
@@ -325,7 +325,7 @@ section {
 
 /* ---------- Formats / Gallery ---------- */
 .formats {
-  padding-top: clamp(64px, 8vw, 120px);
+  padding-top: clamp(40px, 6vw, 80px);
   padding-bottom: clamp(64px, 8vw, 120px);
   border-top: 1px solid var(--hairline);
 }
