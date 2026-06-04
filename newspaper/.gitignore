@@ -1,5 +1,6 @@
-# Generated templates and rendered output. mmc.json (test copy) is tracked.
-template.png
+# Generated stand-in templates and rendered output.
+# NOTE: the real finalised template (template.png) IS tracked; only the
+# generated stand-ins (template_4x.png etc.) and outputs are ignored.
 template_*.png
 *_final.png
 *_final_*.png

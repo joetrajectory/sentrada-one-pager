@@ -38,9 +38,9 @@ COLUMNS_Y0, COLUMNS_Y1 = 0.1976, 0.8136
 COL_DIV_1, COL_DIV_2 = 0.2521, 0.4726
 ARTICLE_X0, ARTICLE_X1 = 0.0338, 0.6857
 PULLQUOTE_TOP_RULE_Y = 0.8194
-PULLQUOTE_Y1 = 0.8717
-KICKER_Y0, KICKER_Y1 = 0.8784, 0.9843
+PAGE_BOTTOM_RULE_Y = 0.9843
 SIDEBAR_DIV_X = 0.693
+SIDEBAR_DIV_Y1 = 0.8203
 STAT_X0, STAT_X1 = 0.7173, 0.9705
 STAT_Y0, STAT_Y1 = 0.0634, 0.2908
 SIDEBAR_DIVIDER_Y = 0.4686   # between sidebar_1 (ends 0.4526) and sidebar_2 (0.4847)
@@ -76,7 +76,7 @@ def make_template(width, height):
                 outline=RULE, width=hair)
 
     # Vertical sidebar boundary.
-    d.line([(X(SIDEBAR_DIV_X), Y(MASTHEAD_Y_END)), (X(SIDEBAR_DIV_X), Y(PULLQUOTE_Y1))],
+    d.line([(X(SIDEBAR_DIV_X), Y(MASTHEAD_Y_END)), (X(SIDEBAR_DIV_X), Y(SIDEBAR_DIV_Y1))],
            fill=RULE, width=hair)
 
     # Horizontal rule under the headline / byline block.
@@ -87,13 +87,14 @@ def make_template(width, height):
     for cx in (COL_DIV_1, COL_DIV_2):
         d.line([(X(cx), Y(COLUMNS_Y0)), (X(cx), Y(COLUMNS_Y1))], fill=RULE, width=hair)
 
-    # Rule under the columns / above the pull quote.
+    # Rule above the pull quote (baked). The LOWER pull-quote rule is drawn by
+    # the engine, so it is not baked here.
     d.line([(X(ARTICLE_X0), Y(PULLQUOTE_TOP_RULE_Y)), (X(ARTICLE_X1), Y(PULLQUOTE_TOP_RULE_Y))],
            fill=RULE, width=hair)
 
-    # Kicker top and bottom rules.
-    d.line([(X(ARTICLE_X0), Y(KICKER_Y0)), (X(ARTICLE_X1), Y(KICKER_Y0))], fill=RULE, width=hair)
-    d.line([(X(ARTICLE_X0), Y(KICKER_Y1)), (X(ARTICLE_X1), Y(KICKER_Y1))], fill=RULE, width=hair)
+    # Page-bottom rule beneath the kicker zone.
+    d.line([(X(ARTICLE_X0), Y(PAGE_BOTTOM_RULE_Y)), (X(ARTICLE_X1), Y(PAGE_BOTTOM_RULE_Y))],
+           fill=RULE, width=hair)
 
     # Divider between the two sidebar stories.
     d.line([(X(SIDEBAR_X0), Y(SIDEBAR_DIVIDER_Y)), (X(SIDEBAR_X1), Y(SIDEBAR_DIVIDER_Y))],

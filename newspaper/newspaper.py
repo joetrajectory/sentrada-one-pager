@@ -95,7 +95,8 @@ CONFIG = {
     "lead_pullquote": 1.30,
     "lead_sidebar": 1.20,
     # Masthead tracking (letter spacing) as a fraction of the masthead size.
-    "masthead_tracking": 0.10,
+    # Tight, like a newspaper nameplate, not a luxury wordmark.
+    "masthead_tracking": 0.055,
     # Fill behaviour ----------------------------------------------------------
     "fill_target": 0.97,        # aim to fill this fraction of a zone's depth
     "fill_min": 0.85,           # warn if a zone fills less than this
@@ -114,16 +115,27 @@ CONFIG = {
     "size_edition": 0.0100,
     "size_byline": 0.0118,
     "size_pullquote_attrib": 0.0085,
-    "size_stat_descriptor": 0.0150,
-    "size_stat_source": 0.0095,
+    "size_stat_descriptor": 0.0225,   # roughly 2x: the descriptor reads boldly
+    "size_stat_source": 0.0105,
     "size_sidebar_byline": 0.0108,
+    # Stat number: fill the box. Constrained on INK extents (actual glyph bounds,
+    # not the line-height box) so the figures genuinely dominate.
+    "stat_ink_width_frac": 0.96,      # number ink may fill this much of box width
+    "stat_ink_height_frac": 0.60,     # ...and up to this much of box height
     # Column geometry. The template already has the column dividers baked in, so
     # we align text to them and DO NOT draw our own.
     "gutter_frac": 0.0127,          # gutter width, fraction of image width
     "col_divider_1_x": 0.2521,      # baked vertical rule (do not draw)
     "col_divider_2_x": 0.4726,      # baked vertical rule (do not draw)
+    "col_pad_frac": 0.0065,         # breathing room each side of a column so body
+    # text never touches the baked divider rules (fraction of image width)
     "article_pad_top_frac": 0.004,  # small top/bottom inset within the columns zone
     "article_pad_bottom_frac": 0.004,
+    # Hyphenation. Favour fewer breaks: only hyphenate longer words and keep a
+    # decent run of letters either side of a break.
+    "hyph_left": 3,
+    "hyph_right": 3,
+    "hyph_min_word_len": 8,
     # Baked rules the template already provides; the engine must not redraw them.
     "pullquote_top_rule_y": 0.8194,  # baked rule above the pull quote
     # The engine draws ONLY the lower pull-quote rule, matched to the baked rules.
@@ -144,8 +156,10 @@ CONFIG = {
         "headline":  (0.0338, 0.0574, 0.6592, 0.1193),
         "byline":    (0.0338, 0.1775, 0.6592, 0.0164),
         "article":   (0.0338, 0.1976, 0.6519, 0.6160),
-        "pullquote": (0.0338, 0.8262, 0.6519, 0.0455),
-        "kicker":    (0.0338, 0.8784, 0.6519, 0.1059),
+        # Pull quote extended downward so the quote and attribution breathe and
+        # the empty kicker space reads as intentional.
+        "pullquote": (0.0338, 0.8262, 0.6519, 0.0738),
+        "kicker":    (0.0338, 0.9050, 0.6519, 0.0793),
         "statbox":   (0.7173, 0.0634, 0.2532, 0.2274),
         "sidebar_1": (0.7068, 0.3095, 0.2689, 0.1431),
         "sidebar_2": (0.7068, 0.4847, 0.2689, 0.3356),
@@ -160,10 +174,11 @@ CONFIG = {
 _HYPHENATOR = None
 
 
-def get_hyphenator(lang):
+def get_hyphenator(cfg):
     global _HYPHENATOR
     if _HYPHENATOR is None:
-        _HYPHENATOR = pyphen.Pyphen(lang=lang)
+        _HYPHENATOR = pyphen.Pyphen(
+            lang=cfg["hyphenation_lang"], left=cfg["hyph_left"], right=cfg["hyph_right"])
     return _HYPHENATOR
 
 
@@ -176,9 +191,22 @@ def sanitise(text):
     return text.replace(" -- ", ", ").replace("--", ", ")
 
 
-def soft_hyphenate(text, lang):
-    hyph = get_hyphenator(lang)
-    return " ".join(hyph.inserted(t, hyphen="­") if t else t for t in text.split(" "))
+def soft_hyphenate(text, cfg):
+    """Insert U+00AD soft hyphens for Pango to break on, but sparingly: only in
+    words at least hyph_min_word_len long, and never the final word of the text
+    (so the last line stays clean). Pango still only breaks when a line would
+    otherwise be too loose."""
+    hyph = get_hyphenator(cfg)
+    min_len = cfg["hyph_min_word_len"]
+    tokens = text.split(" ")
+    last = len(tokens) - 1
+    out = []
+    for i, t in enumerate(tokens):
+        if t and i != last and len(t) >= min_len:
+            out.append(hyph.inserted(t, hyphen="­"))
+        else:
+            out.append(t)
+    return " ".join(out)
 
 
 def word_count(text):
@@ -314,15 +342,20 @@ def render_masthead(cr, ctx, data):
     draw_layout(cr, dl, margin + content_w - dw, line_y, ink)
 
 
-def render_headline(cr, ctx, data):
+def render_headline_and_byline(cr, ctx, data):
+    """Headline filled as large as possible, with the byline tucked directly
+    beneath it. The tight headline+byline pair is centred in the combined
+    headline+byline region so there is no gap between them."""
     H, cfg = ctx["H"], ctx["cfg"]
     ink = cfg["ink"]
-    zx, zy, zw, zh = ctx["px"]["headline"]
+    hx, hy, hw, hh = ctx["px"]["headline"]
+    bx, by, bw, bh = ctx["px"]["byline"]
+    region_top, region_bottom = hy, by + bh
+
     text = sanitise(data["headline"])
     lead = cfg["lead_headline"]
-
     layout = make_layout(cr)
-    layout.set_width(int(zw * SCALE))
+    layout.set_width(int(hw * SCALE))
     layout.set_wrap(Pango.WrapMode.WORD_CHAR)
     layout.set_alignment(Pango.Alignment.LEFT)
 
@@ -332,29 +365,26 @@ def render_headline(cr, ctx, data):
         layout.set_text(text, -1)
         return measure(layout)[1]
 
-    # Largest size that fills the headline zone height without overflowing.
     size, fits = largest_fitting(
-        lambda s: height_at(s) <= zh, cfg["headline_size_min"] * H, cfg["headline_size_max"] * H)
+        lambda s: height_at(s) <= hh, cfg["headline_size_min"] * H, cfg["headline_size_max"] * H)
     height_at(size)
     if not fits:
-        layout.set_height(int(zh * SCALE))
+        layout.set_height(int(hh * SCALE))
         layout.set_ellipsize(Pango.EllipsizeMode.END)
         print("[warn] headline does not fit at minimum size; truncating.")
+    head_h = measure(layout)[1]
 
-    # Vertically centre the wrapped headline within its zone.
-    th = measure(layout)[1]
-    draw_layout(cr, layout, zx, zy + max(0.0, (zh - th) / 2.0), ink)
+    byl = make_layout(cr)
+    set_font(byl, cfg["font_sans"], cfg["size_byline"] * H)
+    byl.set_width(int(bw * SCALE))
+    byl.set_text(sanitise(data["byline"]), -1)
+    byl_h = measure(byl)[1]
 
-
-def render_byline(cr, ctx, data, key, zone_key):
-    H, cfg = ctx["H"], ctx["cfg"]
-    zx, zy, zw, zh = ctx["px"][zone_key]
-    layout = make_layout(cr)
-    set_font(layout, cfg["font_sans"], cfg["size_byline"] * H)
-    layout.set_width(int(zw * SCALE))
-    layout.set_text(sanitise(data[key]), -1)
-    th = measure(layout)[1]
-    draw_layout(cr, layout, zx, zy + max(0.0, (zh - th) / 2.0), cfg["ink"])
+    gap = H * 0.006
+    block_h = head_h + gap + byl_h
+    top = region_top + max(0.0, (region_bottom - region_top - block_h) / 2.0)
+    draw_layout(cr, layout, hx, top, ink)
+    draw_layout(cr, byl, bx, top + head_h + gap, ink)
 
 
 # ----- Lead article: three balanced, justified, hyphenated columns -----------
@@ -367,6 +397,7 @@ def make_paragraph_layout(cr, text, font_str, size_px, leading_px, col_w, lang):
     layout.set_wrap(Pango.WrapMode.WORD_CHAR)
     layout.set_alignment(Pango.Alignment.LEFT)
     layout.set_justify(True)
+    layout.set_justify_last_line(False)  # last line of a paragraph stays left
     layout.set_attributes(build_attrs(
         text, leading_px=leading_px, language=lang, insert_hyphens=True))
     layout.set_text(text, -1)
@@ -422,20 +453,20 @@ def render_article(cr, ctx, data):
     lang = cfg["hyphenation_lang"]
     zx, zy, zw, zh = ctx["px"]["article"]
 
-    gutter = cfg["gutter_frac"] * W
+    pad = cfg["col_pad_frac"] * W
     d1 = cfg["col_divider_1_x"] * W
     d2 = cfg["col_divider_2_x"] * W
-    # Column left edges and a single representative width (columns are equal to
-    # within a pixel), aligned to the baked dividers.
-    col_x = [zx, d1 + gutter / 2.0, d2 + gutter / 2.0]
-    col_right = [d1 - gutter / 2.0, d2 - gutter / 2.0, zx + zw]
+    # Column left edges and right edges, inset by `pad` from the baked dividers
+    # (and from the zone edges) so body text never touches a structural rule.
+    col_x = [zx + pad, d1 + pad, d2 + pad]
+    col_right = [d1 - pad, d2 - pad, zx + zw - pad]
     col_w = sum(col_right[i] - col_x[i] for i in range(3)) / 3.0
 
     top = zy + cfg["article_pad_top_frac"] * H
     avail_h = zh - (cfg["article_pad_top_frac"] + cfg["article_pad_bottom_frac"]) * H
 
     paragraphs = [p.strip() for p in sanitise(data["lead_article"]).split("\n\n") if p.strip()]
-    hyph = [soft_hyphenate(p, lang) for p in paragraphs]
+    hyph = [soft_hyphenate(p, cfg) for p in paragraphs]
 
     def metrics_at(size):
         leading = cfg["lead_body"] * size
@@ -524,6 +555,8 @@ def render_pullquote(cr, ctx, data):
     qy = zy + max(0.0, (zh - clearance - block_h) / 2.0)
     draw_layout(cr, layout, zx, qy, ink)
     draw_layout(cr, al, zx, qy + qh + gap, ink)
+    # The lower rule itself is drawn AFTER compositing (see draw_lower_pq_rule)
+    # so it matches the baked rules exactly, untouched by the ink blur/multiply.
 
     # The template already has the rule ABOVE the pull quote; draw only the rule
     # BELOW it, matched to the baked rules' colour and weight.
@@ -542,43 +575,61 @@ def render_statbox(cr, ctx, data):
     desc = sanitise(data["stat_descriptor"])
     source = sanitise(data["stat_source"])
 
-    # Stat number: as large as possible within the tan box (width and ~half the
-    # box height, leaving room for the descriptor and source beneath).
+    # Stat number: the single most dominant element on the page. Size it on its
+    # INK extents (the real glyph bounds, not the line-height box) so it fills
+    # the box. For a wide multi-digit number the box WIDTH is the binding limit;
+    # for a narrow number the height limit applies.
     nl = make_layout(cr)
     nl.set_width(-1)
 
-    def num_ok(size):
+    def num_ink(size):
         set_font(nl, cfg["font_stat"], size)
         nl.set_text(number, -1)
-        w, h = measure(nl)
-        return w <= zw * 0.92 and h <= zh * 0.52
+        return nl.get_pixel_extents()[0]  # ink rect: x, y, width, height
+
+    def num_ok(size):
+        ink_r = num_ink(size)
+        return (ink_r.width <= zw * cfg["stat_ink_width_frac"]
+                and ink_r.height <= zh * cfg["stat_ink_height_frac"])
 
     nsize, _ = largest_fitting(num_ok, cfg["stat_size_min"] * H, cfg["stat_size_max"] * H)
-    set_font(nl, cfg["font_stat"], nsize)
-    nl.set_text(number, -1)
-    nw, nh = measure(nl)
+    ink_r = num_ink(nsize)
+
+    # Descriptor, sized down if needed so the number + descriptor + source still
+    # fit the box height.
+    gap1 = H * 0.010
+    gap2 = H * 0.008
+    src_h_est = cfg["size_stat_source"] * H * 1.4
+    desc_budget = zh - ink_r.height - gap1 - gap2 - src_h_est - H * 0.02
 
     dl = make_layout(cr)
-    set_font(dl, cfg["font_body"], cfg["size_stat_descriptor"] * H)
-    dl.set_width(int(zw * 0.90 * SCALE))
+    dl.set_width(int(zw * 0.92 * SCALE))
     dl.set_alignment(Pango.Alignment.CENTER)
-    dl.set_attributes(build_attrs(desc, leading_px=1.2 * cfg["size_stat_descriptor"] * H))
-    dl.set_text(desc, -1)
+
+    def desc_h(size):
+        set_font(dl, cfg["font_body"], size)
+        dl.set_attributes(build_attrs(desc, leading_px=1.18 * size))
+        dl.set_text(desc, -1)
+        return measure(dl)[1]
+
+    dsize, _ = largest_fitting(
+        lambda s: desc_h(s) <= desc_budget, 0.010 * H, cfg["size_stat_descriptor"] * H)
+    desc_h(dsize)
     dw, dh = measure(dl)
 
     sl = make_layout(cr)
     set_font(sl, cfg["font_sans"], cfg["size_stat_source"] * H)
-    sl.set_width(int(zw * 0.90 * SCALE))
+    sl.set_width(int(zw * 0.92 * SCALE))
     sl.set_alignment(Pango.Alignment.CENTER)
     sl.set_text(source, -1)
     sw, sh = measure(sl)
 
-    gap1 = H * 0.006
-    gap2 = H * 0.008
-    block_h = nh + gap1 + dh + gap2 + sh
+    block_h = ink_r.height + gap1 + dh + gap2 + sh
     y = zy + max(0.0, (zh - block_h) / 2.0)
-    draw_layout(cr, nl, zx + (zw - nw) / 2.0, y, ink)
-    y += nh + gap1
+    # The ink rect starts ink_r.y below the layout origin; offset so the glyphs
+    # (not the line box) align to y.
+    draw_layout(cr, nl, zx + (zw - ink_r.width) / 2.0 - ink_r.x, y - ink_r.y, ink)
+    y += ink_r.height + gap1
     draw_layout(cr, dl, zx + (zw - dw) / 2.0, y, ink)
     y += dh + gap2
     draw_layout(cr, sl, zx + (zw - sw) / 2.0, y, ink)
@@ -587,76 +638,87 @@ def render_statbox(cr, ctx, data):
 # ----- Sidebar stories (two explicit zones, each filled) ---------------------
 
 
-def render_sidebar_story(cr, ctx, zone, head, byline, body):
-    H, cfg = ctx["H"], ctx["cfg"]
-    ink = cfg["ink"]
-    lang = cfg["hyphenation_lang"]
-    zx, zy, zw, zh = zone
-
-    head = sanitise(head)
-    byline = sanitise(byline)
-    body = soft_hyphenate(sanitise(body), lang)
-
-    # Headline: largest size (within range) that wraps to at most ~32% of the
-    # zone height and fits the width.
+def _sidebar_headline_layout(cr, ctx, zw, head, size):
+    cfg = ctx["cfg"]
     hl = make_layout(cr)
     hl.set_width(int(zw * SCALE))
     hl.set_wrap(Pango.WrapMode.WORD)
+    set_font(hl, cfg["font_sidebar_head"], size)
+    hl.set_attributes(build_attrs(head, leading_px=1.08 * size))
+    hl.set_text(head, -1)
+    return hl
 
-    def head_h(size):
-        set_font(hl, cfg["font_sidebar_head"], size)
-        hl.set_attributes(build_attrs(head, leading_px=1.08 * size))
-        hl.set_text(head, -1)
-        return measure(hl)[1]
 
-    hsize, _ = largest_fitting(
-        lambda s: head_h(s) <= zh * 0.34, cfg["sidebar_head_min"] * H, cfg["sidebar_head_max"] * H)
-    head_h(hsize)
-    hh = measure(hl)[1]
-
-    bl = make_layout(cr)
-    set_font(bl, cfg["font_sans"], cfg["size_sidebar_byline"] * H)
-    bl.set_width(int(zw * SCALE))
-    bl.set_text(byline, -1)
-    bh = measure(bl)[1]
-
-    gap_hb = H * 0.004
-    gap_bb = H * 0.007
-    body_top = zy + hh + gap_hb + bh + gap_bb
-    body_avail = (zy + zh) - body_top
-
-    # Body: largest size that fits the remaining depth, then feathered to fill it.
-    def body_layout(size, leading):
-        layout = make_layout(cr)
-        set_font(layout, cfg["font_body"], size)
-        layout.set_width(int(zw * SCALE))
-        layout.set_wrap(Pango.WrapMode.WORD_CHAR)
-        layout.set_justify(True)
-        layout.set_alignment(Pango.Alignment.LEFT)
-        layout.set_attributes(build_attrs(
-            body, leading_px=leading, language=lang, insert_hyphens=True))
-        layout.set_text(body, -1)
-        return layout
-
-    bsize, _ = largest_fitting(
-        lambda s: measure(body_layout(s, cfg["lead_sidebar"] * s))[1] <= body_avail,
-        cfg["sidebar_body_min"] * H, cfg["sidebar_body_max"] * H)
-    base_lead = cfg["lead_sidebar"] * bsize
-    lead = feather_leading(
-        lambda ld: measure(body_layout(bsize, ld))[1], base_lead, body_avail, cfg["feather_cap"])
-
-    draw_layout(cr, hl, zx, zy, ink)
-    draw_layout(cr, bl, zx, zy + hh + gap_hb, ink)
-    draw_layout(cr, body_layout(bsize, lead), zx, body_top, ink)
+def _sidebar_body_layout(cr, ctx, zw, body, size):
+    cfg = ctx["cfg"]
+    layout = make_layout(cr)
+    set_font(layout, cfg["font_body"], size)
+    layout.set_width(int(zw * SCALE))
+    layout.set_wrap(Pango.WrapMode.WORD_CHAR)
+    layout.set_justify(True)
+    layout.set_justify_last_line(False)  # last line stays left aligned
+    layout.set_alignment(Pango.Alignment.LEFT)
+    layout.set_attributes(build_attrs(
+        body, leading_px=cfg["lead_sidebar"] * size,
+        language=cfg["hyphenation_lang"], insert_hyphens=True))
+    layout.set_text(body, -1)
+    return layout
 
 
 def render_sidebar(cr, ctx, data):
-    render_sidebar_story(cr, ctx, ctx["px"]["sidebar_1"],
-                         data["sidebar_1_headline"], data["sidebar_1_byline"],
-                         data["sidebar_1_body"])
-    render_sidebar_story(cr, ctx, ctx["px"]["sidebar_2"],
-                         data["sidebar_2_headline"], data["sidebar_2_byline"],
-                         data["sidebar_2_body"])
+    """Both sidebar stories share ONE headline size and ONE body size, computed
+    from sidebar 1 (the shorter, more constrained zone) and applied to both. If
+    sidebar 2 has spare depth at the foot, that is fine; consistency wins."""
+    H, cfg = ctx["H"], ctx["cfg"]
+    ink = cfg["ink"]
+
+    stories = []
+    for n in (1, 2):
+        zone = ctx["px"][f"sidebar_{n}"]
+        stories.append((
+            zone,
+            sanitise(data[f"sidebar_{n}_headline"]),
+            sanitise(data[f"sidebar_{n}_byline"]),
+            soft_hyphenate(sanitise(data[f"sidebar_{n}_body"]), cfg),
+        ))
+
+    byline_size = cfg["size_sidebar_byline"] * H
+    gap_hb = H * 0.004
+    gap_bb = H * 0.007
+
+    # Shared headline size: largest that fits BOTH headlines within ~34% of each
+    # story's zone height and within its width.
+    def head_fits_all(size):
+        for zone, head, _, _ in stories:
+            zw, zh = zone[2], zone[3]
+            if measure(_sidebar_headline_layout(cr, ctx, zw, head, size))[1] > zh * 0.34:
+                return False
+        return True
+
+    head_size, _ = largest_fitting(
+        head_fits_all, cfg["sidebar_head_min"] * H, cfg["sidebar_head_max"] * H)
+
+    # Shared body size: fill sidebar 1's body depth (after its headline+byline).
+    z1 = stories[0][0]
+    h1 = measure(_sidebar_headline_layout(cr, ctx, z1[2], stories[0][1], head_size))[1]
+    body1_avail = (z1[1] + z1[3]) - (z1[1] + h1 + gap_hb + byline_size + gap_bb)
+    body_size, _ = largest_fitting(
+        lambda s: measure(_sidebar_body_layout(cr, ctx, z1[2], stories[0][3], s))[1] <= body1_avail,
+        cfg["sidebar_body_min"] * H, cfg["sidebar_body_max"] * H)
+
+    for zone, head, byline, body in stories:
+        zx, zy, zw, zh = zone
+        hl = _sidebar_headline_layout(cr, ctx, zw, head, head_size)
+        hh = measure(hl)[1]
+        bl = make_layout(cr)
+        set_font(bl, cfg["font_sans"], byline_size)
+        bl.set_width(int(zw * SCALE))
+        bl.set_text(byline, -1)
+        bh = measure(bl)[1]
+        draw_layout(cr, hl, zx, zy, ink)
+        draw_layout(cr, bl, zx, zy + hh + gap_hb, ink)
+        draw_layout(cr, _sidebar_body_layout(cr, ctx, zw, body, body_size),
+                    zx, zy + hh + gap_hb + bh + gap_bb, ink)
 
 
 # ----- Kicker (optional full-width block beneath the pull quote) --------------
@@ -673,13 +735,13 @@ def render_kicker(cr, ctx, data):
     ink = cfg["ink"]
     lang = cfg["hyphenation_lang"]
     zx, zy, zw, zh = ctx["px"]["kicker"]
-    text = soft_hyphenate(sanitise(data["kicker_text"]), lang)
+    text = soft_hyphenate(sanitise(data["kicker_text"]), cfg)
 
-    gutter = cfg["gutter_frac"] * ctx["W"]
+    pad = cfg["col_pad_frac"] * ctx["W"]
     d1 = cfg["col_divider_1_x"] * ctx["W"]
     d2 = cfg["col_divider_2_x"] * ctx["W"]
-    col_x = [zx, d1 + gutter / 2.0, d2 + gutter / 2.0]
-    col_right = [d1 - gutter / 2.0, d2 - gutter / 2.0, zx + zw]
+    col_x = [zx + pad, d1 + pad, d2 + pad]
+    col_right = [d1 - pad, d2 - pad, zx + zw - pad]
     col_w = sum(col_right[i] - col_x[i] for i in range(3)) / 3.0
 
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
@@ -709,27 +771,45 @@ def render_kicker(cr, ctx, data):
 # ---------------------------------------------------------------------------
 
 
+def _lum(p):
+    return 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2]
+
+
 def sample_rule(template_rgb, cfg, W, H):
-    """Look along the baked pull-quote top rule and pick its darkest pixel as the
-    rule colour, so our lower rule matches. Falls back to a default grey."""
+    """Measure the baked pull-quote top rule's exact colour and thickness so the
+    lower rule we draw is identical. At many x positions we find the dark run
+    crossing the rule's y, then average its colour and median its thickness."""
     y = int(round(cfg["pullquote_top_rule_y"] * H))
     x0 = int(round(cfg["zones"]["pullquote"][0] * W))
     x1 = int(round((cfg["zones"]["pullquote"][0] + cfg["zones"]["pullquote"][2]) * W))
     px = template_rgb.load()
-    best = None
-    for yy in (y - 1, y, y + 1):
-        if not (0 <= yy < H):
-            continue
-        for xx in range(max(0, x0), min(W, x1), max(1, (x1 - x0) // 200)):
-            r, g, b = px[xx, yy][:3]
-            lum = 0.299 * r + 0.587 * g + 0.114 * b
-            if best is None or lum < best[0]:
-                best = (lum, (r, g, b))
-    weight = max(1.0, cfg["hairline_frac"] * H)
-    if best is None or best[0] > 200:
-        return cfg["lower_rule_default"], weight
-    r, g, b = best[1]
-    return (r / 255, g / 255, b / 255), weight
+    span = max(6, int(round(0.004 * H)))  # vertical search window around the rule
+
+    # Background luminance from just above the rule.
+    bg_samples = [_lum(px[xx, max(0, y - span)])
+                  for xx in range(max(0, x0), min(W, x1), max(1, (x1 - x0) // 100))]
+    if not bg_samples:
+        return cfg["lower_rule_default"], max(1.0, cfg["hairline_frac"] * H)
+    bg = sorted(bg_samples)[len(bg_samples) // 2]
+
+    thicknesses, colours = [], []
+    for xx in range(max(0, x0), min(W, x1), max(1, (x1 - x0) // 240)):
+        col = [(yy, px[xx, yy]) for yy in range(max(0, y - span), min(H, y + span + 1))]
+        darkest = min(col, key=lambda t: _lum(t[1]))
+        if _lum(darkest[1]) > bg - 25:
+            continue  # no rule here (e.g. a gap)
+        thr = (bg + _lum(darkest[1])) / 2.0
+        run = [p for (yy, p) in col if _lum(p) <= thr]
+        if run:
+            thicknesses.append(len(run))
+            colours.extend(run)
+    if not colours:
+        return cfg["lower_rule_default"], max(1.0, cfg["hairline_frac"] * H)
+    r = sum(c[0] for c in colours) / len(colours) / 255.0
+    g = sum(c[1] for c in colours) / len(colours) / 255.0
+    b = sum(c[2] for c in colours) / len(colours) / 255.0
+    weight = max(1.0, sorted(thicknesses)[len(thicknesses) // 2])
+    return (r, g, b), weight
 
 
 # ---------------------------------------------------------------------------
@@ -752,6 +832,21 @@ def composite(template_rgb, text_rgba, cfg, W):
     white = Image.new("RGBA", template_rgb.size, (255, 255, 255, 255))
     ink_map = Image.alpha_composite(white, text_rgba).convert("RGB")
     return ImageChops.multiply(template_rgb, ink_map)
+
+
+def draw_lower_pq_rule(image_rgb, ctx):
+    """Draw the lower pull-quote rule directly onto the composited image, at the
+    exact RGB and thickness sampled from the baked rules, so it is identical to
+    them (the multiply/blur ink pipeline is bypassed for structural rules)."""
+    from PIL import ImageDraw
+    cfg = ctx["cfg"]
+    zx, zy, zw, zh = ctx["px"]["pullquote"]
+    y = int(round(zy + zh))
+    colour = tuple(int(round(c * 255)) for c in ctx["rule_colour"])
+    width = int(round(ctx["rule_weight"]))
+    d = ImageDraw.Draw(image_rgb)
+    d.line([(int(round(zx)), y), (int(round(zx + zw)), y)], fill=colour, width=width)
+    return image_rgb
 
 
 def place_logo(image_rgb, ctx):
@@ -820,8 +915,7 @@ def build(template_path, data_path, output_path, cfg=CONFIG):
            "rule_colour": rule_colour, "rule_weight": rule_weight}
 
     render_masthead(cr, ctx, data)
-    render_headline(cr, ctx, data)
-    render_byline(cr, ctx, data, "byline", "byline")
+    render_headline_and_byline(cr, ctx, data)
     render_article(cr, ctx, data)
     render_pullquote(cr, ctx, data)
     render_statbox(cr, ctx, data)
@@ -830,6 +924,7 @@ def build(template_path, data_path, output_path, cfg=CONFIG):
 
     text_rgba = cairo_to_pil(surface)
     result = composite(template, text_rgba, cfg, W)
+    result = draw_lower_pq_rule(result, ctx)
     result = place_logo(result, ctx)
     result.save(output_path)
     print(f"[done] wrote {output_path} ({W}x{H}px)")
