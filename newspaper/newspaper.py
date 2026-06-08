@@ -930,14 +930,30 @@ def finalize_output(result, cfg, print_dpi, print_size):
 
 
 def build(template_path, data_path, output_path, cfg=CONFIG,
-          print_dpi=None, print_size=None):
+          print_dpi=None, print_size=None, render_dpi=None, render_size=None):
     with open(data_path, "r", encoding="utf-8") as fh:
         data = json.load(fh)
     validate(data, cfg)
 
     template = Image.open(template_path).convert("RGB")
+    print(f"[info] template {os.path.basename(template_path)}: "
+          f"{template.width}x{template.height}px")
+
+    # Optionally upscale a small template to the print size BEFORE rendering, so
+    # the text is drawn crisp at full resolution even from a small input. Only
+    # the paper texture is interpolated (it is just grain); the glyphs are not.
+    if render_size or render_dpi:
+        if render_size:
+            tw, th = render_size
+        else:
+            mm = cfg["a2_mm"]
+            tw = int(round(mm[0] / 25.4 * render_dpi))
+            th = int(round(mm[1] / 25.4 * render_dpi))
+        if (tw, th) != template.size:
+            print(f"[info] upscaling template {template.width}x{template.height} -> "
+                  f"{tw}x{th} before rendering" + (f" ({render_dpi} DPI)" if render_dpi else ""))
+            template = template.resize((tw, th), Image.LANCZOS)
     W, H = template.size
-    print(f"[info] template {os.path.basename(template_path)}: {W}x{H}px")
 
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, W, H)
     cr = cairo.Context(surface)
@@ -975,13 +991,23 @@ def main():
                          "(e.g. 300 -> 4961x7016) and tag the PNG")
     ap.add_argument("--print-size", default=None,
                     help="explicit WIDTHxHEIGHT to downsample to, overrides --print-dpi")
+    ap.add_argument("--render-dpi", type=int, default=None,
+                    help="upscale the template to A2 at this DPI BEFORE rendering, so "
+                         "a small template yields crisp text at full print size "
+                         "(e.g. 300 -> render at 4961x7016)")
+    ap.add_argument("--render-size", default=None,
+                    help="explicit WIDTHxHEIGHT to upscale the template to before rendering")
     args = ap.parse_args()
-    print_size = None
-    if args.print_size:
-        w, h = args.print_size.lower().split("x")
-        print_size = (int(w), int(h))
+
+    def parse_size(s):
+        if not s:
+            return None
+        w, h = s.lower().split("x")
+        return (int(w), int(h))
+
     build(args.template, args.data, args.output,
-          print_dpi=args.print_dpi, print_size=print_size)
+          print_dpi=args.print_dpi, print_size=parse_size(args.print_size),
+          render_dpi=args.render_dpi, render_size=parse_size(args.render_size))
 
 
 if __name__ == "__main__":

@@ -70,6 +70,18 @@ PNG. Use `--print-size 4961x7016` to give an explicit pixel target instead.
 Rendering at 8x uses ~1.3 GB RAM and about 30 seconds; 229 DPI (4x) is fine for
 foam board, 300 DPI (5x+) matches commercial print specs.
 
+Because the text is drawn fresh as glyphs, you do not even need a big template.
+`--render-dpi 300` upscales a SMALL template (e.g. the 948x1341 original, under
+1 MB) to A2 at 300 DPI before rendering, so the text comes out crisp at full
+print size while only the paper grain is interpolated:
+
+```bash
+python newspaper.py --template template.png --data mmc.json --output print.png --render-dpi 300
+```
+
+This is the easiest route when a large upscaled template is awkward to move
+around: keep the template small, let the engine render at print size.
+
 ## Calibrating to the real template
 
 Every zone position is a fraction of the image dimensions, so the same config
