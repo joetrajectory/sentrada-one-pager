@@ -48,6 +48,28 @@ python newspaper.py --template template_4x.png --data mmc.json --output out.png
 `mmc.json` is real production copy and exercises every field. At the 4x
 production resolution the full page renders in roughly eight seconds.
 
+## Print resolution
+
+The engine renders fonts as real glyphs at the template's pixel size, so text
+sharpness comes from the render resolution, not from how much the template is
+upscaled. The template upscale only adds newsprint texture detail.
+
+For an A2 print run at the standard 300 DPI (4961x7016 px), either:
+
+```bash
+# Render directly on a 300 DPI (5x, 4961x7016) template:
+python newspaper.py --template template_5x.png --data mmc.json --output print.png --print-dpi 300
+
+# ...or render on a larger master (e.g. 8x) and downsample the FINISHED page to
+# an exact 300 DPI, which supersamples the glyph edges and texture:
+python newspaper.py --template template_8x.png --data mmc.json --output print.png --print-dpi 300
+```
+
+`--print-dpi 300` downsamples the composited page to A2 at that DPI and tags the
+PNG. Use `--print-size 4961x7016` to give an explicit pixel target instead.
+Rendering at 8x uses ~1.3 GB RAM and about 30 seconds; 229 DPI (4x) is fine for
+foam board, 300 DPI (5x+) matches commercial print specs.
+
 ## Calibrating to the real template
 
 Every zone position is a fraction of the image dimensions, so the same config

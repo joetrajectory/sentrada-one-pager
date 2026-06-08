@@ -147,6 +147,9 @@ CONFIG = {
     "text_blur_px": 0.4,
     "blur_reference_width": 948,
     "hyphenation_lang": "en_GB",
+    # Physical page size, for downsampling a supersampled render to an exact
+    # print resolution. A2 portrait.
+    "a2_mm": (420, 594),
     # Validation --------------------------------------------------------------
     "lead_words_min": 580,
     "lead_words_max": 660,
@@ -899,7 +902,35 @@ def resolve_zones(cfg, W, H):
             for name, (fx, fy, fw, fh) in cfg["zones"].items()}
 
 
-def build(template_path, data_path, output_path, cfg=CONFIG):
+def finalize_output(result, cfg, print_dpi, print_size):
+    """Optionally downsample the finished page to an exact print resolution.
+    Rendering large (e.g. an 8x template) and scaling the FINAL composite down to
+    300 DPI supersamples the glyph edges and paper texture, which is cleaner than
+    rendering at the target size directly. Embeds the DPI in the PNG."""
+    if print_size:
+        tw, th = print_size
+    elif print_dpi:
+        mm = cfg["a2_mm"]
+        tw = int(round(mm[0] / 25.4 * print_dpi))
+        th = int(round(mm[1] / 25.4 * print_dpi))
+    else:
+        return result, None
+
+    src_ar = result.width / result.height
+    dst_ar = tw / th
+    if abs(src_ar - dst_ar) > 0.01:
+        print(f"[warn] template aspect ratio {src_ar:.4f} differs from the print "
+              f"target {dst_ar:.4f}; the downsample will distort slightly.")
+    if (tw, th) != result.size:
+        scale = tw / result.width
+        print(f"[info] downsampling {result.width}x{result.height} -> {tw}x{th} "
+              f"({scale:.2f}x) for print" + (f" at {print_dpi} DPI" if print_dpi else ""))
+        result = result.resize((tw, th), Image.LANCZOS)
+    return result, print_dpi
+
+
+def build(template_path, data_path, output_path, cfg=CONFIG,
+          print_dpi=None, print_size=None):
     with open(data_path, "r", encoding="utf-8") as fh:
         data = json.load(fh)
     validate(data, cfg)
@@ -926,8 +957,11 @@ def build(template_path, data_path, output_path, cfg=CONFIG):
     result = composite(template, text_rgba, cfg, W)
     result = draw_lower_pq_rule(result, ctx)
     result = place_logo(result, ctx)
-    result.save(output_path)
-    print(f"[done] wrote {output_path} ({W}x{H}px)")
+
+    result, dpi = finalize_output(result, cfg, print_dpi, print_size)
+    save_kwargs = {"dpi": (dpi, dpi)} if dpi else {}
+    result.save(output_path, **save_kwargs)
+    print(f"[done] wrote {output_path} ({result.width}x{result.height}px)")
 
 
 def main():
@@ -936,8 +970,18 @@ def main():
     ap.add_argument("--template", required=True)
     ap.add_argument("--data", required=True)
     ap.add_argument("--output", required=True)
+    ap.add_argument("--print-dpi", type=int, default=None,
+                    help="downsample the finished page to A2 at this DPI "
+                         "(e.g. 300 -> 4961x7016) and tag the PNG")
+    ap.add_argument("--print-size", default=None,
+                    help="explicit WIDTHxHEIGHT to downsample to, overrides --print-dpi")
     args = ap.parse_args()
-    build(args.template, args.data, args.output)
+    print_size = None
+    if args.print_size:
+        w, h = args.print_size.lower().split("x")
+        print_size = (int(w), int(h))
+    build(args.template, args.data, args.output,
+          print_dpi=args.print_dpi, print_size=print_size)
 
 
 if __name__ == "__main__":
