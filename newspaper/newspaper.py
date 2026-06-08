@@ -143,9 +143,13 @@ CONFIG = {
     "hairline_frac": 0.00065,        # fallback rule thickness, fraction of height
     # Logo --------------------------------------------------------------------
     "logo_path": os.path.normpath(os.path.join(SCRIPT_DIR, "..", "assets", "sentrada-logo.png")),
-    # Ink / paper realism -----------------------------------------------------
+    # Ink / paper realism. A faint sub-pixel blur simulates ink spreading into
+    # newsprint. It scales with resolution but is capped low so text stays sharp
+    # at print resolution (set ink_blur_cap to 0, or pass --ink-blur 0, for dead
+    # sharp "pasted" text).
     "text_blur_px": 0.4,
     "blur_reference_width": 948,
+    "ink_blur_cap": 0.6,
     "hyphenation_lang": "en_GB",
     # Physical page size, for downsampling a supersampled render to an exact
     # print resolution. A2 portrait.
@@ -828,8 +832,11 @@ def cairo_to_pil(surface):
     return Image.open(buf).convert("RGBA")
 
 
-def composite(template_rgb, text_rgba, cfg, W):
-    blur = cfg["text_blur_px"] * (W / float(cfg["blur_reference_width"]))
+def composite(template_rgb, text_rgba, cfg, W, ink_blur=None):
+    if ink_blur is None:
+        blur = min(cfg["ink_blur_cap"], cfg["text_blur_px"] * (W / float(cfg["blur_reference_width"])))
+    else:
+        blur = ink_blur
     if blur > 0:
         text_rgba = text_rgba.filter(ImageFilter.GaussianBlur(blur))
     white = Image.new("RGBA", template_rgb.size, (255, 255, 255, 255))
@@ -930,7 +937,8 @@ def finalize_output(result, cfg, print_dpi, print_size):
 
 
 def build(template_path, data_path, output_path, cfg=CONFIG,
-          print_dpi=None, print_size=None, render_dpi=None, render_size=None):
+          print_dpi=None, print_size=None, render_dpi=None, render_size=None,
+          ink_blur=None):
     with open(data_path, "r", encoding="utf-8") as fh:
         data = json.load(fh)
     validate(data, cfg)
@@ -970,7 +978,7 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
     render_kicker(cr, ctx, data)
 
     text_rgba = cairo_to_pil(surface)
-    result = composite(template, text_rgba, cfg, W)
+    result = composite(template, text_rgba, cfg, W, ink_blur=ink_blur)
     result = draw_lower_pq_rule(result, ctx)
     result = place_logo(result, ctx)
 
@@ -997,6 +1005,9 @@ def main():
                          "(e.g. 300 -> render at 4961x7016)")
     ap.add_argument("--render-size", default=None,
                     help="explicit WIDTHxHEIGHT to upscale the template to before rendering")
+    ap.add_argument("--ink-blur", type=float, default=None,
+                    help="ink-spread blur in px on the text (0 = razor sharp). "
+                         "Default is a faint, capped blur for newsprint realism.")
     args = ap.parse_args()
 
     def parse_size(s):
@@ -1007,7 +1018,8 @@ def main():
 
     build(args.template, args.data, args.output,
           print_dpi=args.print_dpi, print_size=parse_size(args.print_size),
-          render_dpi=args.render_dpi, render_size=parse_size(args.render_size))
+          render_dpi=args.render_dpi, render_size=parse_size(args.render_size),
+          ink_blur=args.ink_blur)
 
 
 if __name__ == "__main__":

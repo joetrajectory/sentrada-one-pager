@@ -144,3 +144,11 @@ prefers to break columns at paragraph boundaries rather than mid-sentence.
 
 No em dashes (they are replaced with a comma break). All body and sidebar text is
 justified with hyphenation. Text is near-black (#1A1A1A) on the cream template.
+
+## Ink sharpness
+
+Text is rendered as real glyphs at full output resolution, so it is sharp. A
+faint sub-pixel blur is then applied to the ink to simulate it spreading into the
+newsprint, capped low (`ink_blur_cap`, default 0.6 px) so text stays crisp at
+print resolution. Override per run with `--ink-blur` (e.g. `--ink-blur 0` for
+dead-sharp, `--ink-blur 0.3` for a whisper).
