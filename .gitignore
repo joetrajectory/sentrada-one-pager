@@ -1,0 +1,14 @@
+# Secrets and dependencies
+.env
+node_modules/
+
+# Generated per-campaign output (see CLAUDE.md > Git tracking)
+/pipeline/
+
+# Newspaper engine render output (generated artefacts, kept out of git).
+# The blank template (newspaper_template_a2.png) IS tracked; rendered pages
+# and scratch previews are not.
+newspaper/_*.png
+newspaper/*_final*.png
+newspaper/*_print*.png
+newspaper/mmc_*.png
