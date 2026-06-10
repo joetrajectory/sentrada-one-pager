@@ -896,9 +896,14 @@ def render_sidebar(cr, ctx, data):
         lambda s: measure(_sidebar_body_layout(cr, ctx, z1[2], stories[0][3], s))[1] <= body1_avail,
         cfg["sidebar_body_min"] * H, cfg["sidebar_body_max"] * H)
 
-    leading = cfg["lead_sidebar"] * body_size
+    # One line height, the unit the rule and sidebar 2 chain off.
+    line_h = cfg["lead_sidebar"] * body_size
 
     def draw_story(zone_x, zone_w, top_y, head, byline, body):
+        """Draw a sidebar story from top_y and return the y of its last inked
+        pixel (the actual rendered content end at the final font sizes, NOT an
+        estimate from the zone), so the rule and the next story chain off real
+        geometry and can never collide."""
         hl = _sidebar_headline_layout(cr, ctx, zone_w, head, head_size)
         hh = measure(hl)[1]
         bl = make_layout(cr)
@@ -911,21 +916,26 @@ def render_sidebar(cr, ctx, data):
         draw_layout(cr, hl, zone_x, top_y, ink)
         draw_layout(cr, bl, zone_x, top_y + hh + gap_hb, ink)
         draw_layout(cr, body_lay, zone_x, body_top, ink)
-        return body_top + measure(body_lay)[1]
+        # Last inked pixel of the body = body_top + (ink rect top + ink height).
+        body_ink = body_lay.get_pixel_extents()[0]
+        return body_top + body_ink.y + body_ink.height
 
     (zf1, head1, by1, body1), (zf2, head2, by2, body2) = stories
     end1 = draw_story(zf1[0], zf1[2], zf1[1], head1, by1, body1)
 
     # Engine-owned divider rule: the baked one was inpainted out of the template
     # (its fixed position collides with variable-length content), and is redrawn
-    # post-composite at one line height below sidebar 1's content end, matched to
-    # the baked rules' RGB and weight. Sidebar 2 starts 1.5 line heights below it.
-    rule_y = end1 + leading
+    # post-composite ONE FULL LINE below sidebar 1's actual last inked pixel,
+    # matched to the baked rules' RGB and weight. Sidebar 2 starts 1.5 line
+    # heights below the rule. Both gaps are measured from real ink, so larger
+    # headlines or an extra hyphenated line can never close them.
+    rule_y = end1 + line_h
     ctx["sidebar_rule"] = (zf2[0], zf2[0] + zf2[2], rule_y)
 
-    end2 = draw_story(zf2[0], zf2[2], rule_y + 1.5 * leading, head2, by2, body2)
-    # Sidebar 2's adaptive zone foot: where its content ends plus ~2 line heights.
-    ctx["sidebar2_zone_end"] = end2 + 2.0 * leading
+    end2 = draw_story(zf2[0], zf2[2], rule_y + 1.5 * line_h, head2, by2, body2)
+    # Sidebar 2's adaptive zone foot: its last inked pixel plus ~2 line heights.
+    # Anything placed below the rail (none at present) must clear this.
+    ctx["sidebar2_zone_end"] = end2 + 2.0 * line_h
 
 
 # ----- Kicker (optional full-width block beneath the pull quote) --------------
