@@ -92,15 +92,15 @@ CONFIG = {
     # the BASE values; vertical justification may loosen them slightly to fill.
     "lead_headline": 1.10,
     "lead_body": 1.20,
-    "lead_pullquote": 1.30,
+    "lead_pullquote": 1.34,
     "lead_sidebar": 1.20,
     # Masthead tracking (letter spacing) as a fraction of the masthead size.
-    # Tight, like a newspaper nameplate, not a luxury wordmark.
-    "masthead_tracking": 0.055,
+    # Tight and dense, like a NYT/FT nameplate, not a luxury wordmark.
+    "masthead_tracking": 0.040,
     # Fill behaviour ----------------------------------------------------------
     "fill_target": 0.97,        # aim to fill this fraction of a zone's depth
     "fill_min": 0.85,           # warn if a zone fills less than this
-    "feather_cap": 1.45,        # max leading stretch (x base) for vertical fill
+    "feather_cap": 1.60,        # max leading stretch (x base) for vertical fill
     "body_size_min": 0.0060,    # body auto-size search range, fraction of height
     "body_size_max": 0.0220,
     "headline_size_min": 0.0140,
@@ -137,8 +137,12 @@ CONFIG = {
     "hyph_right": 3,
     "hyph_min_word_len": 8,
     # Baked rules the template already provides; the engine must not redraw them.
-    "pullquote_top_rule_y": 0.8194,  # baked rule above the pull quote
-    # The engine draws ONLY the lower pull-quote rule, matched to the baked rules.
+    "pullquote_top_rule_y": 0.8233,  # baked rule above the pull-quote feature
+    # The faint baked sub-rule partway down the bottom block (article width only).
+    # The pull-quote feature now spans the whole bottom block, so this stray rule
+    # is erased (cloned over with paper) to keep the feature clean.
+    "sub_rule_y": 0.8717,
+    "sub_rule_x_end": 0.693,
     "lower_rule_default": (0x55 / 255, 0x55 / 255, 0x55 / 255),
     "hairline_frac": 0.00065,        # fallback rule thickness, fraction of height
     # Logo --------------------------------------------------------------------
@@ -158,14 +162,19 @@ CONFIG = {
     "lead_words_min": 580,
     "lead_words_max": 660,
     # Zones: (x, y, w, h) as fractions of the image, from the template spec.
+    # Baked horizontal rules sit at y = 0.0567 (under masthead), 0.1767 (under
+    # the headline block), 0.8233 (under the columns), 0.8717 (faint sub-rule,
+    # erased). The headline block lives BETWEEN the masthead and standfirst rules
+    # with breathing room; the pull-quote feature fills the whole bottom block.
     "zones": {
         "masthead":  (0.0000, 0.0000, 1.0000, 0.0567),
-        "headline":  (0.0338, 0.0574, 0.6592, 0.1193),
-        "byline":    (0.0338, 0.1775, 0.6592, 0.0164),
-        "article":   (0.0338, 0.1976, 0.6519, 0.6160),
-        # Pull quote extended downward so the quote and attribution breathe and
-        # the empty kicker space reads as intentional.
-        "pullquote": (0.0338, 0.8262, 0.6519, 0.0738),
+        "headline":  (0.0338, 0.0660, 0.6592, 0.0930),
+        "byline":    (0.0338, 0.1600, 0.6592, 0.0150),
+        "article":   (0.0338, 0.1840, 0.6519, 0.6320),
+        # Pull-quote feature: fills the entire bottom block, from the baked rule
+        # at 0.8233 down to a small bottom margin, large and generously spaced so
+        # the lower third reads as a deliberate closing feature, not dead space.
+        "pullquote": (0.0338, 0.8290, 0.6519, 0.1480),
         "kicker":    (0.0338, 0.9050, 0.6519, 0.0793),
         "statbox":   (0.7173, 0.0634, 0.2532, 0.2274),
         "sidebar_1": (0.7068, 0.3095, 0.2689, 0.1431),
@@ -196,6 +205,21 @@ def sanitise(text):
     for ch in ("—", "―", "‒", "⸺", "⸻"):
         text = text.replace(" " + ch + " ", ", ").replace(ch, ", ")
     return text.replace(" -- ", ", ").replace("--", ", ")
+
+
+def keep_phrases_together(text):
+    """Bind runs of capitalised words (proper nouns like "MMC Ventures") with a
+    non-breaking space so centred, narrow text blocks do not split them across
+    lines. Only the space BETWEEN two capitalised tokens is hardened."""
+    if not text:
+        return text
+    tokens = text.split(" ")
+    out = [tokens[0]] if tokens else []
+    for i in range(1, len(tokens)):
+        prev, cur = tokens[i - 1], tokens[i]
+        cap = lambda w: bool(w) and (w[0].isupper() or w[0].isdigit())
+        out.append((" " if cap(prev) and cap(cur) else " ") + cur)
+    return "".join(out)
 
 
 def soft_hyphenate(text, cfg):
@@ -527,10 +551,10 @@ def render_pullquote(cr, ctx, data):
     zx, zy, zw, zh = ctx["px"]["pullquote"]
 
     quote = "“" + sanitise(data["pull_quote_text"]) + "”"
-    attrib = sanitise(data["pull_quote_attribution"])
+    attrib = sanitise(keep_phrases_together(data["pull_quote_attribution"]))
 
-    # Attribution first (fixed size) so we can reserve its space, then a gap and
-    # clearance above the lower rule, before sizing the quote to fill the rest.
+    # Attribution first (fixed size) so we can reserve its space, then a gap,
+    # before sizing the quote to fill the rest of this tall closing block.
     a_size = cfg["size_pullquote_attrib"] * H
     al = make_layout(cr)
     set_font(al, cfg["font_sans"], a_size)
@@ -539,8 +563,8 @@ def render_pullquote(cr, ctx, data):
     al.set_text(attrib, -1)
     ah = measure(al)[1]
 
-    gap = H * 0.004
-    clearance = H * 0.006
+    gap = H * 0.012
+    clearance = H * 0.010
     quote_budget = zh - clearance - gap - ah
 
     layout = make_layout(cr)
@@ -554,20 +578,18 @@ def render_pullquote(cr, ctx, data):
         layout.set_text(quote, -1)
         return measure(layout)[1]
 
-    q_size, _ = largest_fitting(lambda s: q_height(s) <= quote_budget, 0.0070 * H, 0.030 * H)
+    # Size the quote to fill the block. It is the closing feature of the page, so
+    # it is allowed to grow large; the block is tall enough to carry it.
+    q_size, _ = largest_fitting(lambda s: q_height(s) <= quote_budget, 0.0090 * H, 0.046 * H)
     q_height(q_size)
     qh = measure(layout)[1]
 
     block_h = qh + gap + ah
-    qy = zy + max(0.0, (zh - clearance - block_h) / 2.0)
+    qy = zy + max(0.0, (zh - block_h) / 2.0)
     draw_layout(cr, layout, zx, qy, ink)
     draw_layout(cr, al, zx, qy + qh + gap, ink)
-    # The lower rule itself is drawn AFTER compositing (see draw_lower_pq_rule)
-    # so it matches the baked rules exactly, untouched by the ink blur/multiply.
-
-    # The template already has the rule ABOVE the pull quote; draw only the rule
-    # BELOW it, matched to the baked rules' colour and weight.
-    hrule(cr, zx, zx + zw, zy + zh, ctx["rule_weight"], ctx["rule_colour"])
+    # No engine-drawn rule: the baked rule at the top of the block is its only
+    # border, and the faint baked sub-rule lower down is erased post-composite.
 
 
 # ----- Stat box (on the tan fill) --------------------------------------------
@@ -579,7 +601,7 @@ def render_statbox(cr, ctx, data):
     zx, zy, zw, zh = ctx["px"]["statbox"]
 
     number = sanitise(data["stat_number"])
-    desc = sanitise(data["stat_descriptor"])
+    desc = keep_phrases_together(sanitise(data["stat_descriptor"]))
     source = sanitise(data["stat_source"])
 
     # Stat number: the single most dominant element on the page. Size it on its
@@ -673,9 +695,10 @@ def _sidebar_body_layout(cr, ctx, zw, body, size):
 
 
 def render_sidebar(cr, ctx, data):
-    """Both sidebar stories share ONE headline size and ONE body size, computed
-    from sidebar 1 (the shorter, more constrained zone) and applied to both. If
-    sidebar 2 has spare depth at the foot, that is fine; consistency wins."""
+    """Both sidebar stories share ONE headline size for consistency, but each
+    body is sized to FILL its own zone so neither story leaves a gap at the foot.
+    Sidebar 2 is the tall one; sizing it independently (rather than inheriting the
+    shorter sidebar 1's size) is what stops the bottom-right going empty."""
     H, cfg = ctx["H"], ctx["cfg"]
     ink = cfg["ink"]
 
@@ -705,14 +728,6 @@ def render_sidebar(cr, ctx, data):
     head_size, _ = largest_fitting(
         head_fits_all, cfg["sidebar_head_min"] * H, cfg["sidebar_head_max"] * H)
 
-    # Shared body size: fill sidebar 1's body depth (after its headline+byline).
-    z1 = stories[0][0]
-    h1 = measure(_sidebar_headline_layout(cr, ctx, z1[2], stories[0][1], head_size))[1]
-    body1_avail = (z1[1] + z1[3]) - (z1[1] + h1 + gap_hb + byline_size + gap_bb)
-    body_size, _ = largest_fitting(
-        lambda s: measure(_sidebar_body_layout(cr, ctx, z1[2], stories[0][3], s))[1] <= body1_avail,
-        cfg["sidebar_body_min"] * H, cfg["sidebar_body_max"] * H)
-
     for zone, head, byline, body in stories:
         zx, zy, zw, zh = zone
         hl = _sidebar_headline_layout(cr, ctx, zw, head, head_size)
@@ -722,10 +737,30 @@ def render_sidebar(cr, ctx, data):
         bl.set_width(int(zw * SCALE))
         bl.set_text(byline, -1)
         bh = measure(bl)[1]
+
+        # Body depth available in THIS zone, after its headline and byline.
+        body_avail = (zy + zh) - (zy + hh + gap_hb + bh + gap_bb)
+        body_size, _ = largest_fitting(
+            lambda s, b=body: measure(_sidebar_body_layout(cr, ctx, zw, b, s))[1] <= body_avail,
+            cfg["sidebar_body_min"] * H, cfg["sidebar_body_max"] * H)
+        # If the copy is short, loosen leading to bottom-fill rather than leave a
+        # gap at the foot of the zone.
+        base_lead = cfg["lead_sidebar"] * body_size
+
+        def body_h(ld, b=body, s=body_size):
+            lay = _sidebar_body_layout(cr, ctx, zw, b, s)
+            lay.set_attributes(build_attrs(
+                b, leading_px=ld, language=cfg["hyphenation_lang"], insert_hyphens=True))
+            return measure(lay)[1]
+
+        lead = feather_leading(body_h, base_lead, body_avail, cfg["feather_cap"])
+        body_lay = _sidebar_body_layout(cr, ctx, zw, body, body_size)
+        body_lay.set_attributes(build_attrs(
+            body, leading_px=lead, language=cfg["hyphenation_lang"], insert_hyphens=True))
+
         draw_layout(cr, hl, zx, zy, ink)
         draw_layout(cr, bl, zx, zy + hh + gap_hb, ink)
-        draw_layout(cr, _sidebar_body_layout(cr, ctx, zw, body, body_size),
-                    zx, zy + hh + gap_hb + bh + gap_bb, ink)
+        draw_layout(cr, body_lay, zx, zy + hh + gap_hb + bh + gap_bb, ink)
 
 
 # ----- Kicker (optional full-width block beneath the pull quote) --------------
@@ -859,6 +894,45 @@ def draw_lower_pq_rule(image_rgb, ctx):
     return image_rgb
 
 
+def erase_sub_rule(template_rgb, cfg, W, H):
+    """Erase the faint baked sub-rule partway down the bottom block by cloning a
+    clean strip of paper from just above it over its location. Done on the
+    TEMPLATE before text is composited, so the pull-quote feature spans the whole
+    bottom block without a stray hairline cutting through it."""
+    y = int(round(cfg["sub_rule_y"] * H))
+    x0 = 0
+    x1 = int(round(cfg["sub_rule_x_end"] * W))
+    band = max(3, int(round(0.006 * H)))      # rows to overwrite, centred on rule
+    top = y - band // 2
+    src_top = top - band - max(2, int(round(0.003 * H)))  # clean paper above
+    if src_top < 0:
+        return template_rgb
+    strip = template_rgb.crop((x0, src_top, x1, src_top + band))
+    template_rgb.paste(strip, (x0, top))
+    return template_rgb
+
+
+def trim_edge_frame(image_rgb, cfg):
+    """Remove the 1px dark halo a LANCZOS resize leaves at the image border by
+    cloning the outer ring inward. The print is cut to the image edge, so there
+    must be no outline. Top-edge cloning stays within the khaki masthead band, so
+    its colour is preserved."""
+    W, H = image_rgb.size
+    r = max(2, int(round(0.0009 * W)))
+    px = image_rgb.load()
+    # Top and bottom rings.
+    top_src = image_rgb.crop((0, r, W, r + 1)).resize((W, r))
+    image_rgb.paste(top_src, (0, 0))
+    bot_src = image_rgb.crop((0, H - r - 1, W, H - r)).resize((W, r))
+    image_rgb.paste(bot_src, (0, H - r))
+    # Left and right rings.
+    left_src = image_rgb.crop((r, 0, r + 1, H)).resize((r, H))
+    image_rgb.paste(left_src, (0, 0))
+    right_src = image_rgb.crop((W - r - 1, 0, W - r, H)).resize((r, H))
+    image_rgb.paste(right_src, (W - r, 0))
+    return image_rgb
+
+
 def place_logo(image_rgb, ctx):
     cfg, W, H = ctx["cfg"], ctx["W"], ctx["H"]
     path = cfg["logo_path"]
@@ -963,6 +1037,10 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
             template = template.resize((tw, th), Image.LANCZOS)
     W, H = template.size
 
+    # Erase the faint baked sub-rule so the pull-quote feature owns the whole
+    # bottom block. Done on the template before any text is composited.
+    erase_sub_rule(template, cfg, W, H)
+
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, W, H)
     cr = cairo.Context(surface)
     rule_colour, rule_weight = sample_rule(template, cfg, W, H)
@@ -979,10 +1057,10 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
 
     text_rgba = cairo_to_pil(surface)
     result = composite(template, text_rgba, cfg, W, ink_blur=ink_blur)
-    result = draw_lower_pq_rule(result, ctx)
     result = place_logo(result, ctx)
 
     result, dpi = finalize_output(result, cfg, print_dpi, print_size)
+    result = trim_edge_frame(result, cfg)  # last: kill any resize edge halo
     save_kwargs = {"dpi": (dpi, dpi)} if dpi else {}
     result.save(output_path, **save_kwargs)
     print(f"[done] wrote {output_path} ({result.width}x{result.height}px)")
