@@ -95,8 +95,9 @@ CONFIG = {
     "lead_pullquote": 1.34,
     "lead_sidebar": 1.42,
     # Masthead tracking (letter spacing) as a fraction of the masthead size.
-    # Tight and dense, like a NYT/FT nameplate, not a luxury wordmark.
-    "masthead_tracking": 0.021,
+    # Tight and dense; the nameplate is auto-sized to span the full page width
+    # and fill the khaki band, so tracking stays small to let the glyphs grow.
+    "masthead_tracking": 0.010,
     # Fill behaviour ----------------------------------------------------------
     "fill_target": 0.97,        # aim to fill this fraction of a zone's depth
     "fill_min": 0.85,           # warn if a zone fills less than this
@@ -139,6 +140,14 @@ CONFIG = {
     "hyph_left": 3,
     "hyph_right": 3,
     "hyph_min_word_len": 8,
+    # Baked rule under the headline block (the standfirst rule). The headline
+    # grows to fill the band down to here; the byline and columns then chain off
+    # the headline's actual bottom rather than sitting at fixed positions.
+    "standfirst_rule_y": 0.1767,
+    # Edition line letterspacing (fraction of its size) when set in spaced caps.
+    "edition_tracking": 0.10,
+    # Khaki band vertical extent (the nameplate is centred and sized to it).
+    "masthead_band": (0.0119, 0.0567),
     # Baked rules the template already provides; the engine must not redraw them.
     "pullquote_top_rule_y": 0.8233,  # baked rule above the pull-quote feature
     # The faint baked sub-rule partway down the bottom block (article width only).
@@ -366,9 +375,14 @@ def render_masthead(cr, ctx, data):
 
     name = sanitise(data["masthead_name"]).upper()
     sub_size = cfg["size_edition"] * H
+    band_top, band_bot = cfg["masthead_band"]
+    band_top, band_bot = band_top * H, band_bot * H
+    band_h = band_bot - band_top
 
-    # Size the masthead name to fill the band: as large as fits the band height
-    # (about 55%) and the content width, with generous tracking.
+    # The nameplate is the loudest text on the page: size it to span the FULL
+    # printable width (margin to margin) and fill the khaki band almost to its
+    # height. Width is normally the binding limit; tracking is small so the
+    # glyphs grow as large as possible.
     layout = make_layout(cr)
 
     def name_metrics(size):
@@ -376,24 +390,35 @@ def render_masthead(cr, ctx, data):
         layout.set_attributes(build_attrs(name, letter_spacing_px=cfg["masthead_tracking"] * size))
         layout.set_width(-1)
         layout.set_text(name, -1)
-        return measure(layout)
+        # Measure the INK (actual cap glyphs), not the logical line box: all-caps
+        # has no descenders, so the logical box is far taller than the letters.
+        # Capping ink height to the band lets the glyphs grow until WIDTH binds,
+        # so the nameplate spans the full page rather than being throttled small.
+        r = layout.get_pixel_extents()[0]
+        return r.width, r.height
 
     def feasible(size):
         w, h = name_metrics(size)
-        return w <= content_w and h <= zh * 0.62
+        return w <= content_w and h <= band_h * 0.86
 
-    size, _ = largest_fitting(feasible, 0.020 * H, 0.060 * H)
+    size, _ = largest_fitting(feasible, 0.030 * H, 0.130 * H)
     nw, nh = name_metrics(size)
+    # Centre the nameplate in the khaki band, both axes. Use ink extents so the
+    # caps sit optically centred rather than floating on the line box.
+    ink_r = layout.get_pixel_extents()[0]
+    name_x = margin + (content_w - ink_r.width) / 2.0 - ink_r.x
+    name_y = band_top + (band_h - ink_r.height) / 2.0 - ink_r.y
+    draw_layout(cr, layout, name_x, name_y, ink)
 
-    block_h = nh + zh * 0.10 + sub_size * 1.2
-    top = zy + max(0.0, (zh - block_h) / 2.0)
-    draw_layout(cr, layout, margin + (content_w - nw) / 2.0, top, ink)
-
-    line_y = top + nh + zh * 0.10
+    # Edition line and date sit just below the band, the edition line in spaced
+    # capitals to read like a broadsheet folio.
+    line_y = band_bot + 0.004 * H
+    edition = sanitise(data["edition_line"]).upper()
     el = make_layout(cr)
     set_font(el, cfg["font_sans"], sub_size)
+    el.set_attributes(build_attrs(edition, letter_spacing_px=cfg["edition_tracking"] * sub_size))
     el.set_width(-1)
-    el.set_text(sanitise(data["edition_line"]), -1)
+    el.set_text(edition, -1)
     draw_layout(cr, el, margin, line_y, ink)
 
     dl = make_layout(cr)
@@ -405,23 +430,34 @@ def render_masthead(cr, ctx, data):
 
 
 def render_headline_and_byline(cr, ctx, data):
-    """Headline filled as large as possible, with the byline tucked directly
-    beneath it. The tight headline+byline pair is centred in the combined
-    headline+byline region so there is no gap between them."""
+    """Headline grown to FILL the band from its zone top down to the standfirst
+    rule, in two or three balanced lines. The byline (bold) chains directly below
+    the headline's last line, and the lead columns chain directly below the
+    byline: no fixed gaps, so the top of the page is loud with no dead space.
+    Stores the article top (where the columns begin) in ctx."""
     H, cfg = ctx["H"], ctx["cfg"]
     ink = cfg["ink"]
     hx, hy, hw, hh = ctx["px"]["headline"]
-    bx, by, bw, bh = ctx["px"]["byline"]
-    region_top, region_bottom = hy, by + bh
 
-    # Bind the trailing phrase so the last line carries at least four words; for
-    # this headline that pulls "Question: Who Runs Sales?" onto the final line.
-    text = prevent_orphan(sanitise(data["headline"]), words=4)
+    region_top = hy
+    region_bottom = cfg["standfirst_rule_y"] * H - 0.004 * H
+
+    text = prevent_orphan(sanitise(data["headline"]), words=2)
     lead = cfg["lead_headline"]
     layout = make_layout(cr)
     layout.set_width(int(hw * SCALE))
     layout.set_wrap(Pango.WrapMode.WORD_CHAR)
     layout.set_alignment(Pango.Alignment.LEFT)
+
+    byl = make_layout(cr)
+    set_font(byl, cfg["font_sans"] + " Bold", cfg["size_byline"] * H)
+    byl.set_width(int(hw * SCALE))
+    byl.set_text(sanitise(data["byline"]), -1)
+    byl_h = measure(byl)[1]
+
+    gap_hb = H * 0.010   # headline to byline
+    gap_ba = H * 0.014   # byline to first column
+    avail_head = region_bottom - region_top - byl_h - gap_hb
 
     def height_at(size):
         set_font(layout, cfg["font_headline"], size)
@@ -429,17 +465,16 @@ def render_headline_and_byline(cr, ctx, data):
         layout.set_text(text, -1)
         return measure(layout)[1]
 
+    # Grow the headline to fill the available band depth (up to three lines).
     size, fits = largest_fitting(
-        lambda s: height_at(s) <= hh, cfg["headline_size_min"] * H, cfg["headline_size_max"] * H)
+        lambda s: height_at(s) <= avail_head, cfg["headline_size_min"] * H, cfg["headline_size_max"] * H)
     height_at(size)
     if not fits:
-        layout.set_height(int(hh * SCALE))
+        layout.set_height(int(avail_head * SCALE))
         layout.set_ellipsize(Pango.EllipsizeMode.END)
         print("[warn] headline does not fit at minimum size; truncating.")
 
-    # Balanced breaking: no line may run shorter than 50% of the block width
-    # (the last line may go to 40%). While the wrap is ragged, shave 2% off the
-    # size and reflow; the goal is lines of roughly even length.
+    # Balanced breaking: no full line under 50% of block width (last under 40%).
     def line_widths():
         ws = []
         it = layout.get_iter()
@@ -463,17 +498,12 @@ def render_headline_and_byline(cr, ctx, data):
         print("[warn] headline lines remain ragged at the minimum size.")
     head_h = measure(layout)[1]
 
-    byl = make_layout(cr)
-    set_font(byl, cfg["font_sans"], cfg["size_byline"] * H)
-    byl.set_width(int(bw * SCALE))
-    byl.set_text(sanitise(data["byline"]), -1)
-    byl_h = measure(byl)[1]
-
-    gap = H * 0.006
-    block_h = head_h + gap + byl_h
-    top = region_top + max(0.0, (region_bottom - region_top - block_h) / 2.0)
-    draw_layout(cr, layout, hx, top, ink)
-    draw_layout(cr, byl, bx, top + head_h + gap, ink)
+    # Chain: headline at region top, byline directly beneath, columns directly
+    # beneath the byline.
+    draw_layout(cr, layout, hx, region_top, ink)
+    byline_y = region_top + head_h + gap_hb
+    draw_layout(cr, byl, hx, byline_y, ink)
+    ctx["article_top_y"] = byline_y + byl_h + gap_ba
 
 
 # ----- Lead article: three balanced, justified, hyphenated columns -----------
@@ -581,8 +611,12 @@ def render_article(cr, ctx, data):
     col_right = [d1 - pad, d2 - pad, zx + zw - pad]
     col_w = sum(col_right[i] - col_x[i] for i in range(3)) / 3.0
 
-    top = zy + cfg["article_pad_top_frac"] * H
-    avail_h = zh - (cfg["article_pad_top_frac"] + cfg["article_pad_bottom_frac"]) * H
+    # Columns chain off the byline (ctx["article_top_y"], set by the headline)
+    # rather than a fixed top, so growing the headline never opens a gap. The
+    # bottom stays fixed, just above the baked rule at 0.8233.
+    zone_bottom = zy + zh
+    top = ctx.get("article_top_y", zy + cfg["article_pad_top_frac"] * H)
+    avail_h = zone_bottom - top - cfg["article_pad_bottom_frac"] * H
 
     paragraphs = [p.strip() for p in sanitise(data["lead_article"]).split("\n\n") if p.strip()]
     # Bind the last two words of every paragraph so no paragraph (and therefore
@@ -755,7 +789,9 @@ def render_statbox(cr, ctx, data):
 
     def desc_h(size):
         set_font(dl, cfg["font_body"], size)
-        dl.set_attributes(build_attrs(desc, leading_px=1.18 * size))
+        # Leading matched proportionally to the body (1.20); the descriptor was
+        # noticeably looser than the rest of the page at 1.18 of a large size.
+        dl.set_attributes(build_attrs(desc, leading_px=1.06 * size))
         dl.set_text(desc, -1)
         return measure(dl)[1]
 
