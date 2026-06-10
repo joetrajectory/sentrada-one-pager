@@ -96,7 +96,7 @@ CONFIG = {
     "lead_sidebar": 1.20,
     # Masthead tracking (letter spacing) as a fraction of the masthead size.
     # Tight and dense, like a NYT/FT nameplate, not a luxury wordmark.
-    "masthead_tracking": 0.040,
+    "masthead_tracking": 0.026,
     # Fill behaviour ----------------------------------------------------------
     "fill_target": 0.97,        # aim to fill this fraction of a zone's depth
     "fill_min": 0.85,           # warn if a zone fills less than this
@@ -220,6 +220,22 @@ def keep_phrases_together(text):
         cap = lambda w: bool(w) and (w[0].isupper() or w[0].isdigit())
         out.append((" " if cap(prev) and cap(cur) else " ") + cur)
     return "".join(out)
+
+
+def prevent_orphan(text, words=2):
+    """Bind the final `words` tokens with non-breaking spaces so a wrap can never
+    strand a single short word on its own last line. Used on the headline (so
+    "Who Runs Sales?" stays together) and on the last paragraph of the lead so a
+    column never ends on a lone word."""
+    if not text:
+        return text
+    nbsp = chr(0x00A0)
+    toks = text.split(" ")
+    if len(toks) <= words:
+        return nbsp.join(toks)
+    head = " ".join(toks[:-words])
+    tail = nbsp.join(toks[-words:])
+    return head + " " + tail
 
 
 def soft_hyphenate(text, cfg):
@@ -383,7 +399,9 @@ def render_headline_and_byline(cr, ctx, data):
     bx, by, bw, bh = ctx["px"]["byline"]
     region_top, region_bottom = hy, by + bh
 
-    text = sanitise(data["headline"])
+    # Bind the trailing phrase so the last line cannot be a lone word; for this
+    # headline that keeps "Who Runs Sales?" together on the final line.
+    text = prevent_orphan(sanitise(data["headline"]), words=3)
     lead = cfg["lead_headline"]
     layout = make_layout(cr)
     layout.set_width(int(hw * SCALE))
@@ -498,6 +516,9 @@ def render_article(cr, ctx, data):
 
     paragraphs = [p.strip() for p in sanitise(data["lead_article"]).split("\n\n") if p.strip()]
     hyph = [soft_hyphenate(p, cfg) for p in paragraphs]
+    # Stop the final column ending on a lone word (the L-shaped notch).
+    if hyph:
+        hyph[-1] = prevent_orphan(hyph[-1], words=2)
 
     def metrics_at(size):
         leading = cfg["lead_body"] * size
@@ -695,10 +716,11 @@ def _sidebar_body_layout(cr, ctx, zw, body, size):
 
 
 def render_sidebar(cr, ctx, data):
-    """Both sidebar stories share ONE headline size for consistency, but each
-    body is sized to FILL its own zone so neither story leaves a gap at the foot.
-    Sidebar 2 is the tall one; sizing it independently (rather than inheriting the
-    shorter sidebar 1's size) is what stops the bottom-right going empty."""
+    """Both sidebar stories share ONE headline size and ONE body size, both
+    computed from sidebar 1 (the shorter, more constrained zone) and applied to
+    both. Sidebar 2 is NOT enlarged to fill its extra depth: a narrow column at a
+    larger size opens ugly word gaps, so leftover space at the foot of sidebar 2
+    is accepted as the lesser evil."""
     H, cfg = ctx["H"], ctx["cfg"]
     ink = cfg["ink"]
 
@@ -728,6 +750,14 @@ def render_sidebar(cr, ctx, data):
     head_size, _ = largest_fitting(
         head_fits_all, cfg["sidebar_head_min"] * H, cfg["sidebar_head_max"] * H)
 
+    # Shared body size: fill sidebar 1's body depth (after its headline+byline).
+    z1 = stories[0][0]
+    h1 = measure(_sidebar_headline_layout(cr, ctx, z1[2], stories[0][1], head_size))[1]
+    body1_avail = (z1[1] + z1[3]) - (z1[1] + h1 + gap_hb + byline_size + gap_bb)
+    body_size, _ = largest_fitting(
+        lambda s: measure(_sidebar_body_layout(cr, ctx, z1[2], stories[0][3], s))[1] <= body1_avail,
+        cfg["sidebar_body_min"] * H, cfg["sidebar_body_max"] * H)
+
     for zone, head, byline, body in stories:
         zx, zy, zw, zh = zone
         hl = _sidebar_headline_layout(cr, ctx, zw, head, head_size)
@@ -737,30 +767,10 @@ def render_sidebar(cr, ctx, data):
         bl.set_width(int(zw * SCALE))
         bl.set_text(byline, -1)
         bh = measure(bl)[1]
-
-        # Body depth available in THIS zone, after its headline and byline.
-        body_avail = (zy + zh) - (zy + hh + gap_hb + bh + gap_bb)
-        body_size, _ = largest_fitting(
-            lambda s, b=body: measure(_sidebar_body_layout(cr, ctx, zw, b, s))[1] <= body_avail,
-            cfg["sidebar_body_min"] * H, cfg["sidebar_body_max"] * H)
-        # If the copy is short, loosen leading to bottom-fill rather than leave a
-        # gap at the foot of the zone.
-        base_lead = cfg["lead_sidebar"] * body_size
-
-        def body_h(ld, b=body, s=body_size):
-            lay = _sidebar_body_layout(cr, ctx, zw, b, s)
-            lay.set_attributes(build_attrs(
-                b, leading_px=ld, language=cfg["hyphenation_lang"], insert_hyphens=True))
-            return measure(lay)[1]
-
-        lead = feather_leading(body_h, base_lead, body_avail, cfg["feather_cap"])
-        body_lay = _sidebar_body_layout(cr, ctx, zw, body, body_size)
-        body_lay.set_attributes(build_attrs(
-            body, leading_px=lead, language=cfg["hyphenation_lang"], insert_hyphens=True))
-
         draw_layout(cr, hl, zx, zy, ink)
         draw_layout(cr, bl, zx, zy + hh + gap_hb, ink)
-        draw_layout(cr, body_lay, zx, zy + hh + gap_hb + bh + gap_bb, ink)
+        draw_layout(cr, _sidebar_body_layout(cr, ctx, zw, body, body_size),
+                    zx, zy + hh + gap_hb + bh + gap_bb, ink)
 
 
 # ----- Kicker (optional full-width block beneath the pull quote) --------------
