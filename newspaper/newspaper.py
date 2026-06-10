@@ -93,10 +93,10 @@ CONFIG = {
     "lead_headline": 1.10,
     "lead_body": 1.20,
     "lead_pullquote": 1.34,
-    "lead_sidebar": 1.20,
+    "lead_sidebar": 1.42,
     # Masthead tracking (letter spacing) as a fraction of the masthead size.
     # Tight and dense, like a NYT/FT nameplate, not a luxury wordmark.
-    "masthead_tracking": 0.026,
+    "masthead_tracking": 0.021,
     # Fill behaviour ----------------------------------------------------------
     "fill_target": 0.97,        # aim to fill this fraction of a zone's depth
     "fill_min": 0.85,           # warn if a zone fills less than this
@@ -107,10 +107,14 @@ CONFIG = {
     "headline_size_max": 0.0480,
     "stat_size_min": 0.0250,
     "stat_size_max": 0.1600,
-    "sidebar_body_min": 0.0075,
-    "sidebar_body_max": 0.0190,
-    "sidebar_head_min": 0.0120,
-    "sidebar_head_max": 0.0230,
+    "sidebar_body_min": 0.0095,
+    "sidebar_body_max": 0.0215,
+    "sidebar_head_min": 0.0160,
+    "sidebar_head_max": 0.0320,
+    # Sidebar headline may occupy up to this fraction of its zone height, and the
+    # body leading may stretch up to this factor to fill the zone foot.
+    "sidebar_head_frac": 0.40,
+    "sidebar_feather_cap": 1.45,
     # Small type that is not auto-filled --------------------------------------
     "size_edition": 0.0100,
     "size_byline": 0.0118,
@@ -177,8 +181,13 @@ CONFIG = {
         "pullquote": (0.0338, 0.8290, 0.6519, 0.1480),
         "kicker":    (0.0338, 0.9050, 0.6519, 0.0793),
         "statbox":   (0.7173, 0.0634, 0.2532, 0.2274),
-        "sidebar_1": (0.7068, 0.3095, 0.2689, 0.1431),
-        "sidebar_2": (0.7068, 0.4847, 0.2689, 0.3356),
+        # Sidebar 1 now runs down to just above the baked divider rule (0.4840),
+        # closing the dead gap above it. Sidebar 2 starts just below that rule
+        # and runs down to the pull-quote depth (~0.93), filling the lower-right
+        # that was empty. The rail's vertical divider runs to 0.95, and no baked
+        # horizontal rule crosses the rail below 0.484, so this is clean.
+        "sidebar_1": (0.7068, 0.3095, 0.2689, 0.1705),
+        "sidebar_2": (0.7068, 0.4885, 0.2689, 0.4415),
         "logo":      (0.9388, 0.9769, 0.0475, 0.0231),
     },
 }
@@ -399,9 +408,9 @@ def render_headline_and_byline(cr, ctx, data):
     bx, by, bw, bh = ctx["px"]["byline"]
     region_top, region_bottom = hy, by + bh
 
-    # Bind the trailing phrase so the last line cannot be a lone word; for this
-    # headline that keeps "Who Runs Sales?" together on the final line.
-    text = prevent_orphan(sanitise(data["headline"]), words=3)
+    # Bind the trailing phrase so the last line carries at least four words; for
+    # this headline that pulls "Question: Who Runs Sales?" onto the final line.
+    text = prevent_orphan(sanitise(data["headline"]), words=4)
     lead = cfg["lead_headline"]
     layout = make_layout(cr)
     layout.set_width(int(hw * SCALE))
@@ -474,7 +483,37 @@ def balance_columns(heights, gap):
             key = (max(ch), max(ch) - min(ch))
             if best is None or key < best[0]:
                 best = (key, groups)
-    return best[1]
+    groups = best[1]
+
+    # Hard requirement: columns must end at the same depth. If the shortest
+    # column is more than 3% shorter than the tallest, try shifting a single
+    # paragraph across the worst boundary and keep the move only if it reduces
+    # the spread. (The min-max partition above is already optimal at paragraph
+    # granularity, so this rarely fires; it is a guard for awkward copy.)
+    def spread(gs):
+        ch = [_column_height(heights, gap, g) for g in gs]
+        return max(ch) - min(ch), ch
+    sp, ch = spread(groups)
+    if ch and max(ch) > 0 and sp / max(ch) > 0.03:
+        for _ in range(len(heights)):
+            tallest = max(range(3), key=lambda i: ch[i])
+            cand = None
+            for j in (tallest - 1, tallest + 1):  # adjacent columns only
+                if 0 <= j < 3 and groups[tallest]:
+                    moved = [list(g) for g in groups]
+                    if j < tallest:           # give tallest's first para to left
+                        moved[j].append(moved[tallest].pop(0))
+                    else:                     # give tallest's last para to right
+                        moved[j].insert(0, moved[tallest].pop())
+                    if all(moved):            # never empty a column
+                        nsp, _ = spread(moved)
+                        if cand is None or nsp < cand[0]:
+                            cand = (nsp, moved)
+            if cand is None or cand[0] >= sp:
+                break
+            groups = cand[1]
+            sp, ch = spread(groups)
+    return groups
 
 
 def feather_leading(measure_fn, base_leading, avail_h, cap_factor):
@@ -515,10 +554,10 @@ def render_article(cr, ctx, data):
     avail_h = zh - (cfg["article_pad_top_frac"] + cfg["article_pad_bottom_frac"]) * H
 
     paragraphs = [p.strip() for p in sanitise(data["lead_article"]).split("\n\n") if p.strip()]
-    hyph = [soft_hyphenate(p, cfg) for p in paragraphs]
-    # Stop the final column ending on a lone word (the L-shaped notch).
-    if hyph:
-        hyph[-1] = prevent_orphan(hyph[-1], words=2)
+    # Bind the last two words of EVERY paragraph: whichever paragraph lands at a
+    # column foot then ends on a full two-word line, not a lone word, so no column
+    # shows an L-shaped notch at the bottom.
+    hyph = [prevent_orphan(soft_hyphenate(p, cfg), words=2) for p in paragraphs]
 
     def metrics_at(size):
         leading = cfg["lead_body"] * size
@@ -735,27 +774,39 @@ def render_sidebar(cr, ctx, data):
         ))
 
     byline_size = cfg["size_sidebar_byline"] * H
-    gap_hb = H * 0.004
-    gap_bb = H * 0.007
+    gap_hb = H * 0.005
+    gap_bb = H * 0.008
 
-    # Shared headline size: largest that fits BOTH headlines within ~34% of each
-    # story's zone height and within its width.
+    # Shared headline size: large, real section-headline scale. Largest that fits
+    # BOTH headlines within sidebar_head_frac of each zone's height and its width.
     def head_fits_all(size):
         for zone, head, _, _ in stories:
             zw, zh = zone[2], zone[3]
-            if measure(_sidebar_headline_layout(cr, ctx, zw, head, size))[1] > zh * 0.34:
+            if measure(_sidebar_headline_layout(cr, ctx, zw, head, size))[1] > zh * cfg["sidebar_head_frac"]:
                 return False
         return True
 
     head_size, _ = largest_fitting(
         head_fits_all, cfg["sidebar_head_min"] * H, cfg["sidebar_head_max"] * H)
 
-    # Shared body size: fill sidebar 1's body depth (after its headline+byline).
+    # Shared body size: fill sidebar 1's body depth (after its headline+byline) at
+    # the BASE leading. Both sidebars use this one size (never resized to fill, so
+    # word spacing stays even); each zone is then filled to its foot by stretching
+    # leading only.
     z1 = stories[0][0]
     h1 = measure(_sidebar_headline_layout(cr, ctx, z1[2], stories[0][1], head_size))[1]
+    base_lead_frac = cfg["lead_sidebar"]
     body1_avail = (z1[1] + z1[3]) - (z1[1] + h1 + gap_hb + byline_size + gap_bb)
+
+    def body_h_at(size, body, zw, lead_mult=1.0):
+        lay = _sidebar_body_layout(cr, ctx, zw, body, size)
+        lay.set_attributes(build_attrs(
+            body, leading_px=base_lead_frac * size * lead_mult,
+            language=cfg["hyphenation_lang"], insert_hyphens=True))
+        return measure(lay)[1]
+
     body_size, _ = largest_fitting(
-        lambda s: measure(_sidebar_body_layout(cr, ctx, z1[2], stories[0][3], s))[1] <= body1_avail,
+        lambda s: body_h_at(s, stories[0][3], z1[2]) <= body1_avail,
         cfg["sidebar_body_min"] * H, cfg["sidebar_body_max"] * H)
 
     for zone, head, byline, body in stories:
@@ -767,10 +818,19 @@ def render_sidebar(cr, ctx, data):
         bl.set_width(int(zw * SCALE))
         bl.set_text(byline, -1)
         bh = measure(bl)[1]
+
+        body_avail = (zy + zh) - (zy + hh + gap_hb + bh + gap_bb)
+        base_lead = base_lead_frac * body_size
+        lead = feather_leading(
+            lambda ld: body_h_at(body_size, body, zw, ld / base_lead),
+            base_lead, body_avail, cfg["sidebar_feather_cap"])
+        body_lay = _sidebar_body_layout(cr, ctx, zw, body, body_size)
+        body_lay.set_attributes(build_attrs(
+            body, leading_px=lead, language=cfg["hyphenation_lang"], insert_hyphens=True))
+
         draw_layout(cr, hl, zx, zy, ink)
         draw_layout(cr, bl, zx, zy + hh + gap_hb, ink)
-        draw_layout(cr, _sidebar_body_layout(cr, ctx, zw, body, body_size),
-                    zx, zy + hh + gap_hb + bh + gap_bb, ink)
+        draw_layout(cr, body_lay, zx, zy + hh + gap_hb + bh + gap_bb, ink)
 
 
 # ----- Kicker (optional full-width block beneath the pull quote) --------------
