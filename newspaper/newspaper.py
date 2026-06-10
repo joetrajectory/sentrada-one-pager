@@ -146,6 +146,13 @@ CONFIG = {
     # is erased (cloned over with paper) to keep the feature clean.
     "sub_rule_y": 0.8717,
     "sub_rule_x_end": 0.693,
+    # Baked rule between the two sidebar stories. It sits at a fixed y but the
+    # sidebar content length varies per send, so the engine inpaints it out of
+    # the template and redraws it at an adaptive position: one line height below
+    # sidebar 1's content end (see render_sidebar).
+    "sidebar_rule_y": 0.4840,
+    "sidebar_rule_x0": 0.7000,
+    "sidebar_rule_x1": 0.9790,
     "lower_rule_default": (0x55 / 255, 0x55 / 255, 0x55 / 255),
     "hairline_frac": 0.00065,        # fallback rule thickness, fraction of height
     # Logo --------------------------------------------------------------------
@@ -429,6 +436,31 @@ def render_headline_and_byline(cr, ctx, data):
         layout.set_height(int(hh * SCALE))
         layout.set_ellipsize(Pango.EllipsizeMode.END)
         print("[warn] headline does not fit at minimum size; truncating.")
+
+    # Balanced breaking: no line may run shorter than 50% of the block width
+    # (the last line may go to 40%). While the wrap is ragged, shave 2% off the
+    # size and reflow; the goal is lines of roughly even length.
+    def line_widths():
+        ws = []
+        it = layout.get_iter()
+        while True:
+            ws.append(it.get_line_extents()[1].width / SCALE)
+            if not it.next_line():
+                break
+        return ws
+
+    def balanced():
+        ws = line_widths()
+        if len(ws) <= 1:
+            return True
+        return all(w >= 0.50 * hw for w in ws[:-1]) and ws[-1] >= 0.40 * hw
+
+    floor = cfg["headline_size_min"] * H
+    while size * 0.98 >= floor and not balanced():
+        size *= 0.98
+        height_at(size)
+    if not balanced():
+        print("[warn] headline lines remain ragged at the minimum size.")
     head_h = measure(layout)[1]
 
     byl = make_layout(cr)
@@ -553,52 +585,79 @@ def render_article(cr, ctx, data):
     avail_h = zh - (cfg["article_pad_top_frac"] + cfg["article_pad_bottom_frac"]) * H
 
     paragraphs = [p.strip() for p in sanitise(data["lead_article"]).split("\n\n") if p.strip()]
-    # Bind the last two words of EVERY paragraph: whichever paragraph lands at a
-    # column foot then ends on a full two-word line, not a lone word, so no column
-    # shows an L-shaped notch at the bottom.
+    # Bind the last two words of every paragraph so no paragraph (and therefore
+    # no column) ends on a lone word.
     hyph = [prevent_orphan(soft_hyphenate(p, cfg), words=2) for p in paragraphs]
+    # One continuous flow, as a real broadsheet sets it: paragraphs separated by
+    # newlines with a first-line indent (no vertical gaps), text breaking across
+    # columns mid-paragraph wherever the line boundaries fall.
+    text = "\n".join(hyph)
 
-    def metrics_at(size):
-        leading = cfg["lead_body"] * size
-        gap = 0.5 * leading
-        heights = [measure(make_paragraph_layout(
-            cr, hp, cfg["font_body"], size, leading, col_w, lang))[1] for hp in hyph]
-        groups = balance_columns(heights, gap)
-        col_h = [_column_height(heights, gap, g) for g in groups]
-        return leading, gap, heights, groups, col_h
+    layout = make_layout(cr)
+    layout.set_width(int(col_w * SCALE))
+    layout.set_wrap(Pango.WrapMode.WORD_CHAR)
+    layout.set_alignment(Pango.Alignment.LEFT)
+    layout.set_justify(True)
+    layout.set_justify_last_line(False)  # last line of a paragraph stays left
 
-    # Size the body so the tallest balanced column fills the columns zone.
+    def reflow(size):
+        set_font(layout, cfg["font_body"], size)
+        layout.set_indent(int(round(1.4 * size * SCALE)))
+        layout.set_attributes(build_attrs(
+            text, leading_px=cfg["lead_body"] * size, language=lang, insert_hyphens=True))
+        layout.set_text(text, -1)
+
+    def line_bounds():
+        """(top, bottom) of each line's logical extent, in pixels, in flow order."""
+        bounds = []
+        it = layout.get_iter()
+        while True:
+            l = it.get_line_extents()[1]
+            bounds.append((l.y / SCALE, (l.y + l.height) / SCALE))
+            if not it.next_line():
+                break
+        return bounds
+
+    def column_split():
+        """Cut the flow into three runs of whole lines. All lines share one
+        leading, so an even line-count split is optimal: columns differ by at
+        most one line, and when the count is not divisible by three the short
+        column falls last, as in a traditional broadsheet."""
+        b = line_bounds()
+        n = len(b)
+        base, rem = divmod(n, 3)
+        counts = [base + (1 if i < rem else 0) for i in range(3)]
+        c1, c2 = counts[0], counts[0] + counts[1]
+        runs = [(0, c1), (c1, c2), (c2, n)]
+        heights = [b[e - 1][1] - b[s][0] for s, e in runs]
+        return b, runs, heights
+
     def feasible(size):
-        return max(metrics_at(size)[4]) <= avail_h
+        reflow(size)
+        return max(column_split()[2]) <= avail_h
 
-    size, fits = largest_fitting(
-        feasible, cfg["body_size_min"] * H, cfg["body_size_max"] * H)
-    leading, gap, heights, groups, col_h = metrics_at(size)
-    fill = max(col_h) / avail_h if avail_h else 0
+    size, fits = largest_fitting(feasible, cfg["body_size_min"] * H, cfg["body_size_max"] * H)
+    reflow(size)
+    bounds, runs, heights = column_split()
+    leading = cfg["lead_body"] * size
     if not fits:
         print("[warn] lead article overflows the columns zone at the minimum body "
               "size; trim copy or enlarge the zone.")
-    elif fill < cfg["fill_min"]:
-        print(f"[warn] columns fill only {fill:.0%} of the zone even at the maximum "
-              f"body size; the article may be too short for this layout.")
+    spread = max(heights) - min(heights)
+    print(f"[info] column depths {[round(h, 1) for h in heights]}px; "
+          f"spread {spread:.1f}px = {spread / leading:.2f} line heights")
+    if spread > leading:
+        print("[warn] column spread exceeds one line height.")
 
-    # Render each column, vertically justified to bottom-align with the others.
-    for ci, group in enumerate(groups):
-        if not group:
-            continue
-
-        def col_height(ld, g=group):
-            return sum(measure(make_paragraph_layout(
-                cr, hyph[i], cfg["font_body"], size, ld, col_w, lang))[1] for i in g) \
-                + (0.5 * ld) * (len(g) - 1)
-
-        ld = feather_leading(col_height, leading, avail_h, cfg["feather_cap"])
-        col_gap = 0.5 * ld
-        cy = top
-        for i in group:
-            layout = make_paragraph_layout(cr, hyph[i], cfg["font_body"], size, ld, col_w, lang)
-            draw_layout(cr, layout, col_x[ci], cy, ink)
-            cy += measure(layout)[1] + col_gap
+    # Each column draws the SAME flow layout, clipped to its run of lines and
+    # shifted so the run's first line sits at the column top.
+    for ci, (s, e) in enumerate(runs):
+        y0, y1 = bounds[s][0], bounds[e - 1][1]
+        cr.save()
+        cr.rectangle(col_x[ci] - 0.9 * pad, top, col_w + 1.8 * pad, y1 - y0)
+        cr.clip()
+        draw_layout(cr, layout, col_x[ci], top - y0, ink)
+        cr.restore()
 
 
 # ----- Pull quote ------------------------------------------------------------
@@ -801,28 +860,36 @@ def render_sidebar(cr, ctx, data):
         lambda s: measure(_sidebar_body_layout(cr, ctx, z1[2], stories[0][3], s))[1] <= body1_avail,
         cfg["sidebar_body_min"] * H, cfg["sidebar_body_max"] * H)
 
-    content_end = 0.0
-    for zone, head, byline, body in stories:
-        zx, zy, zw, zh = zone
-        hl = _sidebar_headline_layout(cr, ctx, zw, head, head_size)
+    leading = cfg["lead_sidebar"] * body_size
+
+    def draw_story(zone_x, zone_w, top_y, head, byline, body):
+        hl = _sidebar_headline_layout(cr, ctx, zone_w, head, head_size)
         hh = measure(hl)[1]
         bl = make_layout(cr)
         set_font(bl, cfg["font_sans"], byline_size)
-        bl.set_width(int(zw * SCALE))
+        bl.set_width(int(zone_w * SCALE))
         bl.set_text(byline, -1)
         bh = measure(bl)[1]
-        body_lay = _sidebar_body_layout(cr, ctx, zw, body, body_size)
-        body_top = zy + hh + gap_hb + bh + gap_bb
+        body_lay = _sidebar_body_layout(cr, ctx, zone_w, body, body_size)
+        body_top = top_y + hh + gap_hb + bh + gap_bb
+        draw_layout(cr, hl, zone_x, top_y, ink)
+        draw_layout(cr, bl, zone_x, top_y + hh + gap_hb, ink)
+        draw_layout(cr, body_lay, zone_x, body_top, ink)
+        return body_top + measure(body_lay)[1]
 
-        draw_layout(cr, hl, zx, zy, ink)
-        draw_layout(cr, bl, zx, zy + hh + gap_hb, ink)
-        draw_layout(cr, body_lay, zx, body_top, ink)
-        content_end = body_top + measure(body_lay)[1]
+    (zf1, head1, by1, body1), (zf2, head2, by2, body2) = stories
+    end1 = draw_story(zf1[0], zf1[2], zf1[1], head1, by1, body1)
 
-    # Sidebar 2's adaptive zone foot: where its content ends, plus ~2 line heights
-    # of bottom padding. Drawn by no rule, this is the true bottom of the rail.
-    pad = 2.0 * cfg["lead_sidebar"] * body_size
-    ctx["sidebar2_zone_end"] = content_end + pad
+    # Engine-owned divider rule: the baked one was inpainted out of the template
+    # (its fixed position collides with variable-length content), and is redrawn
+    # post-composite at one line height below sidebar 1's content end, matched to
+    # the baked rules' RGB and weight. Sidebar 2 starts 1.5 line heights below it.
+    rule_y = end1 + leading
+    ctx["sidebar_rule"] = (zf2[0], zf2[0] + zf2[2], rule_y)
+
+    end2 = draw_story(zf2[0], zf2[2], rule_y + 1.5 * leading, head2, by2, body2)
+    # Sidebar 2's adaptive zone foot: where its content ends plus ~2 line heights.
+    ctx["sidebar2_zone_end"] = end2 + 2.0 * leading
 
 
 # ----- Kicker (optional full-width block beneath the pull quote) --------------
@@ -941,29 +1008,26 @@ def composite(template_rgb, text_rgba, cfg, W, ink_blur=None):
     return ImageChops.multiply(template_rgb, ink_map)
 
 
-def draw_lower_pq_rule(image_rgb, ctx):
-    """Draw the lower pull-quote rule directly onto the composited image, at the
-    exact RGB and thickness sampled from the baked rules, so it is identical to
-    them (the multiply/blur ink pipeline is bypassed for structural rules)."""
+def draw_rule_on_image(image_rgb, ctx, x0, x1, y):
+    """Draw a structural rule directly onto the composited image at the exact
+    RGB and thickness sampled from the baked rules, so it is identical to them
+    (the multiply/blur ink pipeline is bypassed for structural rules)."""
     from PIL import ImageDraw
-    cfg = ctx["cfg"]
-    zx, zy, zw, zh = ctx["px"]["pullquote"]
-    y = int(round(zy + zh))
     colour = tuple(int(round(c * 255)) for c in ctx["rule_colour"])
-    width = int(round(ctx["rule_weight"]))
+    width = max(1, int(round(ctx["rule_weight"])))
     d = ImageDraw.Draw(image_rgb)
-    d.line([(int(round(zx)), y), (int(round(zx + zw)), y)], fill=colour, width=width)
+    d.line([(int(round(x0)), int(round(y))), (int(round(x1)), int(round(y)))],
+           fill=colour, width=width)
     return image_rgb
 
 
-def erase_sub_rule(template_rgb, cfg, W, H):
-    """Erase the faint baked sub-rule partway down the bottom block by cloning a
-    clean strip of paper from just above it over its location. Done on the
-    TEMPLATE before text is composited, so the pull-quote feature spans the whole
-    bottom block without a stray hairline cutting through it."""
-    y = int(round(cfg["sub_rule_y"] * H))
-    x0 = 0
-    x1 = int(round(cfg["sub_rule_x_end"] * W))
+def erase_h_rule(template_rgb, W, H, y_frac, x0_frac, x1_frac):
+    """Inpaint a baked horizontal rule out of the template by cloning a strip of
+    clean newsprint texture from just above it over its location. Done on the
+    TEMPLATE before text is composited."""
+    y = int(round(y_frac * H))
+    x0 = int(round(x0_frac * W))
+    x1 = int(round(x1_frac * W))
     band = max(3, int(round(0.006 * H)))      # rows to overwrite, centred on rule
     top = y - band // 2
     src_top = top - band - max(2, int(round(0.003 * H)))  # clean paper above
@@ -1099,9 +1163,12 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
             template = template.resize((tw, th), Image.LANCZOS)
     W, H = template.size
 
-    # Erase the faint baked sub-rule so the pull-quote feature owns the whole
-    # bottom block. Done on the template before any text is composited.
-    erase_sub_rule(template, cfg, W, H)
+    # Inpaint baked rules the engine replaces or retires: the faint sub-rule in
+    # the bottom block (the pull-quote feature owns that space) and the fixed
+    # inter-sidebar rule (redrawn adaptively after sidebar 1's content).
+    erase_h_rule(template, W, H, cfg["sub_rule_y"], 0.0, cfg["sub_rule_x_end"])
+    erase_h_rule(template, W, H, cfg["sidebar_rule_y"],
+                 cfg["sidebar_rule_x0"], cfg["sidebar_rule_x1"])
 
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, W, H)
     cr = cairo.Context(surface)
@@ -1119,6 +1186,9 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
 
     text_rgba = cairo_to_pil(surface)
     result = composite(template, text_rgba, cfg, W, ink_blur=ink_blur)
+    if "sidebar_rule" in ctx:
+        rx0, rx1, ry = ctx["sidebar_rule"]
+        result = draw_rule_on_image(result, ctx, rx0, rx1, ry)
     result = place_logo(result, ctx)
 
     result, dpi = finalize_output(result, cfg, print_dpi, print_size)
