@@ -140,10 +140,20 @@ CONFIG = {
     "hyph_left": 3,
     "hyph_right": 3,
     "hyph_min_word_len": 8,
-    # Baked rule under the headline block (the standfirst rule). The headline
-    # grows to fill the band down to here; the byline and columns then chain off
-    # the headline's actual bottom rather than sitting at fixed positions.
+    # Baked rule under the headline block (the standfirst rule, article width).
+    # It is inpainted out and redrawn adaptively one line below the byline, so
+    # the headline can grow past its fixed position and the columns chain off it.
     "standfirst_rule_y": 0.1767,
+    "standfirst_rule_x0": 0.000,
+    "standfirst_rule_x1": 0.700,
+    # Top-of-page vertical chain (fractions of H). The headline fills from below
+    # the edition line down to headline_zone_bottom; the columns then chain off
+    # the byline, so the headline is big and nothing is cramped.
+    "masthead_edition_gap": 0.008,   # masthead glyphs -> edition line
+    "edition_headline_gap": 0.010,   # edition line -> headline
+    "headline_zone_bottom": 0.2080,  # headline grows to fill down to here
+    "byline_rule_gap": 0.009,        # byline -> standfirst rule
+    "rule_article_gap": 0.013,       # standfirst rule -> first column line
     # Edition line letterspacing (fraction of its size) when set in spaced caps.
     "edition_tracking": 0.10,
     # Khaki band vertical extent (the nameplate is centred and sized to it).
@@ -410,9 +420,10 @@ def render_masthead(cr, ctx, data):
     name_y = band_top + (band_h - ink_r.height) / 2.0 - ink_r.y
     draw_layout(cr, layout, name_x, name_y, ink)
 
-    # Edition line and date sit just below the band, the edition line in spaced
-    # capitals to read like a broadsheet folio.
-    line_y = band_bot + 0.004 * H
+    # Edition line and date sit below the band on a SHARED baseline, with clear
+    # breathing room under the masthead glyphs. The edition line is in spaced
+    # capitals (broadsheet folio); the date is right-aligned on the same line.
+    line_y = band_bot + cfg["masthead_edition_gap"] * H
     edition = sanitise(data["edition_line"]).upper()
     el = make_layout(cr)
     set_font(el, cfg["font_sans"], sub_size)
@@ -428,6 +439,9 @@ def render_masthead(cr, ctx, data):
     dw, _ = measure(dl)
     draw_layout(cr, dl, margin + content_w - dw, line_y, ink)
 
+    # The headline chains off the bottom of this line.
+    ctx["edition_bottom"] = line_y + measure(el)[1]
+
 
 def render_headline_and_byline(cr, ctx, data):
     """Headline grown to FILL the band from its zone top down to the standfirst
@@ -439,10 +453,16 @@ def render_headline_and_byline(cr, ctx, data):
     ink = cfg["ink"]
     hx, hy, hw, hh = ctx["px"]["headline"]
 
-    region_top = hy
-    region_bottom = cfg["standfirst_rule_y"] * H - 0.004 * H
+    # Chain off the edition line; fill down to the headline zone bottom. The
+    # standfirst rule (inpainted from the template) is redrawn below the byline
+    # and the columns chain below that, so the headline gets full room.
+    region_top = ctx.get("edition_bottom", hy) + cfg["edition_headline_gap"] * H
+    region_bottom = cfg["headline_zone_bottom"] * H
 
-    text = prevent_orphan(sanitise(data["headline"]), words=2)
+    # Bind the trailing phrase so the last line is full enough to satisfy the
+    # balanced-line rule at the three-line fill size (otherwise a too-short last
+    # line forces the balancer to shrink the headline back to two lines).
+    text = prevent_orphan(sanitise(data["headline"]), words=3)
     lead = cfg["lead_headline"]
     layout = make_layout(cr)
     layout.set_width(int(hw * SCALE))
@@ -456,7 +476,6 @@ def render_headline_and_byline(cr, ctx, data):
     byl_h = measure(byl)[1]
 
     gap_hb = H * 0.010   # headline to byline
-    gap_ba = H * 0.014   # byline to first column
     avail_head = region_bottom - region_top - byl_h - gap_hb
 
     def height_at(size):
@@ -498,12 +517,17 @@ def render_headline_and_byline(cr, ctx, data):
         print("[warn] headline lines remain ragged at the minimum size.")
     head_h = measure(layout)[1]
 
-    # Chain: headline at region top, byline directly beneath, columns directly
-    # beneath the byline.
+    # Chain: headline at region top, byline directly beneath, then the redrawn
+    # standfirst rule, then the columns, each measured off the previous element's
+    # real bottom so nothing crowds.
     draw_layout(cr, layout, hx, region_top, ink)
     byline_y = region_top + head_h + gap_hb
     draw_layout(cr, byl, hx, byline_y, ink)
-    ctx["article_top_y"] = byline_y + byl_h + gap_ba
+    byline_bottom = byline_y + byl_h
+    rule_y = byline_bottom + cfg["byline_rule_gap"] * H
+    ctx["standfirst_rule"] = (
+        cfg["standfirst_rule_x0"] * ctx["W"], cfg["standfirst_rule_x1"] * ctx["W"], rule_y)
+    ctx["article_top_y"] = rule_y + cfg["rule_article_gap"] * H
 
 
 # ----- Lead article: three balanced, justified, hyphenated columns -----------
@@ -1215,6 +1239,8 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
     erase_h_rule(template, W, H, cfg["sub_rule_y"], 0.0, cfg["sub_rule_x_end"])
     erase_h_rule(template, W, H, cfg["sidebar_rule_y"],
                  cfg["sidebar_rule_x0"], cfg["sidebar_rule_x1"])
+    erase_h_rule(template, W, H, cfg["standfirst_rule_y"],
+                 cfg["standfirst_rule_x0"], cfg["standfirst_rule_x1"])
 
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, W, H)
     cr = cairo.Context(surface)
@@ -1232,9 +1258,10 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
 
     text_rgba = cairo_to_pil(surface)
     result = composite(template, text_rgba, cfg, W, ink_blur=ink_blur)
-    if "sidebar_rule" in ctx:
-        rx0, rx1, ry = ctx["sidebar_rule"]
-        result = draw_rule_on_image(result, ctx, rx0, rx1, ry)
+    for key in ("standfirst_rule", "sidebar_rule"):
+        if key in ctx:
+            rx0, rx1, ry = ctx[key]
+            result = draw_rule_on_image(result, ctx, rx0, rx1, ry)
     result = place_logo(result, ctx)
 
     result, dpi = finalize_output(result, cfg, print_dpi, print_size)
