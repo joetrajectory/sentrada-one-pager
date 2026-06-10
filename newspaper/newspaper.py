@@ -156,6 +156,17 @@ CONFIG = {
     "rule_article_gap": 0.013,       # standfirst rule -> first column line
     # Edition line letterspacing (fraction of its size) when set in spaced caps.
     "edition_tracking": 0.10,
+    # Right boundary of the masthead/edition row (the sidebar divider x). Nothing
+    # in that row may cross into the rail.
+    "rail_boundary_x": 0.693,
+    # Rail vertical justification. The stat box, sidebar 1 and sidebar 2 render at
+    # natural heights; the surplus down to the pull-quote bottom is split evenly
+    # into the two gaps. If a gap would exceed gap_cap_frac of page height, the
+    # sidebar body leading is loosened (up to sidebar_lead_stretch_max) and the
+    # rail re-distributed so it never looks scattered.
+    "rail_bottom_y": 0.9700,        # bottom of the main content (pull-quote block)
+    "rail_gap_cap_frac": 0.080,
+    "sidebar_lead_stretch_max": 1.15,
     # Khaki band vertical extent (the nameplate is centred and sized to it).
     "masthead_band": (0.0119, 0.0567),
     # Baked rules the template already provides; the engine must not redraw them.
@@ -421,26 +432,41 @@ def render_masthead(cr, ctx, data):
     draw_layout(cr, layout, name_x, name_y, ink)
 
     # Edition line and date sit below the band on a SHARED baseline, with clear
-    # breathing room under the masthead glyphs. The edition line is in spaced
-    # capitals (broadsheet folio); the date is right-aligned on the same line.
+    # breathing room under the masthead glyphs. They must stay in the left two
+    # thirds: the date is right-aligned to the rail boundary (the sidebar divider)
+    # and the edition line, in spaced capitals, is shrunk if needed so nothing in
+    # this row enters the rail.
     line_y = band_bot + cfg["masthead_edition_gap"] * H
-    edition = sanitise(data["edition_line"]).upper()
-    el = make_layout(cr)
-    set_font(el, cfg["font_sans"], sub_size)
-    el.set_attributes(build_attrs(edition, letter_spacing_px=cfg["edition_tracking"] * sub_size))
-    el.set_width(-1)
-    el.set_text(edition, -1)
-    draw_layout(cr, el, margin, line_y, ink)
+    right_boundary = cfg["rail_boundary_x"] * ctx["W"]
 
     dl = make_layout(cr)
     set_font(dl, cfg["font_sans"], sub_size)
     dl.set_width(-1)
     dl.set_text(sanitise(data["date"]), -1)
     dw, _ = measure(dl)
-    draw_layout(cr, dl, margin + content_w - dw, line_y, ink)
+    draw_layout(cr, dl, right_boundary - dw, line_y, ink)
 
-    # The headline chains off the bottom of this line.
-    ctx["edition_bottom"] = line_y + measure(el)[1]
+    # Edition line: spaced caps, shrunk to fit the space left of the date.
+    edition = sanitise(data["edition_line"]).upper()
+    edition_avail = right_boundary - margin - dw - 0.020 * ctx["W"]
+    el = make_layout(cr)
+
+    def edition_w(s):
+        set_font(el, cfg["font_sans"], s)
+        el.set_attributes(build_attrs(edition, letter_spacing_px=cfg["edition_tracking"] * s))
+        el.set_width(-1)
+        el.set_text(edition, -1)
+        return measure(el)[0]
+
+    e_size = sub_size
+    if edition_w(sub_size) > edition_avail:
+        e_size, _ = largest_fitting(
+            lambda s: edition_w(s) <= edition_avail, 0.0060 * H, sub_size)
+        edition_w(e_size)
+    draw_layout(cr, el, margin, line_y, ink)
+
+    # The headline chains off the bottom of this row.
+    ctx["edition_bottom"] = line_y + max(measure(el)[1], measure(dl)[1])
 
 
 def render_headline_and_byline(cr, ctx, data):
@@ -766,6 +792,8 @@ def render_pullquote(cr, ctx, data):
     draw_layout(cr, al, zx, qy + qh + gap, ink)
     # No engine-drawn rule: the baked rule at the top of the block is its only
     # border, and the faint baked sub-rule lower down is erased post-composite.
+    # Record the pull-quote block's bottom so the rail can justify down to it.
+    ctx["pullquote_bottom"] = qy + qh + gap + ah
 
 
 # ----- Stat box (on the tan fill) --------------------------------------------
@@ -856,7 +884,7 @@ def _sidebar_headline_layout(cr, ctx, zw, head, size):
     return hl
 
 
-def _sidebar_body_layout(cr, ctx, zw, body, size):
+def _sidebar_body_layout(cr, ctx, zw, body, size, lead_mult=1.0):
     cfg = ctx["cfg"]
     layout = make_layout(cr)
     set_font(layout, cfg["font_body"], size)
@@ -866,7 +894,7 @@ def _sidebar_body_layout(cr, ctx, zw, body, size):
     layout.set_justify_last_line(False)  # last line stays left aligned
     layout.set_alignment(Pango.Alignment.LEFT)
     layout.set_attributes(build_attrs(
-        body, leading_px=cfg["lead_sidebar"] * size,
+        body, leading_px=cfg["lead_sidebar"] * size * lead_mult,
         language=cfg["hyphenation_lang"], insert_hyphens=True))
     layout.set_text(body, -1)
     return layout
@@ -920,14 +948,12 @@ def render_sidebar(cr, ctx, data):
         lambda s: measure(_sidebar_body_layout(cr, ctx, z1[2], stories[0][3], s))[1] <= body1_avail,
         cfg["sidebar_body_min"] * H, cfg["sidebar_body_max"] * H)
 
-    # One line height, the unit the rule and sidebar 2 chain off.
-    line_h = cfg["lead_sidebar"] * body_size
+    (zf1, head1, by1, body1), (zf2, head2, by2, body2) = stories
 
-    def draw_story(zone_x, zone_w, top_y, head, byline, body):
-        """Draw a sidebar story from top_y and return the y of its last inked
-        pixel (the actual rendered content end at the final font sizes, NOT an
-        estimate from the zone), so the rule and the next story chain off real
-        geometry and can never collide."""
+    def story_pieces(zone_w, head, byline, body, lead_mult):
+        """Return (headline_layout, hh, byline_layout, bh, body_layout, content_h)
+        where content_h is top-of-story to last inked pixel, measured at the final
+        font sizes and the given body leading."""
         hl = _sidebar_headline_layout(cr, ctx, zone_w, head, head_size)
         hh = measure(hl)[1]
         bl = make_layout(cr)
@@ -935,31 +961,53 @@ def render_sidebar(cr, ctx, data):
         bl.set_width(int(zone_w * SCALE))
         bl.set_text(byline, -1)
         bh = measure(bl)[1]
-        body_lay = _sidebar_body_layout(cr, ctx, zone_w, body, body_size)
-        body_top = top_y + hh + gap_hb + bh + gap_bb
+        body_lay = _sidebar_body_layout(cr, ctx, zone_w, body, body_size, lead_mult)
+        body_ink = body_lay.get_pixel_extents()[0]
+        content_h = hh + gap_hb + bh + gap_bb + body_ink.y + body_ink.height
+        return hl, hh, bl, bh, body_lay, content_h
+
+    def draw_story(zone_x, top_y, hl, hh, bl, bh, body_lay):
         draw_layout(cr, hl, zone_x, top_y, ink)
         draw_layout(cr, bl, zone_x, top_y + hh + gap_hb, ink)
-        draw_layout(cr, body_lay, zone_x, body_top, ink)
-        # Last inked pixel of the body = body_top + (ink rect top + ink height).
-        body_ink = body_lay.get_pixel_extents()[0]
-        return body_top + body_ink.y + body_ink.height
+        draw_layout(cr, body_lay, zone_x, top_y + hh + gap_hb + bh + gap_bb, ink)
 
-    (zf1, head1, by1, body1), (zf2, head2, by2, body2) = stories
-    end1 = draw_story(zf1[0], zf1[2], zf1[1], head1, by1, body1)
+    # --- Vertical justification of the rail -------------------------------------
+    # The stat box is fixed (baked tan fill). Sidebar 1 and sidebar 2 are
+    # distributed in the space from just below the stat box down to the pull-quote
+    # block's bottom: surplus space splits evenly into the two gaps (stat box ->
+    # sidebar 1, sidebar 1 -> sidebar 2), so sidebar 2's foot lands at the bottom
+    # of the main content rather than the surplus pooling below it.
+    anchor_top = zf1[1]   # just below the baked stat-box rule
+    rail_bottom = ctx.get("pullquote_bottom", cfg["rail_bottom_y"] * H)
+    gap_cap = cfg["rail_gap_cap_frac"] * H
+    min_gap = cfg["lead_sidebar"] * body_size  # never tighter than one line
 
-    # Engine-owned divider rule: the baked one was inpainted out of the template
-    # (its fixed position collides with variable-length content), and is redrawn
-    # post-composite ONE FULL LINE below sidebar 1's actual last inked pixel,
-    # matched to the baked rules' RGB and weight. Sidebar 2 starts 1.5 line
-    # heights below the rule. Both gaps are measured from real ink, so larger
-    # headlines or an extra hyphenated line can never close them.
-    rule_y = end1 + line_h
+    # Grow the body leading (capped) only if the surplus is so large the gaps
+    # would look scattered; otherwise leading stays natural.
+    lead_mult = 1.0
+    while True:
+        p1 = story_pieces(zf1[2], head1, by1, body1, lead_mult)
+        p2 = story_pieces(zf2[2], head2, by2, body2, lead_mult)
+        h1, h2 = p1[5], p2[5]
+        gap = (rail_bottom - anchor_top - h1 - h2) / 2.0
+        if gap <= gap_cap or lead_mult >= cfg["sidebar_lead_stretch_max"]:
+            break
+        lead_mult = min(cfg["sidebar_lead_stretch_max"], lead_mult * 1.04)
+    gap = max(min_gap, gap)
+
+    s1_top = anchor_top + gap
+    draw_story(zf1[0], s1_top, *p1[:5])
+    end1 = s1_top + h1  # last inked pixel of sidebar 1
+
+    # Inter-sidebar rule centred in the distributed gap, ink-measured as before.
+    rule_y = end1 + gap / 2.0
     ctx["sidebar_rule"] = (zf2[0], zf2[0] + zf2[2], rule_y)
 
-    end2 = draw_story(zf2[0], zf2[2], rule_y + 1.5 * line_h, head2, by2, body2)
-    # Sidebar 2's adaptive zone foot: its last inked pixel plus ~2 line heights.
-    # Anything placed below the rail (none at present) must clear this.
-    ctx["sidebar2_zone_end"] = end2 + 2.0 * line_h
+    s2_top = end1 + gap
+    draw_story(zf2[0], s2_top, *p2[:5])
+    ctx["sidebar2_zone_end"] = s2_top + h2
+    print(f"[info] rail: gap={gap/H:.4f}H lead_mult={lead_mult:.2f} "
+          f"sidebar2 foot={ (s2_top + h2)/H:.4f} rail_bottom={rail_bottom/H:.4f}")
 
 
 # ----- Kicker (optional full-width block beneath the pull quote) --------------
