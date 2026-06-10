@@ -205,7 +205,7 @@ CONFIG = {
     # rule beneath it. The stat box and the whole rail are shifted DOWN by
     # rail_shift so the rail starts below the folio (clearing the date), aligning
     # the rail top with the headline top. The baked tan box is moved to match.
-    "rail_shift": 0.0170,
+    "rail_shift": 0.0200,
     "folio_rule_gap": 0.0042,   # folio baseline -> folio rule
     # Zones: (x, y, w, h) as fractions of the image, from the template spec.
     # Baked horizontal rules sit at y = 0.0567 (under masthead), 0.1767 (under
@@ -443,34 +443,37 @@ def render_masthead(cr, ctx, data):
     # the full width beneath it (drawn post-composite, matched to the baked rules).
     line_y = band_bot + cfg["masthead_edition_gap"] * H
     right_edge = ctx["W"] - margin
+    content_w = right_edge - margin
 
-    dl = make_layout(cr)
-    set_font(dl, cfg["font_sans"], sub_size)
-    dl.set_width(-1)
-    dl.set_text(sanitise(data["date"]), -1)
-    dw, _ = measure(dl)
-
-    # Edition line: spaced caps, shrunk only if it would reach the date.
+    # The folio is ONE row of equal weight: edition line and date are both set in
+    # spaced capitals at a single shared size (same font, same letterspacing), so
+    # the date reads with the same weight as the edition caps rather than looking
+    # lighter. Both share one baseline; edition left, date right.
     edition = sanitise(data["edition_line"]).upper()
-    edition_avail = right_edge - margin - dw - 0.020 * ctx["W"]
-    el = make_layout(cr)
+    date = sanitise(data["date"]).upper()
 
-    def edition_w(s):
-        set_font(el, cfg["font_sans"], s)
-        el.set_attributes(build_attrs(edition, letter_spacing_px=cfg["edition_tracking"] * s))
-        el.set_width(-1)
-        el.set_text(edition, -1)
-        return measure(el)[0]
+    def folio_layout(text, s):
+        lay = make_layout(cr)
+        set_font(lay, cfg["font_sans"], s)
+        lay.set_attributes(build_attrs(text, letter_spacing_px=cfg["edition_tracking"] * s))
+        lay.set_width(-1)
+        lay.set_text(text, -1)
+        return lay
 
-    e_size = sub_size
-    if edition_w(sub_size) > edition_avail:
-        e_size, _ = largest_fitting(
-            lambda s: edition_w(s) <= edition_avail, 0.0060 * H, sub_size)
-    edition_w(e_size)
+    def folio_total(s):  # both lines plus a minimum separating gap
+        return measure(folio_layout(edition, s))[0] + 0.04 * ctx["W"] + measure(folio_layout(date, s))[0]
+
+    folio_size = sub_size
+    if folio_total(sub_size) > content_w:
+        folio_size, _ = largest_fitting(
+            lambda s: folio_total(s) <= content_w, 0.0060 * H, sub_size)
+
+    el = folio_layout(edition, folio_size)
+    dl = folio_layout(date, folio_size)
+    dw = measure(dl)[0]
 
     # Align both on one baseline: draw each so its first-line baseline lands on
-    # baseline_y. (Top-aligning instead would split the baselines whenever the
-    # edition line has been shrunk to a smaller size than the date.)
+    # baseline_y. (Top-aligning would split the baselines if the sizes differed.)
     el_asc = el.get_baseline() / SCALE
     dl_asc = dl.get_baseline() / SCALE
     baseline_y = line_y + max(el_asc, dl_asc)
