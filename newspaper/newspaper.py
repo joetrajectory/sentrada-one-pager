@@ -111,10 +111,9 @@ CONFIG = {
     "sidebar_body_max": 0.0215,
     "sidebar_head_min": 0.0160,
     "sidebar_head_max": 0.0320,
-    # Sidebar headline may occupy up to this fraction of its zone height, and the
-    # body leading may stretch up to this factor to fill the zone foot.
+    # Sidebar headline may occupy up to this fraction of its (sidebar 1) zone
+    # height. Sidebar bodies are never stretched to fill; see render_sidebar.
     "sidebar_head_frac": 0.40,
-    "sidebar_feather_cap": 1.45,
     # Small type that is not auto-filled --------------------------------------
     "size_edition": 0.0100,
     "size_byline": 0.0118,
@@ -755,11 +754,14 @@ def _sidebar_body_layout(cr, ctx, zw, body, size):
 
 
 def render_sidebar(cr, ctx, data):
-    """Both sidebar stories share ONE headline size and ONE body size, both
-    computed from sidebar 1 (the shorter, more constrained zone) and applied to
-    both. Sidebar 2 is NOT enlarged to fill its extra depth: a narrow column at a
-    larger size opens ugly word gaps, so leftover space at the foot of sidebar 2
-    is accepted as the lesser evil."""
+    """Both sidebar stories share ONE headline size and ONE body size, computed
+    from sidebar 1, and both render at a single fixed leading. Text is NEVER
+    stretched or feathered to fill. Each story ends where its content ends; the
+    only thing that adapts is sidebar 2's zone foot, which is reported as the
+    content end plus a small pad (~2 line heights). Short copy therefore leaves
+    honest page-margin whitespace below, not an obviously underfilled zone; long
+    copy (80-100 words) simply runs deeper. Returns sidebar 2's content-end y so
+    the caller knows the true bottom of the filled area."""
     H, cfg = ctx["H"], ctx["cfg"]
     ink = cfg["ink"]
 
@@ -789,26 +791,17 @@ def render_sidebar(cr, ctx, data):
     head_size, _ = largest_fitting(
         head_fits_all, cfg["sidebar_head_min"] * H, cfg["sidebar_head_max"] * H)
 
-    # Shared body size: fill sidebar 1's body depth (after its headline+byline) at
-    # the BASE leading. Both sidebars use this one size (never resized to fill, so
-    # word spacing stays even); each zone is then filled to its foot by stretching
-    # leading only.
+    # Shared body size: largest size at which sidebar 1's body fills its zone at
+    # the fixed leading. Applied unchanged to both stories. No feathering, no
+    # resizing to fill: word spacing stays even and copy is never distorted.
     z1 = stories[0][0]
     h1 = measure(_sidebar_headline_layout(cr, ctx, z1[2], stories[0][1], head_size))[1]
-    base_lead_frac = cfg["lead_sidebar"]
     body1_avail = (z1[1] + z1[3]) - (z1[1] + h1 + gap_hb + byline_size + gap_bb)
-
-    def body_h_at(size, body, zw, lead_mult=1.0):
-        lay = _sidebar_body_layout(cr, ctx, zw, body, size)
-        lay.set_attributes(build_attrs(
-            body, leading_px=base_lead_frac * size * lead_mult,
-            language=cfg["hyphenation_lang"], insert_hyphens=True))
-        return measure(lay)[1]
-
     body_size, _ = largest_fitting(
-        lambda s: body_h_at(s, stories[0][3], z1[2]) <= body1_avail,
+        lambda s: measure(_sidebar_body_layout(cr, ctx, z1[2], stories[0][3], s))[1] <= body1_avail,
         cfg["sidebar_body_min"] * H, cfg["sidebar_body_max"] * H)
 
+    content_end = 0.0
     for zone, head, byline, body in stories:
         zx, zy, zw, zh = zone
         hl = _sidebar_headline_layout(cr, ctx, zw, head, head_size)
@@ -818,19 +811,18 @@ def render_sidebar(cr, ctx, data):
         bl.set_width(int(zw * SCALE))
         bl.set_text(byline, -1)
         bh = measure(bl)[1]
-
-        body_avail = (zy + zh) - (zy + hh + gap_hb + bh + gap_bb)
-        base_lead = base_lead_frac * body_size
-        lead = feather_leading(
-            lambda ld: body_h_at(body_size, body, zw, ld / base_lead),
-            base_lead, body_avail, cfg["sidebar_feather_cap"])
         body_lay = _sidebar_body_layout(cr, ctx, zw, body, body_size)
-        body_lay.set_attributes(build_attrs(
-            body, leading_px=lead, language=cfg["hyphenation_lang"], insert_hyphens=True))
+        body_top = zy + hh + gap_hb + bh + gap_bb
 
         draw_layout(cr, hl, zx, zy, ink)
         draw_layout(cr, bl, zx, zy + hh + gap_hb, ink)
-        draw_layout(cr, body_lay, zx, zy + hh + gap_hb + bh + gap_bb, ink)
+        draw_layout(cr, body_lay, zx, body_top, ink)
+        content_end = body_top + measure(body_lay)[1]
+
+    # Sidebar 2's adaptive zone foot: where its content ends, plus ~2 line heights
+    # of bottom padding. Drawn by no rule, this is the true bottom of the rail.
+    pad = 2.0 * cfg["lead_sidebar"] * body_size
+    ctx["sidebar2_zone_end"] = content_end + pad
 
 
 # ----- Kicker (optional full-width block beneath the pull quote) --------------
