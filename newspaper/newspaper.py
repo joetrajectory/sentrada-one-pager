@@ -201,6 +201,12 @@ CONFIG = {
     # Validation --------------------------------------------------------------
     "lead_words_min": 580,
     "lead_words_max": 660,
+    # Folio row (edition line + date) spans the full page width with a hairline
+    # rule beneath it. The stat box and the whole rail are shifted DOWN by
+    # rail_shift so the rail starts below the folio (clearing the date), aligning
+    # the rail top with the headline top. The baked tan box is moved to match.
+    "rail_shift": 0.0170,
+    "folio_rule_gap": 0.0042,   # folio baseline -> folio rule
     # Zones: (x, y, w, h) as fractions of the image, from the template spec.
     # Baked horizontal rules sit at y = 0.0567 (under masthead), 0.1767 (under
     # the headline block), 0.8233 (under the columns), 0.8717 (faint sub-rule,
@@ -431,12 +437,12 @@ def render_masthead(cr, ctx, data):
     name_y = band_top + (band_h - ink_r.height) / 2.0 - ink_r.y
     draw_layout(cr, layout, name_x, name_y, ink)
 
-    # Edition line and date sit below the band sharing an exact TEXT BASELINE,
-    # with clear breathing room under the masthead glyphs. They stay in the left
-    # two thirds: the date is right-aligned to the rail boundary and the spaced-
-    # caps edition line is shrunk if needed so nothing in this row enters the rail.
+    # Folio row: edition line + date as ONE continuous row spanning the FULL page
+    # width, sharing an exact text baseline. Edition left-aligned at the left
+    # margin, date right-aligned at the RIGHT page margin. A hairline rule runs
+    # the full width beneath it (drawn post-composite, matched to the baked rules).
     line_y = band_bot + cfg["masthead_edition_gap"] * H
-    right_boundary = cfg["rail_boundary_x"] * ctx["W"]
+    right_edge = ctx["W"] - margin
 
     dl = make_layout(cr)
     set_font(dl, cfg["font_sans"], sub_size)
@@ -444,9 +450,9 @@ def render_masthead(cr, ctx, data):
     dl.set_text(sanitise(data["date"]), -1)
     dw, _ = measure(dl)
 
-    # Edition line: spaced caps, shrunk to fit the space left of the date.
+    # Edition line: spaced caps, shrunk only if it would reach the date.
     edition = sanitise(data["edition_line"]).upper()
-    edition_avail = right_boundary - margin - dw - 0.020 * ctx["W"]
+    edition_avail = right_edge - margin - dw - 0.020 * ctx["W"]
     el = make_layout(cr)
 
     def edition_w(s):
@@ -469,11 +475,14 @@ def render_masthead(cr, ctx, data):
     dl_asc = dl.get_baseline() / SCALE
     baseline_y = line_y + max(el_asc, dl_asc)
     draw_layout(cr, el, margin, baseline_y - el_asc, ink)
-    draw_layout(cr, dl, right_boundary - dw, baseline_y - dl_asc, ink)
+    draw_layout(cr, dl, right_edge - dw, baseline_y - dl_asc, ink)
 
     # The headline chains off the bottom of this row.
     ctx["edition_bottom"] = max(baseline_y - el_asc + measure(el)[1],
                                 baseline_y - dl_asc + measure(dl)[1])
+    # Full-width hairline rule beneath the folio, separating it from all content.
+    folio_rule_y = ctx["edition_bottom"] + cfg["folio_rule_gap"] * H
+    ctx["folio_rule"] = (margin, right_edge, folio_rule_y)
 
 
 def render_headline_and_byline(cr, ctx, data):
@@ -1169,6 +1178,27 @@ def erase_h_rule(template_rgb, W, H, y_frac, x0_frac, x1_frac):
     return template_rgb
 
 
+def shift_statbox(template_rgb, cfg, W, H):
+    """Move the baked tan stat box DOWN by rail_shift so it begins below the folio
+    row. The box (with its exact fill, border and texture) is copied and re-stamped
+    rail_shift lower; the strip it vacated at the old top is inpainted with clean
+    newsprint cloned from the blank area immediately to its left. The downward
+    stamp also covers the baked rule that sat just under the old box."""
+    shift = int(round(cfg["rail_shift"] * H))
+    if shift <= 0:
+        return template_rgb
+    x0 = int(round(0.708 * W))
+    x1 = int(round(0.982 * W))
+    y0 = int(round(0.064 * H))
+    y1 = int(round(0.297 * H))
+    box = template_rgb.crop((x0, y0, x1, y1))
+    template_rgb.paste(box, (x0, y0 + shift))         # box, shifted down
+    w = x1 - x0
+    src = template_rgb.crop((x0 - w, y0, x0, y0 + shift))  # blank newsprint to the left
+    template_rgb.paste(src, (x0, y0))                 # cover the vacated top strip
+    return template_rgb
+
+
 def trim_edge_frame(image_rgb, cfg):
     """Remove the 1px dark halo a LANCZOS resize leaves at the image border by
     cloning the outer ring inward. The print is cut to the image edge, so there
@@ -1235,8 +1265,15 @@ def validate(data, cfg):
 
 
 def resolve_zones(cfg, W, H):
-    return {name: (fx * W, fy * H, fw * W, fh * H)
-            for name, (fx, fy, fw, fh) in cfg["zones"].items()}
+    z = {name: (fx * W, fy * H, fw * W, fh * H)
+         for name, (fx, fy, fw, fh) in cfg["zones"].items()}
+    # Shift the stat box and the rail down so they begin below the folio row.
+    # The baked tan box is moved by the same amount in build (shift_statbox).
+    s = cfg["rail_shift"] * H
+    for name in ("statbox", "sidebar_1", "sidebar_2"):
+        x, y, w, h = z[name]
+        z[name] = (x, y + s, w, h)
+    return z
 
 
 def finalize_output(result, cfg, print_dpi, print_size):
@@ -1301,6 +1338,8 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
                  cfg["sidebar_rule_x0"], cfg["sidebar_rule_x1"])
     erase_h_rule(template, W, H, cfg["standfirst_rule_y"],
                  cfg["standfirst_rule_x0"], cfg["standfirst_rule_x1"])
+    # Move the baked stat box down so the rail clears the full-width folio row.
+    shift_statbox(template, cfg, W, H)
 
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, W, H)
     cr = cairo.Context(surface)
@@ -1318,9 +1357,10 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
 
     text_rgba = cairo_to_pil(surface)
     result = composite(template, text_rgba, cfg, W, ink_blur=ink_blur)
-    if "standfirst_rule" in ctx:
-        rx0, rx1, ry = ctx["standfirst_rule"]
-        result = draw_rule_on_image(result, ctx, rx0, rx1, ry)
+    for key in ("folio_rule", "standfirst_rule"):
+        if key in ctx:
+            rx0, rx1, ry = ctx[key]
+            result = draw_rule_on_image(result, ctx, rx0, rx1, ry)
     for rx0, rx1, ry in ctx.get("sidebar_rules", []):
         result = draw_rule_on_image(result, ctx, rx0, rx1, ry)
     result = place_logo(result, ctx)
