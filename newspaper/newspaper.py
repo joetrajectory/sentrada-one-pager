@@ -561,6 +561,8 @@ def render_headline_and_byline(cr, ctx, data):
     if not balanced():
         print("[warn] headline lines remain ragged at the minimum size.")
     head_h = measure(layout)[1]
+    ctx["headline_fits"] = fits
+    ctx["headline_balanced"] = balanced()
 
     # Chain: headline at region top, byline directly beneath, then the redrawn
     # standfirst rule, then the columns, each measured off the previous element's
@@ -569,6 +571,7 @@ def render_headline_and_byline(cr, ctx, data):
     byline_y = region_top + head_h + gap_hb
     draw_layout(cr, byl, hx, byline_y, ink)
     byline_bottom = byline_y + byl_h
+    ctx["byline_bottom"] = byline_bottom
     rule_y = byline_bottom + cfg["byline_rule_gap"] * H
     ctx["standfirst_rule"] = (
         cfg["standfirst_rule_x0"] * ctx["W"], cfg["standfirst_rule_x1"] * ctx["W"], rule_y)
@@ -751,6 +754,10 @@ def render_article(cr, ctx, data):
           f"spread {spread:.1f}px = {spread / leading:.2f} line heights")
     if spread > leading:
         print("[warn] column spread exceeds one line height.")
+    ctx["columns_fit"] = fits
+    ctx["columns_spread_lines"] = spread / leading if leading else 0
+    ctx["column_foot"] = top + max(heights)
+    ctx["columns_bottom"] = zone_bottom
 
     # Each column draws the SAME flow layout, clipped to its run of lines and
     # shifted so the run's first line sits at the column top.
@@ -880,6 +887,8 @@ def render_statbox(cr, ctx, data):
 
     block_h = ink_r.height + gap1 + dh + gap2 + sh
     y = zy + max(0.0, (zh - block_h) / 2.0)
+    ctx["statbox_top"] = zy
+    ctx["statbox_overflow"] = block_h > zh
     # The ink rect starts ink_r.y below the layout origin; offset so the glyphs
     # (not the line box) align to y.
     draw_layout(cr, nl, zx + (zw - ink_r.width) / 2.0 - ink_r.x, y - ink_r.y, ink)
@@ -1022,15 +1031,24 @@ def render_sidebar(cr, ctx, data):
     gap = max(min_gap, gap)
 
     rules = []
+    tops, feet = [], []
     y = anchor_top
     for i, p in enumerate(pieces):
         y += gap                              # gap before each story
         if i > 0:                             # rule centred in each between-story gap
             rules.append((rail_x, rail_x + rail_w, y - gap / 2.0))
+        tops.append(y)
         draw_story(y, *p[:5])
         y += p[5]                             # advance past this story's content
+        feet.append(y)
     ctx["sidebar_rules"] = rules
+    ctx["sidebar_tops"] = tops
+    ctx["sidebar_feet"] = feet
     ctx["sidebar_last_foot"] = y
+    ctx["rail_gap"] = gap
+    ctx["rail_gap_capped"] = gap > gap_cap
+    ctx["rail_lead_mult"] = lead_mult
+    ctx["rail_line_h"] = cfg["lead_sidebar"] * body_size
     print(f"[info] rail: stories={n} gap={gap/H:.4f}H lead_mult={lead_mult:.2f} "
           f"last foot={y/H:.4f} rail_bottom={rail_bottom/H:.4f}")
 
@@ -1252,6 +1270,26 @@ REQUIRED_FIELDS = [
     "stat_source", "sidebar_1_headline", "sidebar_1_byline", "sidebar_1_body",
 ]
 
+# Expected word counts per field (inclusive). lead_article uses the cfg range.
+# Outside-range counts are warnings (the engine still renders), not failures.
+FIELD_WORD_RANGES = {
+    "masthead_name": (1, 5),
+    "edition_line": (4, 16),
+    "date": (1, 4),
+    "headline": (6, 16),
+    "byline": (2, 6),
+    "pull_quote_text": (10, 30),
+    "pull_quote_attribution": (2, 7),
+    "stat_number": (1, 1),
+    "stat_descriptor": (3, 10),
+    "stat_source": (2, 9),
+    "kicker_text": (20, 120),
+}
+for _n in range(1, 5):
+    FIELD_WORD_RANGES[f"sidebar_{_n}_headline"] = (4, 11)
+    FIELD_WORD_RANGES[f"sidebar_{_n}_byline"] = (2, 4)
+    FIELD_WORD_RANGES[f"sidebar_{_n}_body"] = (30, 120)
+
 
 def validate(data, cfg):
     missing = [f for f in REQUIRED_FIELDS if f not in data or data[f] in (None, "")]
@@ -1265,6 +1303,92 @@ def validate(data, cfg):
               f"Proceeding anyway.")
     else:
         print(f"[ok] lead_article word count: {n}")
+
+
+def run_checks(ctx, data, cfg):
+    """Collect a pass/fail report from the rendered layout: word counts outside
+    range, zones that overflow, rail gaps at the cap, and text colliding with a
+    structural rule. Returns a list of (level, field, message), level in
+    {'fail','warn','info'}. Geometry comes from the values the renderers stash in
+    ctx, so this must run AFTER a full render."""
+    H = ctx["H"]
+    out = []
+    add = lambda lvl, field, msg: out.append((lvl, field, msg))
+
+    # --- Word counts ---------------------------------------------------------
+    for field, (lo, hi) in FIELD_WORD_RANGES.items():
+        if field not in data or data[field] in (None, ""):
+            continue
+        if field == "lead_article":
+            lo, hi = cfg["lead_words_min"], cfg["lead_words_max"]
+        wc = len(str(data[field]).split())
+        if wc < lo:
+            add("warn", field, f"{wc} words, below expected {lo}-{hi}")
+        elif wc > hi:
+            add("warn", field, f"{wc} words, above expected {lo}-{hi}")
+    n = word_count(data.get("lead_article", ""))
+    if n < cfg["lead_words_min"] or n > cfg["lead_words_max"]:
+        add("warn", "lead_article", f"{n} words, outside {cfg['lead_words_min']}-{cfg['lead_words_max']}")
+
+    # --- Zone fit ------------------------------------------------------------
+    if ctx.get("headline_fits") is False:
+        add("fail", "headline", "does not fit its band even at minimum size (truncated)")
+    if ctx.get("headline_balanced") is False:
+        add("warn", "headline", "lines remain ragged (uneven length) at the minimum size")
+    if ctx.get("columns_fit") is False:
+        add("fail", "lead_article", "overflows the three columns at the minimum body size; trim copy")
+    if ctx.get("columns_spread_lines", 0) > 1.05:
+        add("warn", "lead_article", f"columns end {ctx['columns_spread_lines']:.1f} line heights apart")
+    cf, cb = ctx.get("column_foot"), ctx.get("columns_bottom")
+    if cf and cb and cf > cb + 1:
+        add("fail", "lead_article", "columns overflow past the column-zone bottom")
+    if ctx.get("statbox_overflow"):
+        add("warn", "stat_descriptor", "stat block is taller than the box; descriptor/source crowd the edges")
+
+    # --- Rail gaps -----------------------------------------------------------
+    if ctx.get("rail_gap_capped"):
+        add("warn", "sidebar_*_body",
+            f"rail gaps hit the {cfg['rail_gap_cap_frac']:.0%} cap even at max leading "
+            f"(gap {ctx['rail_gap']/H:.1%} of page); add a story or lengthen bodies")
+
+    # --- Structural-rule collisions ------------------------------------------
+    sf = ctx.get("standfirst_rule")
+    if sf:
+        if ctx.get("byline_bottom") is not None and ctx["byline_bottom"] > sf[2] + 1:
+            add("fail", "byline", "byline runs into the standfirst rule")
+        if ctx.get("article_top_y") is not None and ctx["article_top_y"] < sf[2] - 1:
+            add("fail", "lead_article", "columns start above the standfirst rule (rule cuts the text)")
+    fr, st = ctx.get("folio_rule"), ctx.get("statbox_top")
+    if fr and st is not None and st <= fr[2]:
+        add("fail", "stat box", "stat box top sits at or above the folio rule")
+    tops, feet, rules = ctx.get("sidebar_tops", []), ctx.get("sidebar_feet", []), ctx.get("sidebar_rules", [])
+    for i, (_, _, ry) in enumerate(rules):       # rule i divides story i and i+1
+        if i < len(feet) and feet[i] > ry + 1:
+            add("fail", f"sidebar_{i+1}_body", "story foot crosses the divider rule below it")
+        if i + 1 < len(tops) and tops[i + 1] < ry - 1:
+            add("fail", f"sidebar_{i+2}_headline", "story headline starts above its divider rule")
+    pb, lf, lh = ctx.get("pullquote_bottom"), ctx.get("sidebar_last_foot"), ctx.get("rail_line_h", 0)
+    if pb and lf is not None:
+        if lf > pb + 2 * lh:
+            add("fail", "sidebar (last)", "last story overflows past the pull-quote bottom")
+        elif lf < pb - 2 * lh:
+            add("info", "sidebar (last)", "last story foot is above the pull-quote bottom (rail not full; expected with short copy)")
+    return out
+
+
+def print_report(diags, label):
+    fails = [d for d in diags if d[0] == "fail"]
+    warns = [d for d in diags if d[0] == "warn"]
+    tag = {"fail": "FAIL", "warn": "WARN", "info": "INFO"}
+    print(f"\n=== Pre-render check: {label} ===")
+    if not diags:
+        print("  (no issues)")
+    for lvl, field, msg in diags:
+        print(f"  [{tag[lvl]}] {field}: {msg}")
+    ok = not fails
+    print("  " + "-" * 40)
+    print(f"  {'PASS' if ok else 'FAIL'} — {len(fails)} failure(s), {len(warns)} warning(s)")
+    return ok
 
 
 def resolve_zones(cfg, W, H):
@@ -1309,6 +1433,8 @@ def finalize_output(result, cfg, print_dpi, print_size):
 def build(template_path, data_path, output_path, cfg=CONFIG,
           print_dpi=None, print_size=None, render_dpi=None, render_size=None,
           ink_blur=None):
+    """Render the page. Returns the diagnostics list from run_checks. If
+    output_path is None the finished page is not saved (validation-only)."""
     with open(data_path, "r", encoding="utf-8") as fh:
         data = json.load(fh)
     validate(data, cfg)
@@ -1370,9 +1496,13 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
 
     result, dpi = finalize_output(result, cfg, print_dpi, print_size)
     result = trim_edge_frame(result, cfg)  # last: kill any resize edge halo
-    save_kwargs = {"dpi": (dpi, dpi)} if dpi else {}
-    result.save(output_path, **save_kwargs)
-    print(f"[done] wrote {output_path} ({result.width}x{result.height}px)")
+
+    diagnostics = run_checks(ctx, data, cfg)
+    if output_path is not None:
+        save_kwargs = {"dpi": (dpi, dpi)} if dpi else {}
+        result.save(output_path, **save_kwargs)
+        print(f"[done] wrote {output_path} ({result.width}x{result.height}px)")
+    return diagnostics
 
 
 def main():
@@ -1380,7 +1510,14 @@ def main():
         description="Place structured newspaper copy onto a blank template.")
     ap.add_argument("--template", required=True)
     ap.add_argument("--data", required=True)
-    ap.add_argument("--output", required=True)
+    ap.add_argument("--output", default=None,
+                    help="output PNG path. Optional with --check (validation only).")
+    ap.add_argument("--check", action="store_true",
+                    help="run pre-render validation and print a PASS/FAIL report "
+                         "(word counts, zone overflow, rail gaps at cap, rule "
+                         "collisions). Exits non-zero on any failure. Runs at the "
+                         "print resolution (defaults to 300 DPI) so the check "
+                         "matches what will be printed.")
     ap.add_argument("--print-dpi", type=int, default=None,
                     help="downsample the finished page to A2 at this DPI "
                          "(e.g. 300 -> 4961x7016) and tag the PNG")
@@ -1403,10 +1540,24 @@ def main():
         w, h = s.lower().split("x")
         return (int(w), int(h))
 
-    build(args.template, args.data, args.output,
-          print_dpi=args.print_dpi, print_size=parse_size(args.print_size),
-          render_dpi=args.render_dpi, render_size=parse_size(args.render_size),
-          ink_blur=args.ink_blur)
+    if not args.check and not args.output:
+        ap.error("--output is required unless --check is given")
+
+    render_dpi = args.render_dpi
+    render_size = parse_size(args.render_size)
+    # The check must run at print resolution so wrapping/hyphenation matches the
+    # printed page; default it to 300 DPI when no render size was requested.
+    if args.check and not render_dpi and not render_size:
+        render_dpi = 300
+
+    diagnostics = build(
+        args.template, args.data, args.output,
+        print_dpi=args.print_dpi, print_size=parse_size(args.print_size),
+        render_dpi=render_dpi, render_size=render_size, ink_blur=args.ink_blur)
+
+    if args.check:
+        ok = print_report(diagnostics, os.path.basename(args.data))
+        sys.exit(0 if ok else 1)
 
 
 if __name__ == "__main__":

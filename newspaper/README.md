@@ -100,19 +100,104 @@ open `newspaper.py` and adjust the `zones` block in `CONFIG` near the top:
 Everything else (fonts, type sizes as a fraction of height, leading multiples,
 gutters, padding, ink blur) is also in `CONFIG` and documented inline.
 
-## The JSON input
+## JSON schema (the Copy Agent contract)
 
-`mmc.json` shows the full schema. Required fields:
+`mmc.json` is a complete worked example. Every field is a flat top-level string.
+This table is the contract between the Copy Agent and the engine: target the word
+counts and the engine lays the page out with no manual adjustment. Counts are
+guidance, not hard limits (the engine still renders outside them); `--check`
+warns when a field is out of range and fails on anything that will not fit.
 
-`masthead_name`, `edition_line`, `date`, `headline`, `byline`, `lead_article`,
-`pull_quote_text`, `pull_quote_attribution`, `stat_number`, `stat_descriptor`,
-`stat_source`, `sidebar_1_headline`, `sidebar_1_byline`, `sidebar_1_body`,
-`sidebar_2_headline`, `sidebar_2_byline`, `sidebar_2_body`.
+| Field | Required | Words | Notes |
+|-------|----------|-------|-------|
+| `masthead_name` | yes | 1–5 | Publication name. Rendered UPPERCASE, sized to span the full page width and fill the khaki band. |
+| `edition_line` | yes | 4–16 | Folio strapline. Rendered in spaced capitals, left of the date; auto-shrinks if the folio row would exceed the page width. |
+| `date` | yes | 1–4 | Folio date. Rendered in the SAME spaced caps/size as the edition line, right-aligned at the right margin, sharing its baseline. |
+| `headline` | yes | 6–16 | Grows to fill the band down to the standfirst rule, two or three balanced lines (no line under 50% width, last under 40%). Over ~16 words it shrinks; far over and it truncates (a check failure). |
+| `byline` | yes | 2–6 | Bold, chained directly beneath the headline. |
+| `lead_article` | yes | 580–660 (target 620) | Three-column continuous flow. Separate paragraphs with `\n\n`. See below. |
+| `pull_quote_text` | yes | 10–30 | Large centred italic feature quote filling the bottom-left block. |
+| `pull_quote_attribution` | yes | 2–7 | Sits under the quote. Adjacent proper nouns are kept on one line. |
+| `stat_number` | yes | 1 | The dominant figure (e.g. `447`, `$1bn`, `42%`). Sized to fill the stat box. |
+| `stat_descriptor` | yes | 3–10 | Caption under the number. Adjacent capitalised words (e.g. "MMC Ventures") stay together. |
+| `stat_source` | yes | 2–9 | Small source line under the descriptor. |
+| `sidebar_1_headline` | yes | 4–11 | First rail story headline (section-headline scale). |
+| `sidebar_1_byline` | yes | 2–4 | First rail story byline. |
+| `sidebar_1_body` | yes | 30–120 | First rail story body. See rail sizing below. |
+| `sidebar_2_*` | optional | as above | Second rail story (headline/byline/body). |
+| `sidebar_3_*` | optional | as above | Third rail story. |
+| `sidebar_4_*` | optional | as above | Fourth rail story. |
+| `kicker_text` | optional | 20–120 | Extra column block beneath the pull quote; only rendered if present. |
 
-`lead_article` is the body copy, target 620 words. Before placing anything the
-engine counts the words and warns (but proceeds) if it is under 580 or over 660.
-Use `\n\n` for paragraph breaks; they are preserved and the column balancer
-prefers to break columns at paragraph boundaries rather than mid-sentence.
+### Lead article
+
+Target 620 words; the engine warns under 580 / over 660 and fails if the copy
+cannot fit three columns at the minimum body size. Use `\n\n` for paragraph
+breaks. The article is set as one continuous broadsheet flow (paragraphs
+newline-separated with a first-line indent) and split across the three columns at
+line boundaries, breaking mid-paragraph and mid-sentence so all three columns end
+level (within one line height). No em dashes (they become a comma break).
+
+### Sidebar stories (1 to 4) and the self-balancing rail
+
+Supply between one and four stories as `sidebar_N_headline` / `sidebar_N_byline`
+/ `sidebar_N_body`, numbered from 1 with no gaps. The engine collects them in
+order and stops at the first missing `sidebar_N_headline`:
+
+- **Absent `sidebar_2`+** — fewer stories are rendered; the rail distributes
+  however many it is given. Only `sidebar_1` is mandatory.
+- **All stories share one headline size and one body size** (computed from the
+  sidebar-1 reference zone) so the rail is typographically consistent; text is
+  never stretched or resized to fill.
+- **The rail self-balances vertically.** The stat box is fixed at the top; the
+  stories sit below at their natural heights and the surplus down to the
+  pull-quote bottom is split evenly into the gaps (one before each story), with a
+  divider rule centred in each between-story gap. The last story's foot lands on
+  the pull-quote bottom, so spare space reads as editorial spacing, never as a
+  hole below the last story.
+- **Gap cap.** If the gaps would exceed ~8% of page height, the body leading is
+  loosened up to 1.15x and the rail re-distributed. If they still exceed the cap
+  (very short copy), `--check` warns: the structural fix is more content (another
+  story, or longer bodies), not more stretching. Two ~50-word stories leave ~12%
+  gaps; three bring it to ~2–3%. Around 80–120 words per body, or three to four
+  stories, fills the rail tightly.
+
+### Optional fields when absent
+
+`sidebar_2`–`sidebar_4` and `kicker_text` are optional. When a `sidebar_N` story
+is absent the rail simply renders fewer stories and redistributes. When
+`kicker_text` is absent the kicker block is skipped. No field needs a placeholder
+value; omit it entirely.
+
+## Pre-render check
+
+Run a validation pass that renders the page (at print resolution) and prints a
+PASS/FAIL report without needing to eyeball the output. Use it in the Copy Agent
+pipeline so a send self-reports before it goes to print.
+
+```bash
+python newspaper.py --template template.png --data company.json --check
+```
+
+`--output` is optional with `--check` (nothing is saved unless you also pass it).
+The check runs at 300 DPI by default so wrapping and hyphenation match the printed
+page. It reports:
+
+- **Word counts** outside the ranges above (warning).
+- **Zone overflow** — headline that truncates, lead article that will not fit the
+  columns, columns overflowing the zone, a stat block taller than the box.
+- **Rail gaps at the cap** — gaps still over ~8% after the leading stretch
+  (warning; add a story or lengthen bodies).
+- **Structural-rule collisions** — byline touching the standfirst rule, columns
+  starting above it, the stat box reaching the folio rule, a sidebar story
+  crossing its divider rule, or the last story overflowing the pull-quote bottom.
+
+It exits `0` on pass and `1` if there is any failure, so it can gate a build:
+
+```bash
+python newspaper.py --template t.png --data company.json --check \
+  && python newspaper.py --template t.png --data company.json --output final.png --render-dpi 300 --print-dpi 300
+```
 
 ## How the layout works
 
@@ -120,20 +205,28 @@ prefers to break columns at paragraph boundaries rather than mid-sentence.
   recomputed in pixels from the `CONFIG` fractions. Type sizes are fractions of
   image height. The ink-spread blur is scaled by the upscale factor so the paper
   effect is identical at any size.
-- **Masthead** large tracked serif capitals, centred, with edition line (left)
-  and date (right) beneath and a rule under it.
-- **Headline** large bold serif over the left two-thirds. It shrinks to fit the
-  zone, with a minimum-size floor; if it still will not fit it is truncated with
-  a warning.
-- **Lead article** flows into three equal, justified, hyphenated (en_GB) columns
-  with gutters and edge padding. Paragraph breaks become a small vertical gap
-  (no first-line indent), broadsheet style. The body size auto-fits so the
-  columns fill the zone, and paragraphs are partitioned across the three columns
-  to keep them level without ever cutting a paragraph in half.
-- **Pull quote** larger centred italic serif spanning the article width, with
-  hairline rules drawn above and below (not part of the template image).
-- **Stat box, sidebar stories** stacked in the right third, justified and
-  hyphenated, with hairline separators.
+- **Masthead** large serif capitals sized by cap height to span the full page
+  width and fill the khaki band.
+- **Folio row** edition line and date as one continuous row of spaced capitals,
+  full width (edition left, date at the right margin) on a shared baseline, with
+  a full-width hairline rule beneath separating the folio from all content.
+- **Headline** large bold serif that grows to fill the band down to the
+  standfirst rule in two or three balanced lines; the bold byline and then the
+  columns chain off it adaptively (no fixed gaps). If it cannot fit even at the
+  minimum size it is truncated with a warning (a `--check` failure).
+- **Lead article** one continuous justified, hyphenated (en_GB) flow split across
+  three columns at line boundaries — mid-paragraph and mid-sentence, like a real
+  broadsheet — so all three columns end level within one line height.
+- **Pull quote** large centred italic serif filling the bottom-left block.
+- **Stat box** the dominant figure plus caption, shifted down so the rail clears
+  the folio row. The baked tan box is relocated by the engine to match.
+- **Rail (1–4 sidebar stories)** self-balancing: natural heights with the surplus
+  distributed evenly into the gaps, divider rules centred in each gap, last
+  story's foot on the pull-quote bottom. See the schema section above.
+- **Structural rules** the inter-sidebar, standfirst and folio rules are
+  engine-drawn at content-adaptive positions (the fixed baked ones are inpainted
+  out) and matched to the baked rule colour and weight, so they never collide
+  with variable-length copy.
 - **Logo** `../assets/sentrada-logo.png`, ~3% of image width, bottom right.
   Skipped gracefully with a note if the file is missing.
 - **Compositing** all text is drawn on a transparent layer, given a sub-pixel
