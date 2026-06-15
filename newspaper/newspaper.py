@@ -67,7 +67,7 @@ from gi.repository import Pango, PangoCairo  # noqa: E402
 
 import cairo  # noqa: E402
 import pyphen  # noqa: E402
-from PIL import Image, ImageChops, ImageFilter  # noqa: E402
+from PIL import Image, ImageChops, ImageCms, ImageDraw, ImageFilter  # noqa: E402
 
 SCALE = Pango.SCALE
 
@@ -204,6 +204,13 @@ CONFIG = {
     # Physical page size, for downsampling a supersampled render to an exact
     # print resolution. A2 portrait.
     "a2_mm": (420, 594),
+    # Print production. Bleed extends the artwork past the trim so a cut that
+    # drifts never exposes a white sliver; crop marks show the trim corners in
+    # the bleed margin. Both are OFF by default (exact-A2 output); enable per run
+    # with --bleed-mm / --crop-marks once the print supplier's spec is known.
+    "crop_mark_mm": 4.0,          # crop mark length
+    "crop_mark_weight_mm": 0.12,  # crop mark stroke weight
+    "crop_mark_gap_mm": 1.5,      # gap between the trim corner and the mark
     # Validation --------------------------------------------------------------
     "lead_words_min": 580,
     "lead_words_max": 660,
@@ -1400,6 +1407,10 @@ def run_checks(ctx, data, cfg):
     out = []
     add = lambda lvl, field, msg: out.append((lvl, field, msg))
 
+    # --- Template surgery (rule erasure + stat-box shift) --------------------
+    for lvl, field, msg in ctx.get("surgery_issues", []):
+        add(lvl, field, msg)
+
     # --- Word counts ---------------------------------------------------------
     for field, (lo, hi) in FIELD_WORD_RANGES.items():
         if field not in data or data[field] in (None, ""):
@@ -1515,6 +1526,130 @@ def finalize_output(result, cfg, print_dpi, print_size):
     return result, print_dpi
 
 
+_SRGB_ICC = None
+
+
+def srgb_icc_bytes():
+    """The sRGB ICC profile, cached, so every saved file is tagged with an
+    unambiguous colour space. An untagged RGB file forces the print RIP to guess;
+    a tagged file converts predictably to the press's CMYK profile."""
+    global _SRGB_ICC
+    if _SRGB_ICC is None:
+        _SRGB_ICC = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    return _SRGB_ICC
+
+
+def effective_dpi(image, cfg):
+    """The page's real DPI, from its width against the A2 long-edge-in-inches."""
+    return image.width / (cfg["a2_mm"][0] / 25.4)
+
+
+def add_bleed_and_marks(image, cfg, bleed_mm, crop_marks):
+    """Extend the trimmed A2 page with `bleed_mm` of bleed on every side and,
+    optionally, draw crop marks just OUTSIDE the bleed. Bleed is filled by
+    replicating the edge pixels (clamp) so a cut drifting into the bleed shows
+    artwork, never white. Crop marks live in a white slug beyond the bleed (never
+    over live artwork) and point at the trim corners. The total margin is sized to
+    hold the bleed AND the marks, so nothing is clipped. Returns the enlarged
+    image; the trim box is inset by `margin` on every side."""
+    if bleed_mm <= 0 and not crop_marks:
+        return image
+    dpi = effective_dpi(image, cfg)
+    W, H = image.size
+    bleed = max(0, int(round(bleed_mm / 25.4 * dpi)))
+    if crop_marks:
+        L = max(2, int(round(cfg["crop_mark_mm"] / 25.4 * dpi)))
+        w = max(1, int(round(cfg["crop_mark_weight_mm"] / 25.4 * dpi)))
+        gap = max(bleed, int(round(cfg["crop_mark_gap_mm"] / 25.4 * dpi)))  # marks start outside the bleed
+        pad = max(2, int(round(1.0 / 25.4 * dpi)))                          # breathing room past the marks
+        margin = gap + L + pad
+    else:
+        margin = bleed
+
+    canvas = Image.new("RGB", (W + 2 * margin, H + 2 * margin), (255, 255, 255))
+    canvas.paste(image, (margin, margin))
+    if bleed > 0:
+        # Replicate the edge rows/columns outward into the bleed zone only.
+        top = image.crop((0, 0, W, 1)).resize((W, bleed))
+        bot = image.crop((0, H - 1, W, H)).resize((W, bleed))
+        left = image.crop((0, 0, 1, H)).resize((bleed, H))
+        right = image.crop((W - 1, 0, W, H)).resize((bleed, H))
+        canvas.paste(top, (margin, margin - bleed)); canvas.paste(bot, (margin, margin + H))
+        canvas.paste(left, (margin - bleed, margin)); canvas.paste(right, (margin + W, margin))
+        for cx, cy, sx, sy in ((margin - bleed, margin - bleed, 0, 0),
+                               (margin + W, margin - bleed, W - 1, 0),
+                               (margin - bleed, margin + H, 0, H - 1),
+                               (margin + W, margin + H, W - 1, H - 1)):
+            canvas.paste(image.crop((sx, sy, sx + 1, sy + 1)).resize((bleed, bleed)), (cx, cy))
+    if crop_marks:
+        d = ImageDraw.Draw(canvas)
+        col = (0, 0, 0)
+        x0, y0, x1, y1 = margin, margin, margin + W, margin + H  # trim box on the canvas
+        for tx, ty, hx, vy in ((x0, y0, -1, -1), (x1, y0, 1, -1),
+                               (x0, y1, -1, 1), (x1, y1, 1, 1)):
+            d.line([(tx + hx * gap, ty), (tx + hx * (gap + L), ty)], fill=col, width=w)
+            d.line([(tx, ty + vy * gap), (tx, ty + vy * (gap + L))], fill=col, width=w)
+    return canvas
+
+
+def _region_mean_rgb(px, x0, x1, y0, y1, step=5):
+    rs = gs = bs = c = 0
+    for x in range(int(x0), int(x1), max(1, step)):
+        for y in range(int(y0), int(y1), max(1, step)):
+            p = px[x, y]
+            rs += p[0]; gs += p[1]; bs += p[2]; c += 1
+    if not c:
+        return (0.0, 0.0, 0.0)
+    return (rs / c, gs / c, bs / c)
+
+
+def verify_surgery(template, cfg, W, H):
+    """Post-conditions for the template pixel surgery (rule erasure + stat-box
+    shift). Those operations clone fixed pixel strips at fractions calibrated to
+    the PRODUCTION template; a different template would silently corrupt (a ghost
+    rule, a half-cloned box). Runs on the template BEFORE text is composited, so
+    any darkness found is structural, not copy. Returns 'fail' diagnostics so
+    build() quarantines the render rather than shipping a smeared page."""
+    issues = []
+    px = template.load()
+    band = max(3, int(round(0.006 * H)))
+
+    # 1) Erased rules must leave no residual dark horizontal line.
+    erased = [
+        ("sub_rule", cfg["sub_rule_y"], 0.0, cfg["sub_rule_x_end"]),
+        ("sidebar_rule", cfg["sidebar_rule_y"], cfg["sidebar_rule_x0"], cfg["sidebar_rule_x1"]),
+        ("standfirst_rule", cfg["standfirst_rule_y"], cfg["standfirst_rule_x0"], cfg["standfirst_rule_x1"]),
+    ]
+    for name, yf, x0f, x1f in erased:
+        y = int(round(yf * H)); x0 = int(round(x0f * W)); x1 = int(round(x1f * W))
+        if x1 - x0 < 10 or y - 3 * band < 0:
+            continue
+        ref = _region_mean_rgb(px, x0, x1, y - 3 * band, y - 2 * band)
+        paper_lum = _lum(ref)
+        step = max(1, (x1 - x0) // 200)
+        darkest = min(_lum(_region_mean_rgb(px, x0, x1, yy, yy + 1, step))
+                      for yy in range(max(0, y - band // 2), min(H, y + band // 2 + 1)))
+        if darkest < paper_lum - 18:
+            issues.append(("fail", f"template/{name}",
+                f"a dark rule persists after erase (row {darkest:.0f} vs paper {paper_lum:.0f}); "
+                "the template's baked rules do not sit where the engine expects"))
+
+    # 2) Stat box must be relocated: box colour at the shifted top, paper where it
+    #    vacated. (Skip when rail_shift is 0, since nothing moves.)
+    shift = int(round(cfg["rail_shift"] * H))
+    if shift > band:
+        sx0 = int(round(0.708 * W)); sx1 = int(round(0.982 * W)); oy = int(round(0.064 * H))
+        qx0, qx1 = sx0 + (sx1 - sx0) // 4, sx1 - (sx1 - sx0) // 4
+        box_new = _region_mean_rgb(px, qx0, qx1, oy + shift + band, oy + shift + 4 * band)
+        vacated = _region_mean_rgb(px, qx0, qx1, oy, oy + max(1, shift - band))
+        d = sum((box_new[i] - vacated[i]) ** 2 for i in range(3)) ** 0.5
+        if d < 20:
+            issues.append(("fail", "template/statbox",
+                f"stat box did not relocate (box/paper colour distance {d:.0f} < 20); "
+                "the baked tan box is not where the engine expects on this template"))
+    return issues
+
+
 def assert_fonts_resolved(cr, cfg):
     """Hard-fail if any configured font family resolves to a substitute rather
     than the real face. A fresh container missing the bundled ./fonts would
@@ -1546,7 +1681,7 @@ def assert_fonts_resolved(cr, cfg):
 
 def build(template_path, data_path, output_path, cfg=CONFIG,
           print_dpi=None, print_size=None, render_dpi=None, render_size=None,
-          ink_blur=None):
+          ink_blur=None, bleed_mm=0.0, crop_marks=False):
     """Render the page. Returns the diagnostics list from run_checks. If
     output_path is None the finished page is not saved (validation-only)."""
     with open(data_path, "r", encoding="utf-8") as fh:
@@ -1583,13 +1718,16 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
                  cfg["standfirst_rule_x0"], cfg["standfirst_rule_x1"])
     # Move the baked stat box down so the rail clears the full-width folio row.
     shift_statbox(template, cfg, W, H)
+    # Verify the surgery landed before drawing anything on top of it.
+    surgery_issues = verify_surgery(template, cfg, W, H)
 
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, W, H)
     cr = cairo.Context(surface)
     assert_fonts_resolved(cr, cfg)
     rule_colour, rule_weight = sample_rule(template, cfg, W, H)
     ctx = {"W": W, "H": H, "cfg": cfg, "px": resolve_zones(cfg, W, H),
-           "rule_colour": rule_colour, "rule_weight": rule_weight}
+           "rule_colour": rule_colour, "rule_weight": rule_weight,
+           "surgery_issues": surgery_issues}
 
     render_masthead(cr, ctx, data)
     render_headline_and_byline(cr, ctx, data)
@@ -1610,12 +1748,16 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
     result = place_logo(result, ctx)
 
     result, dpi = finalize_output(result, cfg, print_dpi, print_size)
-    result = trim_edge_frame(result, cfg)  # last: kill any resize edge halo
+    result = trim_edge_frame(result, cfg)  # kill any resize edge halo on the trim
+    if bleed_mm > 0 or crop_marks:
+        result = add_bleed_and_marks(result, cfg, bleed_mm, crop_marks)
 
     diagnostics = run_checks(ctx, data, cfg)
     fails = [d for d in diagnostics if d[0] == "fail"]
     if output_path is not None:
-        save_kwargs = {"dpi": (dpi, dpi)} if dpi else {}
+        save_kwargs = {"icc_profile": srgb_icc_bytes()}
+        if dpi:
+            save_kwargs["dpi"] = (dpi, dpi)
         if fails:
             # A FAIL means the page is not print-ready. Never write it to the
             # deliverable path where it could be mistaken for a good render;
@@ -1661,6 +1803,13 @@ def main():
     ap.add_argument("--ink-blur", type=float, default=None,
                     help="ink-spread blur in px on the text (0 = razor sharp). "
                          "Default is a faint, capped blur for newsprint realism.")
+    ap.add_argument("--bleed-mm", type=float, default=0.0,
+                    help="extend the page with this much bleed (mm) on every side, "
+                         "filled by replicating the edge so a drifting cut never "
+                         "shows white. Off (0) by default. Typical print spec: 3.")
+    ap.add_argument("--crop-marks", action="store_true",
+                    help="draw crop marks at the trim corners (in the bleed margin). "
+                         "Adds a 3mm margin if no bleed is set.")
     args = ap.parse_args()
 
     def parse_size(s):
@@ -1682,7 +1831,8 @@ def main():
     diagnostics = build(
         args.template, args.data, args.output,
         print_dpi=args.print_dpi, print_size=parse_size(args.print_size),
-        render_dpi=render_dpi, render_size=render_size, ink_blur=args.ink_blur)
+        render_dpi=render_dpi, render_size=render_size, ink_blur=args.ink_blur,
+        bleed_mm=args.bleed_mm, crop_marks=args.crop_marks)
 
     if args.check:
         ok = print_report(diagnostics, os.path.basename(args.data))

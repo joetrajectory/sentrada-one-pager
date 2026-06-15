@@ -245,8 +245,12 @@ python newspaper.py --template t.png --data company.json --check \
 
 ## Copy rules enforced at render time
 
-No em dashes (they are replaced with a comma break). All body and sidebar text is
-justified with hyphenation. Text is near-black (#1A1A1A) on the cream template.
+No em dashes (they are replaced with a comma break). Straight quotes,
+apostrophes and triple-dots are normalised to typographic forms (`"x"` becomes
+curly, `don't` gets a real apostrophe, `...` becomes an ellipsis) so every field
+matches the curly quotes the engine sets on the pull quote. All body and sidebar
+text is justified with hyphenation. Text is near-black (#1A1A1A) on the cream
+template.
 
 Hyphenation is en_GB, left/right 3, minimum 8 **letters**, and never the last
 word of a block. The minimum counts letters only, not trailing punctuation, so a
@@ -260,3 +264,46 @@ faint sub-pixel blur is then applied to the ink to simulate it spreading into th
 newsprint, capped low (`ink_blur_cap`, default 0.6 px) so text stays crisp at
 print resolution. Override per run with `--ink-blur` (e.g. `--ink-blur 0` for
 dead-sharp, `--ink-blur 0.3` for a whisper).
+
+## Print production: bleed, crop marks and colour
+
+Output is exact-A2 by default (trim to the image edge). For a supplier that
+trims after printing, add bleed so a drifting cut never exposes a white sliver,
+and crop marks so the trim line is unambiguous:
+
+```bash
+# 3mm bleed on every side, with crop marks
+python newspaper.py --template t.png --data company.json --output print.png \
+  --print-dpi 300 --bleed-mm 3 --crop-marks
+```
+
+`--bleed-mm` extends the page by replicating the edge pixels outward (the bleed
+zone is real artwork, not a fill). `--crop-marks` draws marks in a white slug
+*outside* the bleed (never over live artwork), and enlarges the margin to hold
+them. The trim box stays exactly A2 at the requested DPI; the canvas grows by the
+bleed plus the mark length. Confirm the supplier's required bleed (commonly 3mm)
+before a run.
+
+**Colour:** every saved file is tagged with an **sRGB ICC profile**, so the
+print RIP converts predictably to its CMYK press profile instead of guessing.
+PNG is an RGB container and cannot hold CMYK; for large-format/foam-board work an
+sRGB-tagged RGB file is the normal hand-off and the supplier separates to their
+own profile. If a supplier insists on a pre-separated CMYK file, that needs a
+TIFF/PDF export against their named press profile, which is not yet built.
+
+## Safety guards (fail fast, never ship a bad page)
+
+The engine refuses to produce a deliverable it cannot stand behind:
+
+- **Output-on-fail guard.** If `run_checks` records any `fail` (overflow, a rule
+  collision, a failed template surgery), the render is written to a `*.FAILED`
+  path for inspection and the deliverable path is left empty; the process exits
+  non-zero so a batch runner treats it as a hard error.
+- **Font resolution.** Every configured font family must resolve to its real
+  face. A fresh container missing the bundled `./fonts` would otherwise render in
+  a substitute and still pass every layout check; instead the run aborts.
+- **Template surgery verification.** The rule erasure and stat-box shift clone
+  fixed pixel strips at fractions calibrated to the production template. After
+  the surgery the engine checks that no erased rule survived and that the stat
+  box actually relocated; a mismatched template fails loudly rather than shipping
+  a ghost rule or a half-cloned box.
