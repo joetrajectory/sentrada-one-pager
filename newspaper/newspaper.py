@@ -255,13 +255,39 @@ def get_hyphenator(cfg):
     return _HYPHENATOR
 
 
+def smarten_quotes(text):
+    """Convert straight quotes, apostrophes and triple-dots to typographic forms
+    so headlines and body match the curly quotes the engine sets on the pull
+    quote. A straight quote OPENS when it begins the string or follows whitespace
+    or an opening bracket; otherwise it CLOSES (and a single quote before a digit
+    or after a letter is an apostrophe, e.g. "don't", "the '90s")."""
+    text = text.replace("...", "…")  # ellipsis
+    opener_prev = " \t\n([{‘“"  # start-like contexts
+    out = []
+    for i, ch in enumerate(text):
+        if ch == '"':
+            prev = text[i - 1] if i > 0 else ""
+            out.append("“" if (prev == "" or prev in opener_prev) else "”")
+        elif ch == "'":
+            prev = text[i - 1] if i > 0 else ""
+            nxt = text[i + 1] if i + 1 < len(text) else ""
+            opening = (prev == "" or prev in opener_prev) and not nxt.isdigit()
+            out.append("‘" if opening else "’")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 def sanitise(text):
-    """Rendering copy rules. No em dashes anywhere in the output."""
+    """Rendering copy rules: no em dashes, and straight quotes/apostrophes/triple
+    dots normalised to typographic forms so every field matches the curly quotes
+    the engine sets on the pull quote."""
     if text is None:
         return ""
     for ch in ("—", "―", "‒", "⸺", "⸻"):
         text = text.replace(" " + ch + " ", ", ").replace(ch, ", ")
-    return text.replace(" -- ", ", ").replace("--", ", ")
+    text = text.replace(" -- ", ", ").replace("--", ", ")
+    return smarten_quotes(text)
 
 
 def keep_phrases_together(text):
@@ -1489,6 +1515,35 @@ def finalize_output(result, cfg, print_dpi, print_size):
     return result, print_dpi
 
 
+def assert_fonts_resolved(cr, cfg):
+    """Hard-fail if any configured font family resolves to a substitute rather
+    than the real face. A fresh container missing the bundled ./fonts would
+    otherwise render in a fallback and still pass every layout check, so this is
+    the guard against a silently ugly batch."""
+    layout = PangoCairo.create_layout(cr)
+    pctx = layout.get_context()
+    keys = ("font_masthead", "font_headline", "font_body", "font_sans",
+            "font_pullquote", "font_stat", "font_sidebar_head")
+    checked, missing = set(), []
+    for spec in (cfg[k] for k in keys):
+        fd = Pango.FontDescription.from_string(spec)
+        fam = (fd.get_family() or "").strip()
+        if not fam or fam in checked:
+            continue
+        checked.add(fam)
+        font = pctx.load_font(fd)
+        resolved = (font.describe().get_family() if font else "") or ""
+        if fam.lower() not in resolved.lower():
+            missing.append((spec, f"resolved to '{resolved}'" if resolved else "no font loaded"))
+    if missing:
+        print("[error] required fonts did not resolve to their real faces:")
+        for spec, why in missing:
+            print(f"[error]   '{spec}' -> {why}")
+        print(f"[error] check the bundled fonts in {FONT_DIR} (or set "
+              f"SENTRADA_FONT_DIR). Refusing to render in substitute fonts.")
+        sys.exit(1)
+
+
 def build(template_path, data_path, output_path, cfg=CONFIG,
           print_dpi=None, print_size=None, render_dpi=None, render_size=None,
           ink_blur=None):
@@ -1531,6 +1586,7 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
 
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, W, H)
     cr = cairo.Context(surface)
+    assert_fonts_resolved(cr, cfg)
     rule_colour, rule_weight = sample_rule(template, cfg, W, H)
     ctx = {"W": W, "H": H, "cfg": cfg, "px": resolve_zones(cfg, W, H),
            "rule_colour": rule_colour, "rule_weight": rule_weight}
@@ -1557,10 +1613,24 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
     result = trim_edge_frame(result, cfg)  # last: kill any resize edge halo
 
     diagnostics = run_checks(ctx, data, cfg)
+    fails = [d for d in diagnostics if d[0] == "fail"]
     if output_path is not None:
         save_kwargs = {"dpi": (dpi, dpi)} if dpi else {}
-        result.save(output_path, **save_kwargs)
-        print(f"[done] wrote {output_path} ({result.width}x{result.height}px)")
+        if fails:
+            # A FAIL means the page is not print-ready. Never write it to the
+            # deliverable path where it could be mistaken for a good render;
+            # quarantine it under a .FAILED name for inspection instead.
+            root, ext = os.path.splitext(output_path)
+            quarantine = root + ".FAILED" + ext
+            result.save(quarantine, **save_kwargs)
+            print(f"[error] {len(fails)} layout failure(s); deliverable WITHHELD:")
+            for _lvl, field, msg in fails:
+                print(f"[error]   {field}: {msg}")
+            print(f"[error] wrote quarantined render to {quarantine} "
+                  f"(NOT print-ready). Fix the copy/template and re-run.")
+        else:
+            result.save(output_path, **save_kwargs)
+            print(f"[done] wrote {output_path} ({result.width}x{result.height}px)")
     return diagnostics
 
 
@@ -1617,6 +1687,11 @@ def main():
     if args.check:
         ok = print_report(diagnostics, os.path.basename(args.data))
         sys.exit(0 if ok else 1)
+
+    # Normal render: exit non-zero on any layout failure so a batch runner (or
+    # CI) treats the withheld deliverable as a hard error, not a success.
+    if any(d[0] == "fail" for d in diagnostics):
+        sys.exit(1)
 
 
 if __name__ == "__main__":
