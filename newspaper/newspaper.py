@@ -108,7 +108,13 @@ CONFIG = {
     "headline_size_max": 0.0480,
     "stat_size_min": 0.0250,
     "stat_size_max": 0.1600,
+    # Body-size range as a fraction of page height. sidebar_body_min is the
+    # PREFERRED floor (the reference-zone size never drops below it, which keeps
+    # the established look). sidebar_body_abs_min is a lower readability floor the
+    # rail may shrink to ONLY when several long stories would otherwise overflow
+    # the rail; copy is never altered, only the shared type size.
     "sidebar_body_min": 0.0095,
+    "sidebar_body_abs_min": 0.0060,
     "sidebar_body_max": 0.0215,
     "sidebar_head_min": 0.0160,
     "sidebar_head_max": 0.0320,
@@ -300,7 +306,11 @@ def soft_hyphenate(text, cfg):
     last = len(tokens) - 1
     out = []
     for i, t in enumerate(tokens):
-        if t and i != last and len(t) >= min_len:
+        # Gate on the LETTER count, not the raw token length: trailing punctuation
+        # (e.g. "Reuters," is 8 chars but 7 letters) must not push a short proper
+        # noun over the minimum and get it hyphenated.
+        letters = sum(c.isalpha() for c in t)
+        if t and i != last and letters >= min_len:
             out.append(hyph.inserted(t, hyphen="­"))
         else:
             out.append(t)
@@ -832,7 +842,7 @@ def render_statbox(cr, ctx, data):
 
     number = sanitise(data["stat_number"])
     desc = keep_phrases_together(sanitise(data["stat_descriptor"]))
-    source = sanitise(data["stat_source"])
+    source = sanitise(data.get("stat_source", ""))  # optional
 
     # Stat number: the single most dominant element on the page. Size it on its
     # INK extents (the real glyph bounds, not the line-height box) so it fills
@@ -855,10 +865,12 @@ def render_statbox(cr, ctx, data):
     ink_r = num_ink(nsize)
 
     # Descriptor, sized down if needed so the number + descriptor + source still
-    # fit the box height.
+    # fit the box height. The source line is OPTIONAL: when absent it reserves no
+    # space and is not drawn, so the number + descriptor re-centre on their own.
+    has_source = bool(source)
     gap1 = H * 0.010
-    gap2 = H * 0.008
-    src_h_est = cfg["size_stat_source"] * H * 1.4
+    gap2 = H * 0.008 if has_source else 0.0
+    src_h_est = cfg["size_stat_source"] * H * 1.4 if has_source else 0.0
     desc_budget = zh - ink_r.height - gap1 - gap2 - src_h_est - H * 0.02
 
     dl = make_layout(cr)
@@ -878,12 +890,14 @@ def render_statbox(cr, ctx, data):
     desc_h(dsize)
     dw, dh = measure(dl)
 
-    sl = make_layout(cr)
-    set_font(sl, cfg["font_sans"], cfg["size_stat_source"] * H)
-    sl.set_width(int(zw * 0.92 * SCALE))
-    sl.set_alignment(Pango.Alignment.CENTER)
-    sl.set_text(source, -1)
-    sw, sh = measure(sl)
+    sl, sw, sh = None, 0.0, 0.0
+    if has_source:
+        sl = make_layout(cr)
+        set_font(sl, cfg["font_sans"], cfg["size_stat_source"] * H)
+        sl.set_width(int(zw * 0.92 * SCALE))
+        sl.set_alignment(Pango.Alignment.CENTER)
+        sl.set_text(source, -1)
+        sw, sh = measure(sl)
 
     block_h = ink_r.height + gap1 + dh + gap2 + sh
     y = zy + max(0.0, (zh - block_h) / 2.0)
@@ -894,8 +908,9 @@ def render_statbox(cr, ctx, data):
     draw_layout(cr, nl, zx + (zw - ink_r.width) / 2.0 - ink_r.x, y - ink_r.y, ink)
     y += ink_r.height + gap1
     draw_layout(cr, dl, zx + (zw - dw) / 2.0, y, ink)
-    y += dh + gap2
-    draw_layout(cr, sl, zx + (zw - sw) / 2.0, y, ink)
+    if has_source:
+        y += dh + gap2
+        draw_layout(cr, sl, zx + (zw - sw) / 2.0, y, ink)
 
 
 # ----- Sidebar stories (two explicit zones, each filled) ---------------------
@@ -1017,6 +1032,47 @@ def render_sidebar(cr, ctx, data):
     n = len(stories)
     anchor_top = ref_top                      # just below the baked stat-box rule
     rail_bottom = ctx.get("pullquote_bottom", cfg["rail_bottom_y"] * H)
+    rail_avail = rail_bottom - anchor_top
+
+    # The shared body size from the reference zone assumes ONE short story. When
+    # the rail carries several stories, or long ones, their natural combined
+    # height can exceed the rail. The rail is bounded by the page, so it cannot
+    # grow; instead shrink the shared body size (uniformly, never below the
+    # readable floor) until the natural content plus one line of gap per story
+    # fits. Copy is never altered, only the type size. The body size is never
+    # enlarged past the reference, so short copy is unaffected.
+    head_hs = [measure(_sidebar_headline_layout(cr, ctx, rail_w, h, head_size))[1]
+               for h, _, _ in stories]
+
+    def _byline_h(b):
+        bl = make_layout(cr)
+        set_font(bl, cfg["font_sans"], byline_size)
+        bl.set_width(int(rail_w * SCALE))
+        bl.set_text(b, -1)
+        return measure(bl)[1]
+
+    byl_hs = [_byline_h(b) for _, b, _ in stories]
+
+    def natural_total(s):
+        t = 0.0
+        for i, (_, _, body) in enumerate(stories):
+            bi = _sidebar_body_layout(cr, ctx, rail_w, body, s).get_pixel_extents()[0]
+            t += head_hs[i] + gap_hb + byl_hs[i] + gap_bb + bi.y + bi.height
+        return t
+
+    def rail_fits(s):
+        return natural_total(s) + n * (cfg["lead_sidebar"] * s) <= rail_avail
+
+    if not rail_fits(body_size):
+        fit_size, ok = largest_fitting(rail_fits, cfg["sidebar_body_abs_min"] * H, body_size)
+        body_size = fit_size
+        if not ok:
+            print("[warn] rail copy does not fit even at the minimum body size; "
+                  "the sidebar stories are too long for the rail.")
+        else:
+            print(f"[info] rail: body size reduced to {body_size/H:.4f}H so "
+                  f"{n} stories fit the rail")
+
     gap_cap = cfg["rail_gap_cap_frac"] * H
     min_gap = cfg["lead_sidebar"] * body_size  # never tighter than one line
 
@@ -1267,7 +1323,7 @@ def place_logo(image_rgb, ctx):
 REQUIRED_FIELDS = [
     "masthead_name", "edition_line", "date", "headline", "byline", "lead_article",
     "pull_quote_text", "pull_quote_attribution", "stat_number", "stat_descriptor",
-    "stat_source", "sidebar_1_headline", "sidebar_1_byline", "sidebar_1_body",
+    "sidebar_1_headline", "sidebar_1_byline", "sidebar_1_body",
 ]
 
 # Expected word counts per field (inclusive). lead_article uses the cfg range.
@@ -1288,7 +1344,10 @@ FIELD_WORD_RANGES = {
 for _n in range(1, 5):
     FIELD_WORD_RANGES[f"sidebar_{_n}_headline"] = (4, 11)
     FIELD_WORD_RANGES[f"sidebar_{_n}_byline"] = (2, 4)
-    FIELD_WORD_RANGES[f"sidebar_{_n}_body"] = (30, 120)
+    # Production target is 60-80 words (see README); the check tolerates 40-110
+    # before warning, because the rail adapts: short copy distributes into gaps,
+    # long copy shrinks the shared body size to fit.
+    FIELD_WORD_RANGES[f"sidebar_{_n}_body"] = (40, 110)
 
 
 def validate(data, cfg):

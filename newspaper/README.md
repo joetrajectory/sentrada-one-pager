@@ -118,12 +118,12 @@ warns when a field is out of range and fails on anything that will not fit.
 | `lead_article` | yes | 580–660 (target 620) | Three-column continuous flow. Separate paragraphs with `\n\n`. See below. |
 | `pull_quote_text` | yes | 10–30 | Large centred italic feature quote filling the bottom-left block. |
 | `pull_quote_attribution` | yes | 2–7 | Sits under the quote. Adjacent proper nouns are kept on one line. |
-| `stat_number` | yes | 1 | The dominant figure (e.g. `447`, `$1bn`, `42%`). Sized to fill the stat box. |
+| `stat_number` | yes | 1 | The dominant figure (e.g. `447`, `$1bn`, `449,933`, `42%`). Sized by ink width to fill the stat box, so multi-digit/comma figures fit. |
 | `stat_descriptor` | yes | 3–10 | Caption under the number. Adjacent capitalised words (e.g. "MMC Ventures") stay together. |
-| `stat_source` | yes | 2–9 | Small source line under the descriptor. |
+| `stat_source` | optional | 2–9 | Small source line under the descriptor. If absent, it is not drawn and the number + descriptor re-centre in the box. |
 | `sidebar_1_headline` | yes | 4–11 | First rail story headline (section-headline scale). |
 | `sidebar_1_byline` | yes | 2–4 | First rail story byline. |
-| `sidebar_1_body` | yes | 30–120 | First rail story body. See rail sizing below. |
+| `sidebar_1_body` | yes | 60–80 (target) | First rail story body. See rail sizing below. |
 | `sidebar_2_*` | optional | as above | Second rail story (headline/byline/body). |
 | `sidebar_3_*` | optional | as above | Third rail story. |
 | `sidebar_4_*` | optional | as above | Fourth rail story. |
@@ -140,34 +140,44 @@ level (within one line height). No em dashes (they become a comma break).
 
 ### Sidebar stories (1 to 4) and the self-balancing rail
 
-Supply between one and four stories as `sidebar_N_headline` / `sidebar_N_byline`
-/ `sidebar_N_body`, numbered from 1 with no gaps. The engine collects them in
-order and stops at the first missing `sidebar_N_headline`:
+**Production standard: three stories of 60–80 words each.** That fills the rail
+at a comfortable body size with tidy gaps. Supply between one and four stories as
+`sidebar_N_headline` / `sidebar_N_byline` / `sidebar_N_body`, numbered from 1 with
+no gaps. The engine collects them in order and stops at the first missing
+`sidebar_N_headline`:
 
 - **Absent `sidebar_2`+** — fewer stories are rendered; the rail distributes
   however many it is given. Only `sidebar_1` is mandatory.
-- **All stories share one headline size and one body size** (computed from the
-  sidebar-1 reference zone) so the rail is typographically consistent; text is
-  never stretched or resized to fill.
+- **All stories share one headline size and one body size** so the rail is
+  typographically consistent; the words themselves are never stretched, padded
+  or feathered to fill.
 - **The rail self-balances vertically.** The stat box is fixed at the top; the
   stories sit below at their natural heights and the surplus down to the
   pull-quote bottom is split evenly into the gaps (one before each story), with a
   divider rule centred in each between-story gap. The last story's foot lands on
   the pull-quote bottom, so spare space reads as editorial spacing, never as a
   hole below the last story.
-- **Gap cap.** If the gaps would exceed ~8% of page height, the body leading is
-  loosened up to 1.15x and the rail re-distributed. If they still exceed the cap
-  (very short copy), `--check` warns: the structural fix is more content (another
-  story, or longer bodies), not more stretching. Two ~50-word stories leave ~12%
-  gaps; three bring it to ~2–3%. Around 80–120 words per body, or three to four
-  stories, fills the rail tightly.
+- **Short copy → gaps grow.** If the gaps would exceed ~8% of page height, the
+  body leading is loosened up to 1.15x and the rail re-distributed. Two ~50-word
+  stories leave ~12% gaps; three 60–80 word stories bring it to ~2–4%.
+- **Long copy → type shrinks to fit.** When several long stories would be taller
+  than the rail (which is bounded by the page and cannot grow), the shared body
+  size is reduced uniformly to a readability floor so everything fits, down to
+  the pull-quote bottom. Only the type size adapts; the copy is never altered.
+  The body size is never enlarged past the established reference, so short copy
+  is unaffected. If even the floor will not fit, `--check` fails: the fix is
+  shorter or fewer stories, never editing the words.
+
+The engine handles ~40–110 words per body (`--check` warns outside that) by these
+two mechanisms, but 60–80 × 3 is the sweet spot the Copy Agent should target.
 
 ### Optional fields when absent
 
-`sidebar_2`–`sidebar_4` and `kicker_text` are optional. When a `sidebar_N` story
-is absent the rail simply renders fewer stories and redistributes. When
-`kicker_text` is absent the kicker block is skipped. No field needs a placeholder
-value; omit it entirely.
+`stat_source`, `sidebar_2`–`sidebar_4` and `kicker_text` are optional. When
+`stat_source` is absent the source line is not drawn and the stat number and
+descriptor re-centre in the box. When a `sidebar_N` story is absent the rail
+renders fewer stories and redistributes. When `kicker_text` is absent the kicker
+block is skipped. No field needs a placeholder value; omit it entirely.
 
 ## Pre-render check
 
@@ -237,6 +247,11 @@ python newspaper.py --template t.png --data company.json --check \
 
 No em dashes (they are replaced with a comma break). All body and sidebar text is
 justified with hyphenation. Text is near-black (#1A1A1A) on the cream template.
+
+Hyphenation is en_GB, left/right 3, minimum 8 **letters**, and never the last
+word of a block. The minimum counts letters only, not trailing punctuation, so a
+7-letter proper noun followed by a comma ("Reuters,") is not hyphenated — earlier
+it was, because the comma pushed the token to 8 characters.
 
 ## Ink sharpness
 
