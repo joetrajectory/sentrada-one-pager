@@ -8,6 +8,7 @@ template_*.png
 out.png
 # Rendered pages and QC crops (large, regenerable from <company>.json).
 _*.png
+_*.jpg
 *_300.png
 mmc_*.png
 cognism_*.png
