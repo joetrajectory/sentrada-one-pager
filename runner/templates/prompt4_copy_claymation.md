@@ -38,6 +38,14 @@ recipient.
 
 FACTUAL ACCURACY RULE: Every claim must be factually accurate to the research.
 
+METRIC FRAMING RULE (never invert a published positive): Do not invert a company's
+published positive metric into its negative. If the company publishes a number as an
+achievement (e.g. 11.3% cold-calling success, four times the industry average),
+never reframe it as its inverse ("88.7% failure"). The recipient knows the inverse
+and published the positive on purpose. Lead with their number in their framing, then
+name the gap it cannot close. Acknowledge the win in their language, then extend
+beyond it.
+
 ## Claymation content rules
 
 Non-negotiable (Hero's Journey Test): The scene must have a three-beat narrative

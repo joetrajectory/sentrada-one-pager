@@ -45,6 +45,17 @@ be factually accurate to the research. Do not simplify or reframe in a way that
 changes the meaning of the underlying data. If a claim is "close but not quite,"
 rewrite it. The recipient will know whether the claim is true.
 
+METRIC FRAMING RULE (never invert a published positive): Do not invert a company's
+published positive metric into its negative. If the company publishes a number as an
+achievement (e.g. 11.3% cold-calling success, four times the industry average),
+never reframe it as its inverse ("88.7% failure"). The recipient knows the inverse
+and published the positive on purpose; inverting it signals you did not understand
+their position and the piece loses credibility on first read. Lead with their number
+in their framing, then name the gap it cannot close: "11.3% cold-calling success,
+four times the industry average. But the senior enterprise buyers the upmarket pivot
+depends on are not in the callable cohort." Acknowledge the win in their language,
+then extend beyond it.
+
 PERSONALISATION PRINCIPLE: Personalisation should reward close reading on second
 look, not advertise itself on first. The recipient's company name inside a headline
 that makes sense as a story, not as a banner overlay. Operational details woven

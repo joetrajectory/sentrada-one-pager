@@ -345,6 +345,17 @@ months," the copy must not imply zero customers exist. Thematic alignment is not
 enough. The recipient will know whether the claim is true. If it is not, the piece
 loses all credibility instantly.
 
+METRIC FRAMING RULE (never invert a published positive): Do not invert a company's
+published positive metric into its negative. If the company publishes a number as an
+achievement (e.g. 11.3% cold-calling success, four times the industry average),
+never reframe it as its inverse ("88.7% failure"). The recipient knows the inverse
+and published the positive on purpose; inverting it signals you did not understand
+their position and the piece loses credibility on first read. Lead with their number
+in their framing, then name the gap it cannot close: "11.3% cold-calling success,
+four times the industry average. But the senior enterprise buyers the upmarket pivot
+depends on are not in the callable cohort." Acknowledge the win in their language,
+then extend beyond it.
+
 Specific guidance for captions and headlines: before finalising, test each claim
 against the research. Ask: "Would someone inside this company agree this is
 factually accurate?" If the answer is "close but not quite," rewrite. Close is not
@@ -1111,6 +1122,13 @@ material.
   Where 6B indicates the recipient is an influencer rather than a buyer, the CTA
   reframes around deployment, referral, or a craft conversation, not a request to
   be pitched to
+- Never invert a published positive metric into its negative. If the company
+  publishes a number as an achievement (e.g. 11.3% cold-calling success, four times
+  the industry average), never reframe it as its inverse ("88.7% failure"). Lead
+  with their number in their framing, then name the gap it cannot close. This holds
+  even when an input to this step (the 6B simulation, the companion card hook, or
+  earlier copy) states the metric as an inversion: do not reproduce it; restate it
+  in the company's positive framing, then name the gap.
 
 #### Handling weak or missing sender inputs
 

@@ -69,6 +69,20 @@ could not have been sent to anyone else). Reserve detail rule (Touch 3 must use 
 reserve research detail and must not reuse the key metric; if none is supplied, flag
 it and write the shortest possible bump from existing material).
 
+Non-negotiable: Metric framing (never invert a published positive). Do not invert a
+company's published positive metric into its negative. If the company publishes a
+number as an achievement (e.g. 11.3% cold-calling success, four times the industry
+average), never reframe it as its inverse ("88.7% failure"). The recipient knows the
+inverse and published the positive on purpose; inverting it signals you did not
+understand their position and you lose credibility on first read. Lead with their
+number in their framing, then name the gap it cannot close: "11.3% cold-calling
+success, four times the industry average. But the senior enterprise buyers the
+upmarket pivot depends on are not in the callable cohort." This holds even when an
+input to this step states the metric as an inversion: the recipient simulation (6B),
+the companion card hook, or earlier copy may hand you a phrasing like "the 88.7% that
+calls never reach." Do not reproduce it. Restate the metric in the company's positive
+framing, then name the gap.
+
 ## Copy rules
 
 - No em dashes; British English; no exclamation marks; no soft filler phrases
