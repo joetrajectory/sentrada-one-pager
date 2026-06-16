@@ -131,6 +131,12 @@ recognition earns the right to name the gap.
 - {PROBLEM_LABEL}: 2-4 word noun phrase. This becomes the subtitle on the piece.
 - {COMPANION_CARD_HOOK}: One sentence that connects this specific problem to the
   sender's product.
+- {RESERVE_DETAIL}: One concrete, verifiable, attributable detail from the research
+  that is NOT the key metric and is NOT used in the headline or the artefact. Hold
+  it back deliberately so the day-7 follow-up bump has a fresh fact to open with.
+  Must be specific and citable (a named hire, a recent deal, a regulatory event, a
+  product launch, a dated quote). If the research genuinely offers no second
+  verifiable detail beyond the key metric, write "none".
 
 ### Step 3b: Tone Self-Check (run before outputting the brief)
 
@@ -176,6 +182,7 @@ read:
   "operational_details": "...",
   "problem_label": "...",
   "companion_card_hook": "...",
+  "reserve_detail": "one held-back verifiable detail for the day-7 bump, or 'none'",
   "absurdity": "claymation only; otherwise empty string",
   "comedy_potential": "claymation only, e.g. 7/10; otherwise empty string"
 }

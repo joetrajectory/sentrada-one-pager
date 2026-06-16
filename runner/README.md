@@ -14,24 +14,37 @@ your approval of the brief.
 
 ## What it does, in order
 
-1. **Prompt 2 (brief)** via Claude. Prints the snapshot and the seven brief
-   fields, then **stops and waits**. Type `approve` to continue, or paste
-   feedback to regenerate the brief. Nothing proceeds without approval.
-   - If the brief declares a **poor fit**, the runner halts with a clear message.
-2. **Prompt 4 (copy)** via Claude, branching by format:
-   - **Newspaper:** Claude returns the layout engine's flat JSON schema. The
-     runner checks the copy against a strict gate (lead article 600–640 words,
-     exactly 3 sidebar stories, each body 60–80 words). On a violation it reruns
-     Prompt 4 **once** quoting the violations; if it fails twice it halts. It then
-     runs the engine's own `--check`, and only if that passes does it render the
-     print-ready A2 newspaper PNG.
-   - **Claymation:** Claude returns the scene copy. **Prompt 5** then assembles
-     the final image-generation prompt and writes it to `image_prompt.txt` for you
-     to paste into ChatGPT and upscale by hand.
-3. Writes everything to the piece folder and prints the **fact check list** for
-   your sign-off before print.
+There are **two human checkpoints**: you approve the brief, and you approve the
+finished package for print. Everything else runs automatically.
 
-`qc` and `followup` are separate commands you run by hand when you need them.
+1. **Prompt 2 (brief).** Prints the snapshot, the seven brief fields, and the
+   held-back reserve detail, then **stops and waits**. Type `approve`, or paste
+   feedback to regenerate. Nothing proceeds without approval.
+   - If the brief declares a **poor fit**, the runner halts.
+2. **Prompt 4 (copy)**, branching by format:
+   - **Newspaper:** Claude returns the layout engine's flat JSON schema. The runner
+     gates it on (a) word counts (lead 600–640, exactly 3 sidebars × 60–80 words)
+     **and** (b) a **Prompt 4b factual-grounding check** — a text pass that flags any
+     claim not supported by the research (names, places, numbers, dates). On any
+     violation it reruns Prompt 4 **once** quoting them; if it fails twice it halts.
+     It then runs the engine's `--check`, and only on pass renders the A2 PNG.
+   - **Claymation:** Claude returns the scene copy (also grounding-checked), then
+     **Prompt 5** assembles the paste-ready image prompt. The chain stops here (no
+     rendered image to QC automatically); run `qc`/`followup` after you generate
+     and upscale the image.
+3. **Newspaper only — automatic QC + follow-up chain after render:**
+   - **Prompt 6** (vision) craft review. If **FAIL**, the chain stops and shows the
+     reason and regeneration instructions; 6B and 7 do not run.
+   - **Prompt 6B** (vision) recipient simulation. If **WOULD BIN**, the chain stops
+     and shows the suppression flag; 7 does not run.
+   - **Prompt 7** writes the companion card + 3-touch follow-up, grounded in the 6B
+     output (for all other 6B verdicts).
+4. Prints the **complete package** — render path, P6 verdict + flags, 6B verdict +
+   highest-leverage change, companion card and follow-up — for your single
+   print/no-print decision. Fact-check lists are written for your sign-off.
+
+`qc` and `followup` remain standalone commands (rerun QC on a revised image, or
+regenerate follow-up copy) — they share the same code the chain uses.
 
 ## Setup
 
@@ -121,16 +134,18 @@ followup.md          Prompt 7 card + follow-up
 
 ## Where the prompts live
 
-Every prompt is a template in `runner/templates/`, extracted from the single
-source file `../sentrada-prompts-all-v4.md`. **Edit the prompts there**, not in the
-code. The runner only fills `{{placeholders}}`, calls the API, gates the output,
-and drives the engine.
+**`runner/templates/*.md` is the single source of truth — these are what the
+runner executes.** Edit prompts here, never in the code. `../sentrada-prompts-all-v4.md`
+is a reference/design doc only; it may lag and the runtime never reads it. The
+runner just fills `{{placeholders}}`, calls `claude -p`, gates the output, and
+drives the engine.
 
 | Template | Prompt |
 |---|---|
 | `prompt2_brief.md` | Brief Agent |
 | `prompt4_copy_newspaper.md` | Copy Agent (newspaper → engine schema) |
 | `prompt4_copy_claymation.md` | Copy Agent (claymation) |
+| `prompt4b_grounding.md` | Factual grounding gate (text fact-check on the copy) |
 | `prompt5_assembly_claymation.md` | Assembly Agent (claymation image prompt) |
 | `prompt6_review.md` | Review Agent |
 | `prompt6b_recipient.md` | Recipient Agent |
@@ -146,6 +161,7 @@ code). Values are CLI aliases (`opus`/`sonnet`/`haiku`) or full IDs:
 |---|---|---|
 | `p2` brief | `opus` | Picks the problem angle. Quality decides whether the piece earns a meeting. |
 | `p4` copy | `opus` | Writes the words on the physical piece. |
+| `p4b` grounding | `opus` | Fact-checks the copy against the research. Accuracy is the product. |
 | `p5` claymation assembly | `sonnet` | Mechanical prompt assembly. |
 | `p7` follow-up | `sonnet` | Template-driven transformation. |
 | `p6` review (vision) | `opus` | Last check before print. |

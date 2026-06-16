@@ -1,12 +1,19 @@
 # Sentrada Prompt Chain v4
 
-Assembled from Notion workspace (Prompts & Architecture folder), 16 June 2026.
-Single source file for the chain runner. Each prompt section is extracted into an
-individual template file by the runner build step.
+> **REFERENCE DOC — not what the runner executes.** The prompts the runner
+> actually runs live in `runner/templates/*.md` and are **authoritative**. To
+> change pipeline behaviour, edit the template; this file is the design reference
+> (fuller prose, worked examples, the parked Postcard format) and may lag. When the
+> two differ, the templates win. This avoids the runtime ever depending on a doc
+> that drifted. The runtime grounding gate (Prompt 4b) has no section here; see
+> `runner/templates/prompt4b_grounding.md`.
+
+Assembled from the Notion workspace (Prompts & Architecture folder), 16 June 2026.
 
 P1 (Research Agent) runs outside this pipeline (manual ChatGPT deep research).
 P3 (Format Agent) is skipped when format is pre-locked (the normal case). The
-chain runner consumes: P2, P4, P5 (claymation only), P6, P6B, P7.
+chain runner consumes: P2, P4, P4b (grounding gate), P5 (claymation only), P6,
+P6B, P7.
 
 ---
 
@@ -237,6 +244,13 @@ should the recipient take a meeting with the sender about this problem?"
 Strong: "Sentrada helps teams like yours cut through the noise with physical
 outreach that senior buyers actually open and respond to"
 Weak: "We can help with your outbound challenges" (generic)
+
+{RESERVE_DETAIL}: One concrete, verifiable, attributable detail from the research
+that is NOT the key metric and is NOT used in the headline or the artefact. Held
+back deliberately so the day-7 follow-up bump (Prompt 7, Touch 3) has a fresh fact
+to open with. Must be specific and citable (a named hire, a recent deal, a
+regulatory event, a product launch, a dated quote). If the research offers no
+second verifiable detail beyond the key metric, write "none".
 
 **Step 3b: Tone Self-Check (run before outputting the brief)**
 

@@ -57,6 +57,7 @@ DEFAULT_CONFIG = os.path.join(RUNNER_DIR, "config.json")
 DEFAULT_MODELS = {
     "p2": "opus",      # brief: picks the problem angle (quality-critical)
     "p4": "opus",      # copy: writes what appears on the piece (quality-critical)
+    "p4b": "opus",     # factual-grounding gate on the copy (accuracy-critical)
     "p5": "sonnet",    # claymation image-prompt assembly (mechanical)
     "p7": "sonnet",    # follow-up copy (template-driven transformation)
     "p6": "opus",      # review (vision) — strongest available
@@ -295,6 +296,45 @@ def run_engine(engine_path, template_path, data_path, output_path=None, check=Fa
     return result.returncode, result.stdout + result.stderr
 
 
+# --- Factual grounding gate (text, not vision) -----------------------------
+# Catches fabricated/contradicted claims in the copy before a render exists.
+# More reliable than the post-render vision review for verifying text claims.
+
+def newspaper_copy_text(data):
+    parts = [
+        "HEADLINE: " + data.get("headline", ""),
+        "STAT: " + data.get("stat_number", "") + " " + data.get("stat_descriptor", ""),
+        "LEAD ARTICLE: " + data.get("lead_article", ""),
+        "PULL QUOTE: " + data.get("pull_quote_text", "")
+        + " -- " + data.get("pull_quote_attribution", ""),
+    ]
+    for n in (1, 2, 3):
+        parts.append(f"SIDEBAR {n}: {data.get(f'sidebar_{n}_headline', '')} | "
+                     f"{data.get(f'sidebar_{n}_body', '')}")
+    return "\n\n".join(parts)
+
+
+def claymation_copy_text(clay):
+    parts = ["SCENE: " + str(clay.get("scene_description", "")),
+             "CAPTION: " + str(clay.get("caption", ""))]
+    for label in ("visual_details", "in_scene_text"):
+        val = clay.get(label, "")
+        if isinstance(val, list):
+            val = "; ".join(str(x) for x in val)
+        parts.append(label.upper() + ": " + str(val))
+    return "\n\n".join(parts)
+
+
+def grounding_check(config, research, copy_text):
+    """Return (grounded: bool, issues: list of {claim, issue})."""
+    prompt = fill(load_template("prompt4b_grounding.md"),
+                  {"research": research, "copy_text": copy_text})
+    _, data = cli_json(prompt, model_for(config, "p4b"))
+    issues = data.get("unsupported") or []
+    grounded = bool(data.get("grounded", True)) and not issues
+    return grounded, issues
+
+
 # --- Checkpoint -------------------------------------------------------------
 
 def print_brief_checkpoint(brief):
@@ -311,6 +351,8 @@ def print_brief_checkpoint(brief):
     ]
     for label, key in fields:
         print(f"{label}: {brief.get(key, '')}")
+    if brief.get("reserve_detail"):
+        print(f"Reserve detail (held back for Touch 3): {brief['reserve_detail']}")
     if brief.get("absurdity"):
         print(f"Absurdity: {brief['absurdity']}")
     if brief.get("comedy_potential"):
@@ -451,6 +493,7 @@ def _generate_newspaper(args, config, folder, base_values, brief, meta):
     })
 
     model = model_for(config, "p4")
+    research = base_values["research"]
     attempt, feedback_block = 0, ""
     while True:
         attempt += 1
@@ -458,17 +501,26 @@ def _generate_newspaper(args, config, folder, base_values, brief, meta):
         print(f"\n[prompt 4] writing newspaper copy ({model}, attempt {attempt})...")
         reply, data = cli_json(prompt, model)
         copy_part, factcheck = split_factcheck(reply)
-        violations = newspaper_violations(data)
-        if not violations:
+
+        problems = list(newspaper_violations(data))
+        print(f"[prompt 4b] factual grounding check ({model_for(config, 'p4b')})...")
+        grounded, issues = grounding_check(config, research, newspaper_copy_text(data))
+        problems += [f"unsupported claim \"{i.get('claim', '')}\": {i.get('issue', '')}"
+                     for i in issues]
+
+        if not problems:
             break
         if attempt >= 2:
-            die("Prompt 4 newspaper failed the word-count gate twice:\n  - "
-                + "\n  - ".join(violations))
-        print("[gate] word-count violations, rerunning Prompt 4 once:")
-        for x in violations:
+            die("Prompt 4 newspaper failed the gates twice (word count and/or "
+                "factual grounding):\n  - " + "\n  - ".join(problems))
+        print("[gate] violations found, rerunning Prompt 4 once:")
+        for x in problems:
             print(f"  - {x}")
-        feedback_block = ("YOUR PREVIOUS DRAFT FAILED THESE HARD CONSTRAINTS. Fix "
-                          "every one and keep everything else:\n- " + "\n- ".join(violations))
+        feedback_block = ("YOUR PREVIOUS DRAFT FAILED THESE HARD CHECKS. Fix every "
+                          "one and keep everything else. Any 'unsupported claim' below "
+                          "is a fact the research does not support: remove it or "
+                          "replace it with a fact the research does support.\n- "
+                          + "\n- ".join(problems))
 
     write_file(os.path.join(folder, "copy.md"), copy_part)
     write_file(os.path.join(folder, "factcheck.md"), factcheck or "(none returned)")
@@ -589,8 +641,28 @@ def _generate_claymation(args, config, folder, base_values, brief, meta):
         "operational_details": brief.get("operational_details", ""),
         "absurdity": brief.get("absurdity", ""),
     })
-    print(f"\n[prompt 4] writing claymation copy ({model_for(config, 'p4')})...")
-    reply, clay = cli_json(fill(template, values), model_for(config, "p4"))
+    model = model_for(config, "p4")
+    research = base_values["research"]
+    attempt, feedback_block = 0, ""
+    while True:
+        attempt += 1
+        print(f"\n[prompt 4] writing claymation copy ({model}, attempt {attempt})...")
+        reply, clay = cli_json(fill(template, dict(values, feedback_block=feedback_block)), model)
+        print(f"[prompt 4b] factual grounding check ({model_for(config, 'p4b')})...")
+        grounded, issues = grounding_check(config, research, claymation_copy_text(clay))
+        if grounded:
+            break
+        problems = [f"unsupported claim \"{i.get('claim', '')}\": {i.get('issue', '')}"
+                    for i in issues]
+        if attempt >= 2:
+            die("Prompt 4 claymation failed the factual grounding gate twice:\n  - "
+                + "\n  - ".join(problems))
+        print("[gate] unsupported claims, rerunning Prompt 4 once:")
+        for x in problems:
+            print(f"  - {x}")
+        feedback_block = ("YOUR PREVIOUS DRAFT CONTAINED CLAIMS THE RESEARCH DOES NOT "
+                          "SUPPORT. Remove or replace each, keep everything else.\n- "
+                          + "\n- ".join(problems))
     copy_part, factcheck = split_factcheck(reply)
     write_file(os.path.join(folder, "copy.md"), copy_part)
     write_file(os.path.join(folder, "claymation_copy.json"), json.dumps(clay, indent=2))
@@ -722,7 +794,10 @@ def _p7(config, folder, delivery_date):
         "problem_label": brief.get("problem_label", ""), "core_problem": brief.get("core_problem", ""),
         "key_metric": brief.get("key_metric", ""), "operational_details": brief.get("operational_details", ""),
         "companion_card_hook": meta.get("companion_card_hook", "") or brief.get("companion_card_hook", ""),
-        "reserve_detail": "",  # left blank by design; Prompt 7 flags this if it matters
+        # Reserve detail comes from the brief (Prompt 2). "none" means the research
+        # offered no second verifiable detail; pass "" so Prompt 7's missing-reserve
+        # rule fires legitimately rather than treating the literal word as a fact.
+        "reserve_detail": "" if str(brief.get("reserve_detail", "")).strip().lower() in ("", "none") else brief["reserve_detail"],
         "research": research,
         "verdict_6b": verdict, "failure_mode_6b": failure, "leverage_6b": leverage, "stopped_6b": stopped,
         "sender_name": sender.get("sender_name", ""), "sender_company": sender.get("company", ""),

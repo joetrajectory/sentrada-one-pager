@@ -14,6 +14,7 @@
   "models": {
     "p2": "opus",
     "p4": "opus",
+    "p4b": "opus",
     "p5": "sonnet",
     "p7": "sonnet",
     "p6": "opus",
