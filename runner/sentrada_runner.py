@@ -231,28 +231,14 @@ def print_brief_checkpoint(brief):
 
 # --- generate ---------------------------------------------------------------
 
-def cmd_generate(args):
-    config = load_config(args.config)
-    sender = config["sender"]
-    fmt = args.format.lower()
-    if fmt not in ("newspaper", "claymation"):
-        die("format must be 'newspaper' or 'claymation'.")
-
-    research = read_file(args.research)
-    client = make_client()
-
-    slug = f"{slugify(args.name)}-{slugify(args.company)}"
-    folder = os.path.join(PIECES_DIR, slug)
-    os.makedirs(folder, exist_ok=True)
-    write_file(os.path.join(folder, "research.md"), research)
-    print(f"[folder] {os.path.relpath(folder, REPO_ROOT)}")
-
-    base_values = {
+def _build_base_values(args, sender, research, fmt):
+    probs = sender.get("problems", [])
+    return {
         "recipient_name": args.name, "recipient_title": args.title,
         "recipient_company": args.company,
-        "problem_1": sender.get("problems", ["", "", ""])[0] if sender.get("problems") else "",
-        "problem_2": sender["problems"][1] if len(sender.get("problems", [])) > 1 else "",
-        "problem_3": sender["problems"][2] if len(sender.get("problems", [])) > 2 else "",
+        "problem_1": probs[0] if len(probs) > 0 else "",
+        "problem_2": probs[1] if len(probs) > 1 else "",
+        "problem_3": probs[2] if len(probs) > 2 else "",
         "research": research,
         "sender_company": sender.get("company", ""),
         "sender_what": sender.get("what_they_sell", ""),
@@ -262,27 +248,101 @@ def cmd_generate(args):
         "format": "Newspaper Front Page" if fmt == "newspaper" else "Claymation Scene",
     }
 
-    # --- Prompt 2: brief, with checkpoint loop ---
-    brief_template = load_template("prompt2_brief.md")
-    feedback_block = ""
-    brief, brief_text = None, ""
-    while True:
-        values = dict(base_values, feedback_block=feedback_block)
-        prompt = fill(brief_template, values)
-        print("\n[prompt 2] generating the brief...")
-        brief_text = call_text(client, prompt)
-        brief = extract_last_json(brief_text)
-        if brief is None:
-            die("could not read the brief JSON block from Prompt 2's reply. "
-                "Check runner/templates/prompt2_brief.md output format.")
-        write_file(os.path.join(folder, "brief.md"), brief_text)
-        write_file(os.path.join(folder, "brief.json"), json.dumps(brief, indent=2))
 
+def _build_meta(args, fmt, brief, sender):
+    return {
+        "recipient_name": args.name, "recipient_title": args.title,
+        "recipient_company": args.company, "format": fmt,
+        "problem_label": brief.get("problem_label", ""),
+        "companion_card_hook": brief.get("companion_card_hook", ""),
+        "sender": sender,
+    }
+
+
+def _run_brief(client, folder, base_values, feedback_text=""):
+    feedback_block = ""
+    if feedback_text:
+        feedback_block = ("FOUNDER FEEDBACK ON YOUR PREVIOUS DRAFT:\n" + feedback_text
+                          + "\n\nRegenerate the brief incorporating this feedback.")
+    prompt = fill(load_template("prompt2_brief.md"),
+                  dict(base_values, feedback_block=feedback_block))
+    print("\n[prompt 2] generating the brief...")
+    brief_text = call_text(client, prompt)
+    brief = extract_last_json(brief_text)
+    if brief is None:
+        die("could not read the brief JSON block from Prompt 2's reply. "
+            "Check runner/templates/prompt2_brief.md output format.")
+    write_file(os.path.join(folder, "brief.md"), brief_text)
+    write_file(os.path.join(folder, "brief.json"), json.dumps(brief, indent=2))
+    return brief
+
+
+def _continue_after_brief(client, args, config, folder, base_values, brief, sender):
+    meta = _build_meta(args, fmt_of(args), brief, sender)
+    if fmt_of(args) == "newspaper":
+        _generate_newspaper(client, args, config, folder, base_values, brief, meta)
+    else:
+        _generate_claymation(client, args, folder, base_values, brief, meta)
+
+
+def fmt_of(args):
+    return args.format.lower()
+
+
+def cmd_generate(args):
+    config = load_config(args.config)
+    sender = config["sender"]
+    fmt = args.format.lower()
+    if fmt not in ("newspaper", "claymation"):
+        die("format must be 'newspaper' or 'claymation'.")
+
+    slug = f"{slugify(args.name)}-{slugify(args.company)}"
+    folder = os.path.join(PIECES_DIR, slug)
+
+    # --- resume: skip Prompt 2 and the checkpoint, use the approved brief.json ---
+    if args.resume:
+        bp = os.path.join(folder, "brief.json")
+        if not os.path.exists(bp):
+            die(f"--resume needs an approved brief at {bp}. Run --brief-only first.")
+        research = read_file(os.path.join(folder, "research.md"))
+        brief = json.loads(read_file(bp))
+        base_values = _build_base_values(args, sender, research, fmt)
+        client = make_client()
+        print(f"[resume] {os.path.relpath(folder, REPO_ROOT)} (brief already approved)")
+        _continue_after_brief(client, args, config, folder, base_values, brief, sender)
+        return
+
+    if not args.research:
+        die("--research is required (path to your pasted research file).")
+    research = read_file(args.research)
+    os.makedirs(folder, exist_ok=True)
+    write_file(os.path.join(folder, "research.md"), research)
+    print(f"[folder] {os.path.relpath(folder, REPO_ROOT)}")
+    base_values = _build_base_values(args, sender, research, fmt)
+    client = make_client()
+
+    # --- brief-only: run the brief once, print the checkpoint, then stop ---
+    if args.brief_only:
+        brief = _run_brief(client, folder, base_values, args.feedback)
+        if brief.get("fit") == "poor":
+            die("the brief declares a POOR fit: "
+                + brief.get("fit_reason", "no problem reached medium/high confidence"))
+        print_brief_checkpoint(brief)
+        rel = os.path.relpath(__file__, REPO_ROOT)
+        print("\n[brief-only] Brief saved. When you approve it, continue with:")
+        print(f'  python {rel} generate --name "{args.name}" --title "{args.title}" '
+              f'--company "{args.company}" --format {fmt} --resume')
+        print(f'  (or revise first: ... --format {fmt} --brief-only --feedback "your notes")')
+        return
+
+    # --- default interactive run with the approval checkpoint ---
+    feedback_text = ""
+    while True:
+        brief = _run_brief(client, folder, base_values, feedback_text)
         if brief.get("fit") == "poor":
             die("the brief declares a POOR fit: "
                 + brief.get("fit_reason", "no problem reached medium/high confidence")
                 + "\nNo piece generated. Review the target or add sender context.")
-
         print_brief_checkpoint(brief)
         ans = input("\nType 'approve' to proceed, or paste feedback to rerun the "
                     "brief: ").strip()
@@ -291,22 +351,9 @@ def cmd_generate(args):
         if not ans:
             print("(no input; nothing proceeds without approval)")
             continue
-        feedback_block = ("FOUNDER FEEDBACK ON YOUR PREVIOUS DRAFT:\n" + ans
-                          + "\n\nRegenerate the brief incorporating this feedback.")
+        feedback_text = ans
 
-    # --- meta.json so qc/followup can run standalone later ---
-    meta = {
-        "recipient_name": args.name, "recipient_title": args.title,
-        "recipient_company": args.company, "format": fmt,
-        "problem_label": brief.get("problem_label", ""),
-        "companion_card_hook": brief.get("companion_card_hook", ""),
-        "sender": sender,
-    }
-
-    if fmt == "newspaper":
-        _generate_newspaper(client, args, config, folder, base_values, brief, meta)
-    else:
-        _generate_claymation(client, args, folder, base_values, brief, meta)
+    _continue_after_brief(client, args, config, folder, base_values, brief, sender)
 
 
 def _generate_newspaper(client, args, config, folder, base_values, brief, meta):
@@ -561,8 +608,14 @@ def main():
     g.add_argument("--title", required=True, help="recipient job title")
     g.add_argument("--company", required=True, help="recipient company")
     g.add_argument("--format", required=True, help="newspaper or claymation")
-    g.add_argument("--research", required=True, help="path to the pasted research file")
+    g.add_argument("--research", help="path to the pasted research file (required unless --resume)")
     g.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    g.add_argument("--brief-only", action="store_true",
+                   help="run the brief and stop at the checkpoint (non-interactive approval)")
+    g.add_argument("--resume", action="store_true",
+                   help="skip the brief; continue from the approved brief.json in the piece folder")
+    g.add_argument("--feedback", default="",
+                   help="with --brief-only, regenerate the brief incorporating this feedback")
     g.set_defaults(func=cmd_generate)
 
     q = sub.add_parser("qc", help="run Prompts 6 and 6B against a final image")
