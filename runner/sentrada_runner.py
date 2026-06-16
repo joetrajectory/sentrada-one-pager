@@ -502,7 +502,77 @@ def _generate_newspaper(args, config, folder, base_values, brief, meta):
         f'headline "{engine_data.get("headline", "")}"')
     write_file(os.path.join(folder, "meta.json"), json.dumps(meta, indent=2))
 
-    _final_report(folder, output_path, factcheck)
+    print(f"\n[rendered] {os.path.relpath(output_path, REPO_ROOT)}")
+    print("[fact check] runner/.../factcheck.md holds the copy claims for your "
+          "sign-off before print.")
+    # Newspaper has a real rendered image, so the QC + follow-up chain runs now.
+    delivery_date = getattr(args, "delivery_date", "") or "to be confirmed on delivery"
+    run_chain_after_render(config, folder, output_path, delivery_date)
+
+
+def run_chain_after_render(config, folder, image_path, delivery_date):
+    """After a newspaper renders: P6 craft review -> (stop on FAIL) -> P6B
+    recipient sim -> (stop on WOULD BIN) -> P7 follow-up -> consolidated package
+    for the founder's single print/no-print decision."""
+    meta = json.loads(read_file(os.path.join(folder, "meta.json")))
+    brief = json.loads(read_file(os.path.join(folder, "brief.json")))
+    research = read_file(os.path.join(folder, "research.md"))
+
+    review, v6 = _p6(config, folder, image_path, meta, brief, research)
+    if v6 == "FAIL":
+        print("\n" + "=" * 70)
+        print("CHAIN STOPPED — Prompt 6 returned FAIL. 6B and follow-up not run.")
+        print("=" * 70)
+        print(f"Rendered (withhold from print): {os.path.relpath(image_path, REPO_ROOT)}")
+        print("\nReason and regeneration instructions (full review: qc_review.md):\n")
+        print(review)
+        return
+
+    sixb, v6b = _p6b(config, folder, image_path, meta, research)
+    if v6b == "WOULD BIN":
+        print("\n" + "=" * 70)
+        print("CHAIN STOPPED — Prompt 6B returned WOULD BIN. Follow-up suppressed "
+              "(P7 Step 0 verdict gate).")
+        print("=" * 70)
+        print(f"Rendered: {os.path.relpath(image_path, REPO_ROOT)}")
+        print("The simulation predicts this recipient will not respond regardless of "
+              "conversion copy quality. Card and follow-up suppressed. Recommend "
+              "reviewing the target or the artefact angle before sending.")
+        print("\n6B simulation: qc_recipient.md")
+        return
+
+    reply = _p7(config, folder, delivery_date)
+    _print_package(image_path, review, v6, sixb, v6b, reply)
+
+
+def _print_package(image_path, review, v6, sixb, v6b, followup_text):
+    print("\n" + "=" * 70)
+    print("PIECE COMPLETE — final checkpoint: review and decide whether to print")
+    print("=" * 70)
+    print(f"\nRendered piece: {os.path.relpath(image_path, REPO_ROOT)}")
+
+    print(f"\n--- Prompt 6 (craft): {v6 or 'see qc_review.md'} ---")
+    flags = [ln.strip() for ln in review.splitlines()
+             if ("flag" in ln.lower() or "nuance" in ln.lower()) and ln.strip()]
+    if v6 == "BORDERLINE":
+        print("BORDERLINE — proceeding, but review the craft notes before print.")
+    print("Flags: " + ("; ".join(flags) if flags else "none") + "  (full review: qc_review.md)")
+
+    print(f"\n--- Prompt 6B (recipient): {v6b or 'see qc_recipient.md'} ---")
+    print(_extract_6b_leverage(sixb))
+    print("(full simulation: qc_recipient.md)")
+
+    print("\n--- Companion card + 3-touch follow-up (followup.md) ---\n")
+    print(followup_text)
+
+
+def _extract_6b_leverage(sixb):
+    low = sixb.lower()
+    i = low.find("highest-leverage")
+    if i == -1:
+        return "Highest-leverage change: (see qc_recipient.md)"
+    chunk = "\n\n".join(sixb[i:].split("\n\n")[:2]).strip()
+    return "Highest-leverage change -> " + chunk[:700]
 
 
 def _generate_claymation(args, config, folder, base_values, brief, meta):
@@ -551,76 +621,14 @@ def _generate_claymation(args, config, folder, base_values, brief, meta):
     print("  image_prompt.txt   <- paste this into ChatGPT image generation, then upscale")
     print("  copy.md            <- scene, caption, in-scene text")
     print("  factcheck.md       <- review against the rendered image before print")
+    print("\nClaymation has no rendered image at this stage, so the QC + follow-up "
+          "chain does not run automatically. Generate and upscale the image from "
+          "image_prompt.txt, then run `qc` and `followup` against it manually.")
     print("\nFACT CHECK LIST:\n" + (factcheck or "(none returned)"))
 
 
-def _final_report(folder, output_path, factcheck):
-    print("\n" + "=" * 70)
-    print("NEWSPAPER RENDERED — print-ready")
-    print("=" * 70)
-    print(f"\nFolder: {os.path.relpath(folder, REPO_ROOT)}")
-    print(f"  {os.path.basename(output_path)}   <- the print-ready A2 newspaper (300 DPI)")
-    print("  data.json          <- engine input (engine schema only)")
-    print("  copy.md            <- the full written copy")
-    print("  factcheck.md       <- check the rendered piece against this before print")
-    print("\nFACT CHECK LIST (review the rendered piece against this before print):\n"
-          + (factcheck or "(none returned)"))
-
-
-# --- qc (Prompts 6 + 6B) ----------------------------------------------------
-
-def cmd_qc(args):
-    folder = args.folder
-    config = load_config(args.config)
-    meta = json.loads(read_file(os.path.join(folder, "meta.json")))
-    brief = json.loads(read_file(os.path.join(folder, "brief.json")))
-    research = read_file(os.path.join(folder, "research.md"))
-
-    legibility = "Rendered by the layout engine; all text is guaranteed legible."
-    lp = os.path.join(folder, "image_prompt.txt")
-    if os.path.exists(lp):
-        txt = read_file(lp)
-        idx = txt.find("LEGIBILITY CHECK:")
-        legibility = txt[idx + len("LEGIBILITY CHECK:"):].strip() if idx != -1 else txt
-
-    fmt_label = "Newspaper Front Page" if meta["format"] == "newspaper" else "Claymation Scene"
-    review_values = {
-        "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
-        "recipient_company": meta["recipient_company"], "format": fmt_label,
-        "core_problem": brief.get("core_problem", ""), "key_metric": brief.get("key_metric", ""),
-        "problem_label": brief.get("problem_label", ""),
-        "operational_details": brief.get("operational_details", ""),
-        "research": research, "legibility_checklist": legibility,
-    }
-    print(f"[prompt 6] reviewing the image ({model_for(config, 'p6')}, vision)...")
-    review = vision_call(config, fill(load_template("prompt6_review.md"), review_values),
-                         model_for(config, "p6"), args.image)
-    write_file(os.path.join(folder, "qc_review.md"), review)
-
-    print(f"[prompt 6B] simulating the recipient ({model_for(config, 'p6b')}, vision)...")
-    sixb_values = {
-        "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
-        "recipient_company": meta["recipient_company"], "research": research,
-    }
-    sixb = vision_call(config, fill(load_template("prompt6b_recipient.md"), sixb_values),
-                       model_for(config, "p6b"), args.image)
-    write_file(os.path.join(folder, "qc_recipient.md"), sixb)
-
-    print("\n" + "=" * 70)
-    print("QC COMPLETE")
-    print("=" * 70)
-    print("  qc_review.md     <- Prompt 6 craft review (pass/fail)")
-    print("  qc_recipient.md  <- Prompt 6B recipient simulation (would they respond)")
-    print("\n--- Prompt 6 verdict line ---")
-    for line in review.splitlines():
-        if line.strip().upper().startswith("VERDICT"):
-            print(line.strip())
-            break
-    print("\n--- Prompt 6B verdict ---")
-    print(extract_6b_verdict(sixb) or "(see qc_recipient.md)")
-
-
-# --- followup (Prompt 7) ----------------------------------------------------
+# --- QC (Prompts 6 + 6B) and follow-up (Prompt 7): shared steps -------------
+# These run both standalone (cmd_qc / cmd_followup) and chained from generate.
 
 def extract_6b_verdict(text):
     for phrase in ("WOULD TAKE THE MEETING", "WOULD ENGAGE IF FOLLOWED UP WELL",
@@ -630,9 +638,52 @@ def extract_6b_verdict(text):
     return None
 
 
-def cmd_followup(args):
-    folder = args.folder
-    config = load_config(args.config)
+def extract_p6_verdict(text):
+    for line in text.splitlines():
+        s = line.strip().upper()
+        if s.startswith("VERDICT"):
+            for v in ("FAIL", "BORDERLINE", "PASS"):
+                if v in s:
+                    return v
+    return None
+
+
+def _p6(config, folder, image_path, meta, brief, research):
+    legibility = "Rendered by the layout engine; all text is guaranteed legible."
+    lp = os.path.join(folder, "image_prompt.txt")
+    if os.path.exists(lp):
+        txt = read_file(lp)
+        idx = txt.find("LEGIBILITY CHECK:")
+        legibility = txt[idx + len("LEGIBILITY CHECK:"):].strip() if idx != -1 else txt
+    fmt_label = "Newspaper Front Page" if meta["format"] == "newspaper" else "Claymation Scene"
+    values = {
+        "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
+        "recipient_company": meta["recipient_company"], "format": fmt_label,
+        "core_problem": brief.get("core_problem", ""), "key_metric": brief.get("key_metric", ""),
+        "problem_label": brief.get("problem_label", ""),
+        "operational_details": brief.get("operational_details", ""),
+        "research": research, "legibility_checklist": legibility,
+    }
+    print(f"[prompt 6] reviewing the image ({model_for(config, 'p6')}, vision)...")
+    review = vision_call(config, fill(load_template("prompt6_review.md"), values),
+                         model_for(config, "p6"), image_path)
+    write_file(os.path.join(folder, "qc_review.md"), review)
+    return review, extract_p6_verdict(review)
+
+
+def _p6b(config, folder, image_path, meta, research):
+    values = {
+        "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
+        "recipient_company": meta["recipient_company"], "research": research,
+    }
+    print(f"[prompt 6B] simulating the recipient ({model_for(config, 'p6b')}, vision)...")
+    sixb = vision_call(config, fill(load_template("prompt6b_recipient.md"), values),
+                       model_for(config, "p6b"), image_path)
+    write_file(os.path.join(folder, "qc_recipient.md"), sixb)
+    return sixb, extract_6b_verdict(sixb)
+
+
+def _p7(config, folder, delivery_date):
     meta = json.loads(read_file(os.path.join(folder, "meta.json")))
     brief = json.loads(read_file(os.path.join(folder, "brief.json")))
     research = read_file(os.path.join(folder, "research.md"))
@@ -664,16 +715,48 @@ def cmd_followup(args):
         "verdict_6b": verdict, "failure_mode_6b": failure, "leverage_6b": leverage, "stopped_6b": stopped,
         "sender_name": sender.get("sender_name", ""), "sender_company": sender.get("company", ""),
         "sender_what": sender.get("what_they_sell", ""), "sender_proof": sender.get("proof_points", ""),
-        "booking_link": sender.get("booking_link", ""), "delivery_date": args.delivery_date,
+        "booking_link": sender.get("booking_link", ""), "delivery_date": delivery_date,
     }
     print(f"[prompt 7] writing the companion card and 3-touch follow-up ({model_for(config, 'p7')})...")
     reply = cli_text(fill(load_template("prompt7_followup.md"), values), model_for(config, "p7"))
     write_file(os.path.join(folder, "followup.md"), reply)
+    return reply
 
+
+# --- standalone qc / followup commands -------------------------------------
+
+def cmd_qc(args):
+    config = load_config(args.config)
+    folder = args.folder
+    meta = json.loads(read_file(os.path.join(folder, "meta.json")))
+    brief = json.loads(read_file(os.path.join(folder, "brief.json")))
+    research = read_file(os.path.join(folder, "research.md"))
+
+    review, v6 = _p6(config, folder, args.image, meta, brief, research)
+    if v6 == "FAIL":
+        print("\n" + "=" * 70)
+        print("PROMPT 6: FAIL — 6B not run.")
+        print("=" * 70)
+        print("Reason and regeneration instructions (full review: qc_review.md):\n")
+        print(review)
+        return
+    sixb, v6b = _p6b(config, folder, args.image, meta, research)
+    print("\n" + "=" * 70)
+    print("QC COMPLETE")
+    print("=" * 70)
+    print("  qc_review.md     <- Prompt 6 craft review")
+    print("  qc_recipient.md  <- Prompt 6B recipient simulation")
+    print(f"\nPrompt 6 verdict:  {v6 or '(see qc_review.md)'}")
+    print(f"Prompt 6B verdict: {v6b or '(see qc_recipient.md)'}")
+
+
+def cmd_followup(args):
+    config = load_config(args.config)
+    reply = _p7(config, args.folder, args.delivery_date)
     print("\n" + "=" * 70)
     print("FOLLOW-UP WRITTEN")
     print("=" * 70)
-    print(f"  followup.md  <- companion card + Touch 1-3 + reception nudge + fact check")
+    print("  followup.md  <- companion card + Touch 1-3 + reception nudge + fact check")
     print("\n" + reply)
 
 
@@ -696,6 +779,9 @@ def main():
                    help="skip the brief; continue from the approved brief.json in the piece folder")
     g.add_argument("--feedback", default="",
                    help="with --brief-only, regenerate the brief incorporating this feedback")
+    g.add_argument("--delivery-date", default="to be confirmed on delivery",
+                   help="delivery date passed to the chained follow-up (placeholder is fine; "
+                        "the follow-up is generated and held until delivery is confirmed)")
     g.set_defaults(func=cmd_generate)
 
     q = sub.add_parser("qc", help="run Prompts 6 and 6B against a final image")
