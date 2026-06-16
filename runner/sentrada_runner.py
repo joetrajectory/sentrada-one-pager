@@ -875,6 +875,240 @@ def cmd_followup(args):
     _print_usage("followup")
 
 
+# --- Batch processing -------------------------------------------------------
+# Two phases over a JSON manifest of recipients, each shelling out to the
+# single-piece `generate` path as a subprocess so one piece failing never kills
+# the batch (full isolation, reuses the tested per-piece flow verbatim).
+#
+#   batch-brief  -> runs Prompt 2 for every recipient, writes a review sheet and
+#                   an editable approvals file (APPROVE/SKIP per piece).
+#   batch-build  -> for every APPROVEd piece, runs copy -> render -> QC ->
+#                   follow-up, then writes a summary sheet.
+
+def _piece_slug(entry):
+    return f"{slugify(entry['name'])}-{slugify(entry['company'])}"
+
+
+def _batch_path(manifest_path, suffix):
+    base = os.path.splitext(os.path.abspath(manifest_path))[0]
+    return f"{base}.{suffix}"
+
+
+def _parse_credit(text):
+    m = re.findall(r"approx \$([0-9.]+)", text)
+    return float(m[-1]) if m else 0.0
+
+
+def _last_halt_reason(out, err):
+    for src in (err, out):
+        for line in reversed(src.splitlines()):
+            s = line.strip()
+            if s.startswith("[halt]"):
+                return s[len("[halt]"):].strip()
+    for src in (err, out):
+        lines = [l.strip() for l in src.splitlines() if l.strip()]
+        if lines:
+            return lines[-1][:200]
+    return "unknown error"
+
+
+def _load_manifest(path):
+    entries = json.loads(read_file(path))
+    if not isinstance(entries, list) or not entries:
+        die("manifest must be a non-empty JSON array of recipient objects.")
+    mdir = os.path.dirname(os.path.abspath(path))
+    for e in entries:
+        for k in ("name", "title", "company", "format"):
+            if not e.get(k):
+                die(f"manifest entry missing '{k}': {e}")
+        if e["format"].lower() not in ("newspaper", "claymation"):
+            die(f"manifest entry has bad format '{e['format']}': {e}")
+    return entries, mdir
+
+
+def _run_piece(entry, mode, config_path, research_abs=None):
+    cmd = [sys.executable, os.path.abspath(__file__), "generate",
+           "--name", entry["name"], "--title", entry["title"],
+           "--company", entry["company"], "--format", entry["format"],
+           "--config", config_path]
+    if mode == "brief":
+        cmd += ["--brief-only", "--research", research_abs]
+    else:
+        cmd += ["--resume"]
+        if entry.get("delivery_date"):
+            cmd += ["--delivery-date", entry["delivery_date"]]
+    proc = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def cmd_batch_brief(args):
+    entries, mdir = _load_manifest(args.manifest)
+    rows = []
+    for entry in entries:
+        slug = _piece_slug(entry)
+        research = entry.get("research", "")
+        if research and not os.path.isabs(research):
+            research = os.path.join(mdir, research)
+        print(f"[batch-brief] {slug} ({entry['format']}) ...")
+        if not research or not os.path.exists(research):
+            rows.append({"slug": slug, "entry": entry, "status": "error",
+                         "reason": f"research file not found: {research}", "credit": 0.0})
+            print("  ERROR: research file not found")
+            continue
+        rc, out, err = _run_piece(entry, "brief", args.config, research_abs=research)
+        credit = _parse_credit(out)
+        bp = os.path.join(PIECES_DIR, slug, "brief.json")
+        brief = json.loads(read_file(bp)) if os.path.exists(bp) else None
+        if brief and brief.get("fit") == "poor":
+            rows.append({"slug": slug, "entry": entry, "status": "poor-fit",
+                         "brief": brief, "credit": credit})
+            print(f"  POOR FIT (${credit:.2f}) -> defaults to SKIP")
+        elif rc == 0 and brief:
+            rows.append({"slug": slug, "entry": entry, "status": "ok",
+                         "brief": brief, "credit": credit})
+            print(f"  ok: {brief.get('problem_label', '')} (${credit:.2f})")
+        else:
+            rows.append({"slug": slug, "entry": entry, "status": "error",
+                         "reason": _last_halt_reason(out, err), "credit": credit})
+            print("  ERROR generating brief")
+
+    _write_batch_review(args.manifest, rows)
+    _write_batch_approvals(args.manifest, rows)
+    total = sum(r.get("credit", 0.0) for r in rows)
+    print("\n" + "=" * 70)
+    print("BATCH BRIEFS DONE")
+    print("=" * 70)
+    print(f"  {os.path.basename(_batch_path(args.manifest, 'review.md'))}     "
+          "<- read every brief here")
+    print(f"  {os.path.basename(_batch_path(args.manifest, 'approvals.txt'))}  "
+          "<- edit APPROVE/SKIP per piece, then run batch-build")
+    print(f"\nApprox ${total:.2f} subscription credit across {len(rows)} briefs.")
+
+
+def _write_batch_review(manifest_path, rows):
+    out = ["# Sentrada batch — brief review", "",
+           f"{len(rows)} pieces. Read each brief, then edit the approvals file "
+           "(APPROVE/SKIP) and run `batch-build`.", ""]
+    pairs = [("Fit", "fit"), ("Problem label", "problem_label"),
+             ("Key metric", "key_metric"), ("Core problem", "core_problem"),
+             ("Environment", "environment"), ("Moment", "moment"),
+             ("Operational details", "operational_details"),
+             ("Companion hook", "companion_card_hook"),
+             ("Reserve detail", "reserve_detail")]
+    for r in rows:
+        out.append(f"## {r['slug']}  ({r['entry']['format']})")
+        if r["status"] == "poor-fit":
+            out.append(f"- **POOR FIT** — {r['brief'].get('fit_reason', '')}. Default SKIP.")
+        elif r["status"] == "error":
+            out.append(f"- **ERROR** — {r.get('reason', 'brief did not generate')}. Default SKIP.")
+        else:
+            b = r["brief"]
+            out.append(f"- Snapshot: {b.get('snapshot', '')}")
+            for label, key in pairs:
+                if b.get(key):
+                    out.append(f"- {label}: {b[key]}")
+        out.append("")
+    write_file(_batch_path(manifest_path, "review.md"), "\n".join(out))
+
+
+def _write_batch_approvals(manifest_path, rows):
+    out = ["# Edit the first word (APPROVE or SKIP) on each line, then run batch-build.",
+           "# Poor-fit and errored briefs default to SKIP. To revise a brief, re-run",
+           "# it singly with: generate ... --brief-only --feedback \"notes\", then APPROVE.",
+           ""]
+    for r in rows:
+        if r["status"] == "ok":
+            decision, note = "APPROVE", f"fit: {r['brief'].get('fit', '?')} | {r['brief'].get('problem_label', '')}"
+        elif r["status"] == "poor-fit":
+            decision, note = "SKIP", "POOR FIT"
+        else:
+            decision, note = "SKIP", "ERROR generating brief"
+        out.append(f"{decision:8} {r['slug']:38} | {note}")
+    write_file(_batch_path(manifest_path, "approvals.txt"), "\n".join(out) + "\n")
+
+
+def _read_batch_approvals(manifest_path):
+    path = _batch_path(manifest_path, "approvals.txt")
+    if not os.path.exists(path):
+        die(f"approvals file not found: {path}. Run batch-brief first.")
+    out = {}
+    for line in read_file(path).splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        parts = s.split()
+        if len(parts) >= 2 and parts[0].upper() in ("APPROVE", "SKIP"):
+            out[parts[1]] = parts[0].upper()
+    return out
+
+
+def cmd_batch_build(args):
+    entries, _ = _load_manifest(args.manifest)
+    by_slug = {_piece_slug(e): e for e in entries}
+    approvals = _read_batch_approvals(args.manifest)
+    results = []
+    for slug, decision in approvals.items():
+        if decision != "APPROVE":
+            results.append({"slug": slug, "status": "skipped", "credit": 0.0})
+            continue
+        entry = by_slug.get(slug)
+        if not entry:
+            results.append({"slug": slug, "status": "error",
+                            "detail": "slug not in manifest", "credit": 0.0})
+            continue
+        print(f"[batch-build] {slug} ({entry['format']}) ...")
+        rc, out, err = _run_piece(entry, "build", args.config)
+        results.append(_assess_build(slug, entry, rc, out, err))
+        print(f"  {results[-1]['status']} (${results[-1].get('credit', 0.0):.2f})")
+    _write_batch_summary(args.manifest, results)
+
+
+def _assess_build(slug, entry, rc, out, err):
+    credit = _parse_credit(out)
+    base = {"slug": slug, "credit": credit}
+    if entry["format"].lower() == "claymation":
+        ready = os.path.exists(os.path.join(PIECES_DIR, slug, "image_prompt.txt"))
+        return dict(base, status="claymation prompt ready" if (rc == 0 and ready) else "error",
+                    detail="" if ready else _last_halt_reason(out, err))
+    if "CHAIN STOPPED — Prompt 6 returned FAIL" in out:
+        return dict(base, status="HELD: P6 FAIL")
+    if "CHAIN STOPPED" in out and "WOULD BIN" in out:
+        return dict(base, status="HELD: 6B WOULD BIN")
+    if rc == 0 and "PIECE COMPLETE" in out:
+        m = re.search(r"Prompt 6 \(craft\): ([A-Z]+)", out)
+        return dict(base, status="complete", p6=(m.group(1) if m else "?"),
+                    p6b=extract_6b_verdict(out) or "?")
+    return dict(base, status="error", detail=_last_halt_reason(out, err))
+
+
+def _write_batch_summary(manifest_path, results):
+    total = sum(r.get("credit", 0.0) for r in results)
+    done = sum(1 for r in results if r["status"] in ("complete", "claymation prompt ready"))
+    held = sum(1 for r in results if str(r["status"]).startswith("HELD"))
+    errs = sum(1 for r in results if r["status"] == "error")
+    out = ["# Sentrada batch — build summary", "",
+           f"{done} ready, {held} held for review, {errs} errored, {len(results)} total.",
+           f"Approx ${total:.2f} subscription credit.", ""]
+    for r in results:
+        line = f"- **{r['slug']}** — {r['status']}"
+        if r.get("p6"):
+            line += f" | P6 {r['p6']}"
+        if r.get("p6b"):
+            line += f" | 6B {r['p6b']}"
+        if r.get("detail"):
+            line += f" | {r['detail']}"
+        if r.get("credit"):
+            line += f" | ${r['credit']:.2f}"
+        out.append(line)
+    out += ["", "Each piece's files are in runner/pieces/<slug>/ (render, qc_review.md, "
+            "qc_recipient.md, followup.md). Held pieces: read the reason before re-running."]
+    write_file(_batch_path(manifest_path, "summary.md"), "\n".join(out))
+    print("\n" + "=" * 70)
+    print("BATCH BUILD DONE")
+    print("=" * 70)
+    print("\n".join(out))
+
+
 # --- CLI --------------------------------------------------------------------
 
 def main():
@@ -910,6 +1144,18 @@ def main():
     f.add_argument("--delivery-date", required=True, help="delivery date, e.g. '16 June 2026'")
     f.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     f.set_defaults(func=cmd_followup)
+
+    bb = sub.add_parser("batch-brief",
+                        help="phase 1: run the brief for every recipient in a manifest")
+    bb.add_argument("--manifest", required=True, help="path to the JSON manifest")
+    bb.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    bb.set_defaults(func=cmd_batch_brief)
+
+    bd = sub.add_parser("batch-build",
+                        help="phase 2: build every APPROVEd piece from the manifest")
+    bd.add_argument("--manifest", required=True, help="path to the JSON manifest")
+    bd.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    bd.set_defaults(func=cmd_batch_build)
 
     args = ap.parse_args()
     args.func(args)

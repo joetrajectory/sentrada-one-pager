@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Chris Evans",
+    "title": "Chief Revenue Officer",
+    "company": "Cognism",
+    "format": "newspaper",
+    "research": "research/cognism.md"
+  },
+  {
+    "name": "Jane Doe",
+    "title": "VP Sales",
+    "company": "Acme Corp",
+    "format": "claymation",
+    "research": "research/acme.md",
+    "delivery_date": "30 June 2026"
+  }
+]

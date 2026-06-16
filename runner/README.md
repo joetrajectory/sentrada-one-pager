@@ -111,6 +111,47 @@ python runner/sentrada_runner.py followup \
 Runs Prompt 7 and writes `followup.md` (companion card + 3-touch sequence +
 reception nudge + fact check list).
 
+## Batch (many recipients at once)
+
+Batch fans the same chain across a list of recipients, each with its own
+pre-prepared research file. It keeps **both human checkpoints** by running in two
+phases, and isolates failures — one piece halting never stops the batch.
+
+You provide a JSON manifest (see `batch.example.json`); research paths are relative
+to the manifest:
+
+```json
+[
+  {"name": "Chris Evans", "title": "CRO", "company": "Cognism",
+   "format": "newspaper", "research": "research/cognism.md"},
+  {"name": "Jane Doe", "title": "VP Sales", "company": "Acme Corp",
+   "format": "claymation", "research": "research/acme.md", "delivery_date": "30 June 2026"}
+]
+```
+
+**Phase 1 — briefs:**
+```bash
+python runner/sentrada_runner.py batch-brief --manifest mybatch.json
+```
+Runs Prompt 2 for everyone and writes, next to the manifest:
+- `mybatch.review.md` — every brief (snapshot + seven fields) to read in one pass.
+- `mybatch.approvals.txt` — one `APPROVE`/`SKIP` line per piece (poor-fit and
+  errored briefs default to `SKIP`). **Edit the first word per line**, then:
+
+**Phase 2 — build the approved pieces:**
+```bash
+python runner/sentrada_runner.py batch-build --manifest mybatch.json
+```
+For each `APPROVE`, runs copy → grounding gate → render → P6 → P6B → P7 (newspaper),
+or copy → grounding → P5 paste-ready prompt (claymation). Writes `mybatch.summary.md`:
+per-piece status (ready / **held: P6 FAIL** / **held: 6B WOULD BIN** / error), the
+P6 and 6B verdicts, and the total credit used. Held pieces are flagged for your
+attention rather than silently shipped.
+
+To **revise** one brief, re-run it singly (`generate ... --brief-only --feedback
+"notes"`), then set it to `APPROVE`. Pieces run **sequentially**; a batch of 20 is
+roughly 45–90 minutes and ~$20–40 of subscription credit.
+
 ## What lands in a piece folder
 
 ```
