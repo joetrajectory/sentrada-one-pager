@@ -108,6 +108,17 @@ recognition earns the right to name the gap.
 - {KEY_METRIC}: The most uncomfortable number. Must be a concrete figure
   (percentage, ratio, currency, count, duration). Never "low" or "declining."
   Mark estimates as "(estimated)."
+
+  **Anti-pattern (never do this):** Do not invert a positive metric into its
+  negative. If the company publishes a number as an achievement (e.g. 11.3%
+  cold-calling success rate, 4x the industry average), do not reframe it as
+  "88.7% failure." The recipient knows the inverse. They published the positive
+  number on purpose. Inverting it signals that you did not understand their
+  position, and the piece loses credibility on first read. Instead, lead with
+  their number in their framing, then name the gap it cannot close. "11.3%
+  cold-calling success, four times the industry average. But the senior
+  enterprise buyers the upmarket pivot depends on are not in the callable
+  cohort." Acknowledge the win in their language, then extend beyond it.
 - {ENVIRONMENT}: The specific setting where this problem is most painfully
   visible. Enough detail to picture the room.
 - {MOMENT}: The exact instant the problem becomes undeniable.
@@ -120,6 +131,20 @@ recognition earns the right to name the gap.
 - {PROBLEM_LABEL}: 2-4 word noun phrase. This becomes the subtitle on the piece.
 - {COMPANION_CARD_HOOK}: One sentence that connects this specific problem to the
   sender's product.
+
+### Step 3b: Tone Self-Check (run before outputting the brief)
+
+Re-read your {KEY_METRIC} and {CORE_PROBLEM} fields. For each, ask: "Would this
+recipient feel acknowledged or exposed?" Specifically:
+
+- Does {KEY_METRIC} lead with their achievement before naming the gap? If the
+  company publishes the underlying number as a positive, is it framed as a
+  positive here?
+- Does {CORE_PROBLEM} describe a challenge they are trying to solve, or a failure
+  they should be embarrassed about?
+- Would the recipient show this brief's framing to their CEO without hesitation?
+
+If any field fails, rewrite it before outputting. Do not flag it as a note. Fix it.
 
 ### Step 4: Snapshot Summary (75 words max)
 

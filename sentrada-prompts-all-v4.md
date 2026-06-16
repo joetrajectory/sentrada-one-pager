@@ -186,6 +186,17 @@ Mark estimates as "(estimated)."
 Strong: "Sub-2% reply rate on cold email despite 500+ sends per week (estimated)"
 Weak: "Low response rates" (not a number)
 
+**Anti-pattern (never do this):** Do not invert a positive metric into its
+negative. If the company publishes a number as an achievement (e.g. 11.3%
+cold-calling success rate, 4x the industry average), do not reframe it as "88.7%
+failure." The recipient knows the inverse. They published the positive number on
+purpose. Inverting it signals that you did not understand their position, and the
+piece loses credibility on first read. Instead, lead with their number in their
+framing, then name the gap it cannot close. "11.3% cold-calling success, four
+times the industry average. But the senior enterprise buyers the upmarket pivot
+depends on are not in the callable cohort." Acknowledge the win in their language,
+then extend beyond it.
+
 {ENVIRONMENT}: The specific setting where this problem is most painfully visible.
 Enough detail to picture the room.
 Strong: "Weekly SDR standup where the team reports 400 emails sent, 12 opens, 3
@@ -226,6 +237,20 @@ should the recipient take a meeting with the sender about this problem?"
 Strong: "Sentrada helps teams like yours cut through the noise with physical
 outreach that senior buyers actually open and respond to"
 Weak: "We can help with your outbound challenges" (generic)
+
+**Step 3b: Tone Self-Check (run before outputting the brief)**
+
+Re-read your {KEY_METRIC} and {CORE_PROBLEM} fields. For each, ask: "Would this
+recipient feel acknowledged or exposed?" Specifically:
+
+- Does {KEY_METRIC} lead with their achievement before naming the gap? If the
+  company publishes the underlying number as a positive, is it framed as a
+  positive here?
+- Does {CORE_PROBLEM} describe a challenge they are trying to solve, or a failure
+  they should be embarrassed about?
+- Would the recipient show this brief's framing to their CEO without hesitation?
+
+If any field fails, rewrite it before outputting. Do not flag it as a note. Fix it.
 
 **Step 4: Snapshot Summary (75 words max)**
 
