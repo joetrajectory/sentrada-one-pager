@@ -166,6 +166,21 @@ def model_for(config, key):
     return config.get("models", {}).get(key, DEFAULT_MODELS[key])
 
 
+# Per-run credit accounting. `claude -p` reports total_cost_usd per call; we sum it
+# so each piece prints roughly how much of the subscription pool it consumed.
+_USAGE = {"calls": 0, "cost_usd": 0.0}
+
+
+def _usage_reset():
+    _USAGE["calls"] = 0
+    _USAGE["cost_usd"] = 0.0
+
+
+def _print_usage(label="this run"):
+    print(f"\n[credit] {label}: {_USAGE['calls']} model call(s), approx "
+          f"${_USAGE['cost_usd']:.2f} subscription credit (USD-equivalent).")
+
+
 def _cli_invoke(prompt, model, image_path=None, timeout=900):
     """One `claude -p` call. Returns the model's text. Raises on transport error
     or an error envelope (so the retry wrappers can re-try)."""
@@ -189,6 +204,8 @@ def _cli_invoke(prompt, model, image_path=None, timeout=900):
     except json.JSONDecodeError:
         raise RuntimeError("claude -p did not return a JSON envelope: "
                            + proc.stdout[:300])
+    _USAGE["calls"] += 1
+    _USAGE["cost_usd"] += float(env.get("total_cost_usd") or 0.0)
     if env.get("is_error") or env.get("subtype") != "success":
         raise RuntimeError("claude -p error: " + str(env.get("result", env))[:300])
     return (env.get("result") or "").strip()
@@ -417,6 +434,7 @@ def fmt_of(args):
 
 
 def cmd_generate(args):
+    _usage_reset()
     config = load_config(args.config)
     sender = config["sender"]
     fmt = args.format.lower()
@@ -458,6 +476,7 @@ def cmd_generate(args):
         print(f'  python {rel} generate --name "{args.name}" --title "{args.title}" '
               f'--company "{args.company}" --format {fmt} --resume')
         print(f'  (or revise first: ... --format {fmt} --brief-only --feedback "your notes")')
+        _print_usage("brief")
         return
 
     # --- default interactive run with the approval checkpoint ---
@@ -578,6 +597,7 @@ def run_chain_after_render(config, folder, image_path, delivery_date):
         print(f"Rendered (withhold from print): {os.path.relpath(image_path, REPO_ROOT)}")
         print("\nReason and regeneration instructions (full review: qc_review.md):\n")
         print(review)
+        _print_usage("this piece")
         return
 
     sixb, v6b = _p6b(config, folder, image_path, meta, research)
@@ -591,6 +611,7 @@ def run_chain_after_render(config, folder, image_path, delivery_date):
               "conversion copy quality. Card and follow-up suppressed. Recommend "
               "reviewing the target or the artefact angle before sending.")
         print("\n6B simulation: qc_recipient.md")
+        _print_usage("this piece")
         return
 
     reply = _p7(config, folder, delivery_date)
@@ -616,6 +637,7 @@ def _print_package(image_path, review, v6, sixb, v6b, followup_text):
 
     print("\n--- Companion card + 3-touch follow-up (followup.md) ---\n")
     print(followup_text)
+    _print_usage("this piece")
 
 
 def _extract_6b_leverage(sixb):
@@ -700,6 +722,7 @@ def _generate_claymation(args, config, folder, base_values, brief, meta):
           "chain does not run automatically. Generate and upscale the image from "
           "image_prompt.txt, then run `qc` and `followup` against it manually.")
     print("\nFACT CHECK LIST:\n" + (factcheck or "(none returned)"))
+    _print_usage("this piece")
 
 
 # --- QC (Prompts 6 + 6B) and follow-up (Prompt 7): shared steps -------------
@@ -813,6 +836,7 @@ def _p7(config, folder, delivery_date):
 # --- standalone qc / followup commands -------------------------------------
 
 def cmd_qc(args):
+    _usage_reset()
     config = load_config(args.config)
     folder = args.folder
     meta = json.loads(read_file(os.path.join(folder, "meta.json")))
@@ -826,6 +850,7 @@ def cmd_qc(args):
         print("=" * 70)
         print("Reason and regeneration instructions (full review: qc_review.md):\n")
         print(review)
+        _print_usage("qc")
         return
     sixb, v6b = _p6b(config, folder, args.image, meta, research)
     print("\n" + "=" * 70)
@@ -835,9 +860,11 @@ def cmd_qc(args):
     print("  qc_recipient.md  <- Prompt 6B recipient simulation")
     print(f"\nPrompt 6 verdict:  {v6 or '(see qc_review.md)'}")
     print(f"Prompt 6B verdict: {v6b or '(see qc_recipient.md)'}")
+    _print_usage("qc")
 
 
 def cmd_followup(args):
+    _usage_reset()
     config = load_config(args.config)
     reply = _p7(config, args.folder, args.delivery_date)
     print("\n" + "=" * 70)
@@ -845,6 +872,7 @@ def cmd_followup(args):
     print("=" * 70)
     print("  followup.md  <- companion card + Touch 1-3 + reception nudge + fact check")
     print("\n" + reply)
+    _print_usage("followup")
 
 
 # --- CLI --------------------------------------------------------------------

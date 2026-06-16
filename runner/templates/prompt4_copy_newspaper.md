@@ -107,7 +107,7 @@ fields for the layout engine. No nesting. Every value a plain string:
   "byline": "By [Fictional Name], Senior Correspondent",
   "lead_article": "EXACTLY 600-640 words, target 620. Separate paragraphs with a blank line.",
   "pull_quote_text": "a real attributed quote, 15-25 words",
-  "pull_quote_attribution": "Name, Title, Organisation",
+  "pull_quote_attribution": "2-6 words: Name, Title OR Source name. Keep it under 7 words so the layout sets it on one line, e.g. 'Jason Lemkin, SaaStr' or 'Cognism State of Outbound 2026'",
   "stat_number": "the bare figure ONLY, e.g. 70% or $1bn or 447 (no spaces, no descriptor)",
   "stat_descriptor": "3-10 words describing the figure",
   "stat_source": "optional source line, e.g. Source: Gong, 2025 (omit this field entirely if none)",
