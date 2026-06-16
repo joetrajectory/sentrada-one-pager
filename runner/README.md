@@ -1,8 +1,12 @@
 # Sentrada chain runner
 
-Runs the Sentrada prompt chain via the Anthropic API to produce one-of-one
-physical outreach pieces. It feeds the newspaper layout engine in `../newspaper/`,
-or assembles a paste-ready claymation image prompt for you to run by hand.
+Runs the Sentrada prompt chain to produce one-of-one physical outreach pieces. It
+feeds the newspaper layout engine in `../newspaper/`, or assembles a paste-ready
+claymation image prompt for you to run by hand.
+
+Model calls go through the **Claude Code CLI in headless mode (`claude -p`)**, so
+they draw on your **Max subscription's credit pool** rather than a pay-per-token
+API key. The only prerequisite is being logged in (`claude /login`).
 
 Research (Prompt 1) happens **outside** this runner: you do the deep research
 yourself and paste it in as a file. The runner does the rest, pausing once for
@@ -32,20 +36,22 @@ your approval of the brief.
 ## Setup
 
 ```bash
-# 1. Runner dependency
-pip install -r runner/requirements.txt
+# 1. Claude Code logged in (provides the subscription auth the runner calls).
+claude /login          # one-time; no ANTHROPIC_API_KEY needed
 
 # 2. Newspaper engine dependencies (Pango/Cairo + Python libs)
 cd newspaper && ./setup.sh && cd ..
 
-# 3. API key
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# 4. Your sender profile
+# 3. Your sender profile
 cp runner/config.example.json runner/config.json
 # then edit runner/config.json: your company, what you sell, proof points,
 # booking link, your name, and the 2-3 problems your product solves.
 ```
+
+No API key is required: every model call runs through `claude -p` on your
+subscription. (The one exception is if you set `"vision_backend": "sdk"` in
+config — see Models below — which bills QC per-token and needs
+`ANTHROPIC_API_KEY` plus `pip install -r runner/requirements.txt`.)
 
 `runner/config.json` and `runner/pieces/` are gitignored.
 
@@ -133,10 +139,31 @@ and drives the engine.
 
 ## Models
 
-- Prompts 2, 4, 5, 7: `claude-sonnet-4-6`
-- Prompts 6 and 6B (vision): `claude-opus-4-8`
+Per-prompt, set in `config.json` under `"models"` (change any without touching
+code). Values are CLI aliases (`opus`/`sonnet`/`haiku`) or full IDs:
 
-Set in `sentrada_runner.py` (`MODEL_TEXT`, `MODEL_VISION`).
+| Prompt | Default | Why |
+|---|---|---|
+| `p2` brief | `opus` | Picks the problem angle. Quality decides whether the piece earns a meeting. |
+| `p4` copy | `opus` | Writes the words on the physical piece. |
+| `p5` claymation assembly | `sonnet` | Mechanical prompt assembly. |
+| `p7` follow-up | `sonnet` | Template-driven transformation. |
+| `p6` review (vision) | `opus` | Last check before print. |
+| `p6b` recipient sim (vision) | `opus` | Last check before print. |
+
+All calls run via `claude -p` on your subscription. The headless invocation uses
+a neutral working directory (so the project `CLAUDE.md` never biases generation)
+and `--append-system-prompt` to keep the call to single-shot output; `--bare` is
+deliberately avoided because it breaks subscription auth.
+
+**Vision backend.** `"vision_backend": "cli"` (default) runs QC through `claude -p`
+with the Read tool on your subscription. Set `"vision_backend": "sdk"` to route
+P6/P6B through the Anthropic Python SDK instead — this bills per-token and needs
+`ANTHROPIC_API_KEY` and the `anthropic` package.
+
+**Reliability.** `claude -p` returns text, so the runner extracts the fenced
+`json` block itself and retries (up to 3x) with a reminder if a reply is missing
+or malformed; transient call failures retry up to 3x before halting.
 
 ## Notes and gotchas
 

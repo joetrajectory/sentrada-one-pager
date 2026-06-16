@@ -2,11 +2,13 @@
 """
 Sentrada chain runner.
 
-Runs the Sentrada prompt chain via the Anthropic API to produce one-of-one
-physical outreach pieces. Research (Prompt 1) happens outside this runner: you
-paste your deep research in as a file. The runner then executes Prompt 2 (brief),
-pauses for your approval, runs Prompt 4 (copy), and either renders a newspaper
-with the layout engine or assembles a paste-ready claymation image prompt.
+Runs the Sentrada prompt chain to produce one-of-one physical outreach pieces.
+Model calls go through the Claude Code CLI in headless mode (`claude -p`), which
+draws on the logged-in Max subscription's credit pool rather than a pay-per-token
+API key. Research (Prompt 1) happens outside this runner: you paste your deep
+research in as a file. The runner then executes Prompt 2 (brief), pauses for your
+approval, runs Prompt 4 (copy), and either renders a newspaper with the layout
+engine or assembles a paste-ready claymation image prompt.
 
 Three commands:
 
@@ -14,9 +16,12 @@ Three commands:
   qc        Run Prompts 6 and 6B (vision) against a final image.
   followup  Run Prompt 7 to write the companion card and 3-touch follow-up.
 
-Prompt text lives in runner/templates/*.md, never in this file. Edit the prompts
-there. This file only fills placeholders, calls the API, gates the output, and
-drives the layout engine.
+Prompt text lives in runner/templates/*.md, never in this file. Per-prompt models
+live in config.json under "models". This file only fills placeholders, calls
+`claude -p`, gates the output, and drives the layout engine.
+
+Requires the `claude` CLI logged in (claude /login). No ANTHROPIC_API_KEY is
+needed unless config sets "vision_backend": "sdk".
 
 Usage:
   python sentrada_runner.py generate --name "Jane Doe" --title "VP Sales" \\
@@ -34,7 +39,7 @@ import re
 import subprocess
 import sys
 
-import anthropic
+import tempfile
 
 # --- Paths -----------------------------------------------------------------
 
@@ -44,10 +49,35 @@ TEMPLATE_DIR = os.path.join(RUNNER_DIR, "templates")
 PIECES_DIR = os.path.join(RUNNER_DIR, "pieces")
 DEFAULT_CONFIG = os.path.join(RUNNER_DIR, "config.json")
 
-# --- Models (per the build spec) -------------------------------------------
+# --- Model calls go through `claude -p` (Claude Code headless) --------------
+# This draws on the logged-in Max subscription's credit pool rather than a
+# pay-per-token API key. Per-prompt models live in config.json under "models";
+# these are the defaults if a key is missing. "opus"/"sonnet"/"haiku" are
+# aliases the CLI resolves to the current model; full IDs also work.
+DEFAULT_MODELS = {
+    "p2": "opus",      # brief: picks the problem angle (quality-critical)
+    "p4": "opus",      # copy: writes what appears on the piece (quality-critical)
+    "p5": "sonnet",    # claymation image-prompt assembly (mechanical)
+    "p7": "sonnet",    # follow-up copy (template-driven transformation)
+    "p6": "opus",      # review (vision) — strongest available
+    "p6b": "opus",     # recipient simulation (vision) — strongest available
+}
 
-MODEL_TEXT = "claude-sonnet-4-6"    # Prompts 2, 4, 5, 7
-MODEL_VISION = "claude-opus-4-8"    # Prompts 6 and 6B (strongest vision)
+# Appended (not replacing) so the CLI keeps its OAuth/credential loading intact;
+# replacing the system prompt or using --bare breaks subscription auth.
+APPEND_SYSTEM = (
+    "For this task, act strictly as the role described in the user message and "
+    "produce exactly the output it specifies, including any fenced JSON block. "
+    "Do not use any tools unless the user gives you a file path to read.")
+
+# A neutral working directory so the project CLAUDE.md is never auto-loaded into
+# a generation call (it would bias the copy and bloat every request).
+CLI_CWD = os.path.join(tempfile.gettempdir(), "sentrada_cli_cwd")
+os.makedirs(CLI_CWD, exist_ok=True)
+
+# Map CLI aliases to full API model IDs, for the optional SDK vision fallback.
+ALIAS_TO_ID = {"opus": "claude-opus-4-8", "sonnet": "claude-sonnet-4-6",
+               "haiku": "claude-haiku-4-5"}
 
 # Only these fields may go into the engine's data.json. Everything else (fact
 # check list, prose) stays out of the engine input.
@@ -128,48 +158,107 @@ def split_factcheck(text):
     return text[:idx].rstrip(), text[idx + len(marker):].strip()
 
 
-# --- Anthropic calls --------------------------------------------------------
+# --- Model calls via `claude -p` (headless CLI) -----------------------------
 
-def make_client():
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        die("ANTHROPIC_API_KEY is not set in the environment.")
-    # SDK auto-retries 429/5xx/connection errors; bump to 4 for transient blips.
-    return anthropic.Anthropic(max_retries=4)
+def model_for(config, key):
+    """Per-prompt model from config['models'][key], falling back to DEFAULT_MODELS."""
+    return config.get("models", {}).get(key, DEFAULT_MODELS[key])
 
 
-def call_text(client, prompt, model=MODEL_TEXT, max_tokens=16000):
-    with client.messages.stream(
-        model=model, max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-    ) as stream:
-        for _ in stream.text_stream:
-            pass
-        msg = stream.get_final_message()
-    return "".join(b.text for b in msg.content if b.type == "text").strip()
+def _cli_invoke(prompt, model, image_path=None, timeout=900):
+    """One `claude -p` call. Returns the model's text. Raises on transport error
+    or an error envelope (so the retry wrappers can re-try)."""
+    cmd = ["claude", "-p", "--output-format", "json", "--model", model,
+           "--append-system-prompt", APPEND_SYSTEM]
+    if image_path:
+        cmd += ["--allowed-tools", "Read"]
+        prompt = (prompt + "\n\nThe image to review is at this path. Read it with "
+                  "the Read tool, then complete the task above:\n@"
+                  + os.path.abspath(image_path))
+    try:
+        proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
+                              cwd=CLI_CWD, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"claude -p timed out after {timeout}s (model {model})")
+    if proc.returncode != 0:
+        raise RuntimeError(f"claude -p exited {proc.returncode}: "
+                           + (proc.stderr or proc.stdout)[:500])
+    try:
+        env = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        raise RuntimeError("claude -p did not return a JSON envelope: "
+                           + proc.stdout[:300])
+    if env.get("is_error") or env.get("subtype") != "success":
+        raise RuntimeError("claude -p error: " + str(env.get("result", env))[:300])
+    return (env.get("result") or "").strip()
 
 
-def call_vision(client, prompt, image_path, model=MODEL_VISION, max_tokens=16000):
+def cli_text(prompt, model, image_path=None, retries=2):
+    """Text (or vision) call with transient-error retries."""
+    last = None
+    for attempt in range(retries + 1):
+        try:
+            return _cli_invoke(prompt, model, image_path=image_path)
+        except RuntimeError as exc:
+            last = exc
+            print(f"[retry] {model} call failed ({attempt + 1}/{retries + 1}): {exc}")
+    raise SystemExit(f"\n[halt] model call failed after {retries + 1} attempts: {last}")
+
+
+def cli_json(prompt, model, retries=3):
+    """Call that must return a fenced ```json block. Retries with a reminder if the
+    block is missing or unparseable. Returns (full_text, parsed_dict)."""
+    last_text = ""
+    for attempt in range(retries):
+        p = prompt
+        if attempt > 0:
+            p = (prompt + "\n\nIMPORTANT: your previous reply did not end with a "
+                 "valid fenced ```json block. Produce the full response and finish "
+                 "with one valid ```json ... ``` block as the very last thing.")
+        last_text = cli_text(p, model)
+        data = extract_last_json(last_text)
+        if data is not None:
+            return last_text, data
+        print(f"[retry] no valid JSON block from {model} "
+              f"({attempt + 1}/{retries}); re-asking.")
+    die("could not extract a valid JSON block after retries. Last reply began:\n"
+        + last_text[:500])
+
+
+def vision_call(config, prompt, model, image_path):
+    """Vision call. Default backend is the CLI (subscription). Set
+    config['vision_backend'] = 'sdk' to bill per-token via the Python SDK and
+    ANTHROPIC_API_KEY instead."""
     if not os.path.exists(image_path):
         die(f"image not found: {image_path}")
-    data = base64.standard_b64encode(read_bytes(image_path)).decode("utf-8")
+    if config.get("vision_backend", "cli") == "sdk":
+        return _sdk_vision(prompt, ALIAS_TO_ID.get(model, model), image_path)
+    return cli_text(prompt, model, image_path=image_path)
+
+
+def _sdk_vision(prompt, model_id, image_path):
+    """Optional fallback: vision via the Anthropic Python SDK (needs an API key)."""
+    try:
+        import anthropic
+    except ImportError:
+        die("vision_backend is 'sdk' but the anthropic package is not installed.")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        die("vision_backend is 'sdk' but ANTHROPIC_API_KEY is not set (this path "
+            "bills per-token).")
+    client = anthropic.Anthropic(max_retries=4)
+    with open(image_path, "rb") as fh:
+        data = base64.standard_b64encode(fh.read()).decode("utf-8")
     media = "image/png" if image_path.lower().endswith(".png") else "image/jpeg"
     content = [
         {"type": "image", "source": {"type": "base64", "media_type": media, "data": data}},
         {"type": "text", "text": prompt},
     ]
-    with client.messages.stream(
-        model=model, max_tokens=max_tokens,
-        messages=[{"role": "user", "content": content}],
-    ) as stream:
-        for _ in stream.text_stream:
+    with client.messages.stream(model=model_id, max_tokens=16000,
+                                messages=[{"role": "user", "content": content}]) as s:
+        for _ in s.text_stream:
             pass
-        msg = stream.get_final_message()
+        msg = s.get_final_message()
     return "".join(b.text for b in msg.content if b.type == "text").strip()
-
-
-def read_bytes(path):
-    with open(path, "rb") as fh:
-        return fh.read()
 
 
 # --- Newspaper gates and engine --------------------------------------------
@@ -259,30 +348,26 @@ def _build_meta(args, fmt, brief, sender):
     }
 
 
-def _run_brief(client, folder, base_values, feedback_text=""):
+def _run_brief(config, folder, base_values, feedback_text=""):
     feedback_block = ""
     if feedback_text:
         feedback_block = ("FOUNDER FEEDBACK ON YOUR PREVIOUS DRAFT:\n" + feedback_text
                           + "\n\nRegenerate the brief incorporating this feedback.")
     prompt = fill(load_template("prompt2_brief.md"),
                   dict(base_values, feedback_block=feedback_block))
-    print("\n[prompt 2] generating the brief...")
-    brief_text = call_text(client, prompt)
-    brief = extract_last_json(brief_text)
-    if brief is None:
-        die("could not read the brief JSON block from Prompt 2's reply. "
-            "Check runner/templates/prompt2_brief.md output format.")
+    print(f"\n[prompt 2] generating the brief ({model_for(config, 'p2')})...")
+    brief_text, brief = cli_json(prompt, model_for(config, "p2"))
     write_file(os.path.join(folder, "brief.md"), brief_text)
     write_file(os.path.join(folder, "brief.json"), json.dumps(brief, indent=2))
     return brief
 
 
-def _continue_after_brief(client, args, config, folder, base_values, brief, sender):
+def _continue_after_brief(args, config, folder, base_values, brief, sender):
     meta = _build_meta(args, fmt_of(args), brief, sender)
     if fmt_of(args) == "newspaper":
-        _generate_newspaper(client, args, config, folder, base_values, brief, meta)
+        _generate_newspaper(args, config, folder, base_values, brief, meta)
     else:
-        _generate_claymation(client, args, folder, base_values, brief, meta)
+        _generate_claymation(args, config, folder, base_values, brief, meta)
 
 
 def fmt_of(args):
@@ -307,9 +392,8 @@ def cmd_generate(args):
         research = read_file(os.path.join(folder, "research.md"))
         brief = json.loads(read_file(bp))
         base_values = _build_base_values(args, sender, research, fmt)
-        client = make_client()
         print(f"[resume] {os.path.relpath(folder, REPO_ROOT)} (brief already approved)")
-        _continue_after_brief(client, args, config, folder, base_values, brief, sender)
+        _continue_after_brief(args, config, folder, base_values, brief, sender)
         return
 
     if not args.research:
@@ -319,11 +403,10 @@ def cmd_generate(args):
     write_file(os.path.join(folder, "research.md"), research)
     print(f"[folder] {os.path.relpath(folder, REPO_ROOT)}")
     base_values = _build_base_values(args, sender, research, fmt)
-    client = make_client()
 
     # --- brief-only: run the brief once, print the checkpoint, then stop ---
     if args.brief_only:
-        brief = _run_brief(client, folder, base_values, args.feedback)
+        brief = _run_brief(config, folder, base_values, args.feedback)
         if brief.get("fit") == "poor":
             die("the brief declares a POOR fit: "
                 + brief.get("fit_reason", "no problem reached medium/high confidence"))
@@ -338,7 +421,7 @@ def cmd_generate(args):
     # --- default interactive run with the approval checkpoint ---
     feedback_text = ""
     while True:
-        brief = _run_brief(client, folder, base_values, feedback_text)
+        brief = _run_brief(config, folder, base_values, feedback_text)
         if brief.get("fit") == "poor":
             die("the brief declares a POOR fit: "
                 + brief.get("fit_reason", "no problem reached medium/high confidence")
@@ -353,10 +436,10 @@ def cmd_generate(args):
             continue
         feedback_text = ans
 
-    _continue_after_brief(client, args, config, folder, base_values, brief, sender)
+    _continue_after_brief(args, config, folder, base_values, brief, sender)
 
 
-def _generate_newspaper(client, args, config, folder, base_values, brief, meta):
+def _generate_newspaper(args, config, folder, base_values, brief, meta):
     template = load_template("prompt4_copy_newspaper.md")
     brief_values = dict(base_values, **{
         "core_problem": brief.get("core_problem", ""),
@@ -367,16 +450,14 @@ def _generate_newspaper(client, args, config, folder, base_values, brief, meta):
         "operational_details": brief.get("operational_details", ""),
     })
 
+    model = model_for(config, "p4")
     attempt, feedback_block = 0, ""
     while True:
         attempt += 1
         prompt = fill(template, dict(brief_values, feedback_block=feedback_block))
-        print(f"\n[prompt 4] writing newspaper copy (attempt {attempt})...")
-        reply = call_text(client, prompt)
+        print(f"\n[prompt 4] writing newspaper copy ({model}, attempt {attempt})...")
+        reply, data = cli_json(prompt, model)
         copy_part, factcheck = split_factcheck(reply)
-        data = extract_last_json(reply)
-        if data is None:
-            die("could not read the engine JSON block from Prompt 4's reply.")
         violations = newspaper_violations(data)
         if not violations:
             break
@@ -424,7 +505,7 @@ def _generate_newspaper(client, args, config, folder, base_values, brief, meta):
     _final_report(folder, output_path, factcheck)
 
 
-def _generate_claymation(client, args, folder, base_values, brief, meta):
+def _generate_claymation(args, config, folder, base_values, brief, meta):
     template = load_template("prompt4_copy_claymation.md")
     values = dict(base_values, **{
         "core_problem": brief.get("core_problem", ""),
@@ -435,12 +516,9 @@ def _generate_claymation(client, args, folder, base_values, brief, meta):
         "operational_details": brief.get("operational_details", ""),
         "absurdity": brief.get("absurdity", ""),
     })
-    print("\n[prompt 4] writing claymation copy...")
-    reply = call_text(client, fill(template, values))
+    print(f"\n[prompt 4] writing claymation copy ({model_for(config, 'p4')})...")
+    reply, clay = cli_json(fill(template, values), model_for(config, "p4"))
     copy_part, factcheck = split_factcheck(reply)
-    clay = extract_last_json(reply)
-    if clay is None:
-        die("could not read the claymation JSON block from Prompt 4's reply.")
     write_file(os.path.join(folder, "copy.md"), copy_part)
     write_file(os.path.join(folder, "claymation_copy.json"), json.dumps(clay, indent=2))
     write_file(os.path.join(folder, "factcheck.md"), factcheck or "(none returned)")
@@ -457,8 +535,8 @@ def _generate_claymation(client, args, folder, base_values, brief, meta):
         if isinstance(clay.get("in_scene_text"), list) else clay.get("in_scene_text", ""),
         "caption": clay.get("caption", ""),
     })
-    print("[prompt 5] assembling the paste-ready image prompt...")
-    image_prompt = call_text(client, fill(p5, p5_values))
+    print(f"[prompt 5] assembling the paste-ready image prompt ({model_for(config, 'p5')})...")
+    image_prompt = cli_text(fill(p5, p5_values), model_for(config, "p5"))
     write_file(os.path.join(folder, "image_prompt.txt"), image_prompt)
 
     meta["piece_reference"] = f'the claymation scene captioned "{clay.get("caption", "")}"'
@@ -493,10 +571,10 @@ def _final_report(folder, output_path, factcheck):
 
 def cmd_qc(args):
     folder = args.folder
+    config = load_config(args.config)
     meta = json.loads(read_file(os.path.join(folder, "meta.json")))
     brief = json.loads(read_file(os.path.join(folder, "brief.json")))
     research = read_file(os.path.join(folder, "research.md"))
-    client = make_client()
 
     legibility = "Rendered by the layout engine; all text is guaranteed legible."
     lp = os.path.join(folder, "image_prompt.txt")
@@ -514,16 +592,18 @@ def cmd_qc(args):
         "operational_details": brief.get("operational_details", ""),
         "research": research, "legibility_checklist": legibility,
     }
-    print("[prompt 6] reviewing the image (vision)...")
-    review = call_vision(client, fill(load_template("prompt6_review.md"), review_values), args.image)
+    print(f"[prompt 6] reviewing the image ({model_for(config, 'p6')}, vision)...")
+    review = vision_call(config, fill(load_template("prompt6_review.md"), review_values),
+                         model_for(config, "p6"), args.image)
     write_file(os.path.join(folder, "qc_review.md"), review)
 
-    print("[prompt 6B] simulating the recipient (vision)...")
+    print(f"[prompt 6B] simulating the recipient ({model_for(config, 'p6b')}, vision)...")
     sixb_values = {
         "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
         "recipient_company": meta["recipient_company"], "research": research,
     }
-    sixb = call_vision(client, fill(load_template("prompt6b_recipient.md"), sixb_values), args.image)
+    sixb = vision_call(config, fill(load_template("prompt6b_recipient.md"), sixb_values),
+                       model_for(config, "p6b"), args.image)
     write_file(os.path.join(folder, "qc_recipient.md"), sixb)
 
     print("\n" + "=" * 70)
@@ -552,11 +632,11 @@ def extract_6b_verdict(text):
 
 def cmd_followup(args):
     folder = args.folder
+    config = load_config(args.config)
     meta = json.loads(read_file(os.path.join(folder, "meta.json")))
     brief = json.loads(read_file(os.path.join(folder, "brief.json")))
     research = read_file(os.path.join(folder, "research.md"))
     sender = meta["sender"]
-    client = make_client()
 
     sixb_path = os.path.join(folder, "qc_recipient.md")
     if os.path.exists(sixb_path):
@@ -586,8 +666,8 @@ def cmd_followup(args):
         "sender_what": sender.get("what_they_sell", ""), "sender_proof": sender.get("proof_points", ""),
         "booking_link": sender.get("booking_link", ""), "delivery_date": args.delivery_date,
     }
-    print("[prompt 7] writing the companion card and 3-touch follow-up...")
-    reply = call_text(client, fill(load_template("prompt7_followup.md"), values))
+    print(f"[prompt 7] writing the companion card and 3-touch follow-up ({model_for(config, 'p7')})...")
+    reply = cli_text(fill(load_template("prompt7_followup.md"), values), model_for(config, "p7"))
     write_file(os.path.join(folder, "followup.md"), reply)
 
     print("\n" + "=" * 70)
@@ -621,11 +701,13 @@ def main():
     q = sub.add_parser("qc", help="run Prompts 6 and 6B against a final image")
     q.add_argument("--folder", required=True, help="the piece folder")
     q.add_argument("--image", required=True, help="the final image file (PNG or JPG)")
+    q.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     q.set_defaults(func=cmd_qc)
 
     f = sub.add_parser("followup", help="run Prompt 7 to write the follow-up sequence")
     f.add_argument("--folder", required=True, help="the piece folder")
     f.add_argument("--delivery-date", required=True, help="delivery date, e.g. '16 June 2026'")
+    f.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     f.set_defaults(func=cmd_followup)
 
     args = ap.parse_args()

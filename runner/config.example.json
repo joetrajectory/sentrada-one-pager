@@ -11,6 +11,15 @@
       "Optional third sender problem."
     ]
   },
+  "models": {
+    "p2": "opus",
+    "p4": "opus",
+    "p5": "sonnet",
+    "p7": "sonnet",
+    "p6": "opus",
+    "p6b": "opus"
+  },
+  "vision_backend": "cli",
   "engine": "newspaper/newspaper.py",
   "newspaper_template": "newspaper/Newspaper Template - Upscaled - 25mb.jpg"
 }

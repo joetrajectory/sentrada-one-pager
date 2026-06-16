@@ -1,4 +1,9 @@
-# Chain runner dependency. The newspaper layout engine has its own deps in
-# ../newspaper/requirements.txt (Pango/Cairo/Pillow/pyphen) plus the system libs
-# in ../newspaper/setup.sh.
+# The runner makes model calls through the `claude` CLI (claude -p) on your
+# subscription, so it needs NO Python packages for normal use.
+#
+# This package is ONLY required if you set "vision_backend": "sdk" in config.json
+# (routes QC P6/P6B through the Anthropic API and bills per-token).
+#
+# The newspaper layout engine has its own deps in ../newspaper/requirements.txt
+# (Pango/Cairo/Pillow/pyphen) plus the system libs in ../newspaper/setup.sh.
 anthropic>=0.69
