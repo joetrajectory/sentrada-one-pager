@@ -571,8 +571,11 @@ def _extract_6b_leverage(sixb):
     i = low.find("highest-leverage")
     if i == -1:
         return "Highest-leverage change: (see qc_recipient.md)"
-    chunk = "\n\n".join(sixb[i:].split("\n\n")[:2]).strip()
-    return "Highest-leverage change -> " + chunk[:700]
+    after = sixb[i:]
+    nl = after.find("\n")                       # drop the header line itself
+    body = (after[nl + 1:] if nl != -1 else after).split("\n\n")[0].strip()
+    body = re.sub(r"\*+", "", body)             # strip markdown bold
+    return "Highest-leverage change: " + (body[:600] if body else "(see qc_recipient.md)")
 
 
 def _generate_claymation(args, config, folder, base_values, brief, meta):
@@ -639,13 +642,22 @@ def extract_6b_verdict(text):
 
 
 def extract_p6_verdict(text):
-    for line in text.splitlines():
-        s = line.strip().upper()
-        if s.startswith("VERDICT"):
-            for v in ("FAIL", "BORDERLINE", "PASS"):
-                if v in s:
-                    return v
-    return None
+    """Read the P6 verdict robustly. The model may wrap it in markdown
+    (e.g. '**VERDICT: BORDERLINE**'), so find the first 'VERDICT' anywhere and
+    take the earliest verdict keyword on that line. Returns FAIL / BORDERLINE /
+    PASS / None. Correctness-critical: the chain's FAIL stop-gate depends on it."""
+    up = text.upper()
+    i = up.find("VERDICT")
+    if i == -1:
+        return None
+    line_end = up.find("\n", i)
+    seg = up[i: line_end if line_end != -1 else i + 60]
+    best = None
+    for v in ("PASS", "FAIL", "BORDERLINE"):
+        p = seg.find(v)
+        if p != -1 and (best is None or p < best[0]):
+            best = (p, v)
+    return best[1] if best else None
 
 
 def _p6(config, folder, image_path, meta, brief, research):
