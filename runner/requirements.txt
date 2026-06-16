@@ -1,0 +1,4 @@
+# Chain runner dependency. The newspaper layout engine has its own deps in
+# ../newspaper/requirements.txt (Pango/Cairo/Pillow/pyphen) plus the system libs
+# in ../newspaper/setup.sh.
+anthropic>=0.69
