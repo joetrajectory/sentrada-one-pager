@@ -72,7 +72,7 @@ Scene description (for image gen, not printed): A detailed description of the mi
 
 Visual details (for image gen, not printed): 3-4 specific hidden details that must appear in the miniature set. Hand-painted signs on walls, labels on objects, text on screens, slogans on mugs, notes pinned to boards. These come from the operational details and should reward close inspection.
 
-Recurring motif: Every claymation scene should include a colleague arriving through a door or doorway bringing more bad news (a new regulation, a new brief, a new target). This is the signature Sentrada visual trademark.
+Recurring motif: Every claymation scene should include the signature Sentrada beat of more bad news intruding - bad news arriving from the edge of the scene in whatever form fits the setting: a colleague through a doorway, a runner onto the stage with a fresh brief, a phone lighting up in the cab, a new figure stepping into frame. The intrusion is the trademark; the doorway is just one version of it.
 
 Caption (printed beneath the image on a clean white strip): 1-2 sentences maximum. Dry, understated British humour. Must be specific to THIS company. Maximum 12 words.
 Strong caption: "The regulation arrived. The reply didn't." (specific, dry, true)
