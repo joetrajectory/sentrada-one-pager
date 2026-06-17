@@ -691,24 +691,26 @@ def _generate_claymation(args, config, folder, base_values, brief, meta):
     write_file(os.path.join(folder, "factcheck.md"), factcheck or "(none returned)")
 
     # --- Prompt 5: assemble the paste-ready image prompt ---
+    # P5 is the verbatim general Assembly Agent. It receives Layer A (with its
+    # [LAYER B]/[LAYER C]/[CAPTION] slots), the Layer B brief fields, the literal
+    # [AUTO-ASSIGNED] Layer C tags (resolved from context), and the copy content
+    # (scene description, visual details, caption), then assembles the prompt.
     p5 = load_template("prompt5_assembly_claymation.md")
+    vd = clay.get("visual_details", "")
+    if isinstance(vd, list):
+        vd = "; ".join(str(x) for x in vd)
     p5_values = dict(values, **{
         "layer_a_claymation": load_template("layer_a_claymation.md"),
-        "layer_c": load_template("layer_c.md"),
         "scene_description": clay.get("scene_description", ""),
-        "visual_details": "; ".join(clay.get("visual_details", []))
-        if isinstance(clay.get("visual_details"), list) else clay.get("visual_details", ""),
-        "in_scene_text": "; ".join(clay.get("in_scene_text", []))
-        if isinstance(clay.get("in_scene_text"), list) else clay.get("in_scene_text", ""),
+        "visual_details": vd,
         "caption": clay.get("caption", ""),
     })
     print(f"[prompt 5] assembling the paste-ready image prompt ({model_for(config, 'p5')})...")
     image_prompt = cli_text(fill(p5, p5_values), model_for(config, "p5"))
     write_file(os.path.join(folder, "image_prompt.txt"), image_prompt)
 
+    # Companion card hook comes from the brief (Prompt 2), not Prompt 4 (Notion).
     meta["piece_reference"] = f'the claymation scene captioned "{clay.get("caption", "")}"'
-    if not meta.get("companion_card_hook"):
-        meta["companion_card_hook"] = clay.get("companion_card_hook", "")
     write_file(os.path.join(folder, "meta.json"), json.dumps(meta, indent=2))
 
     print("\n" + "=" * 70)
