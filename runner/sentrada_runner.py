@@ -313,6 +313,86 @@ def run_engine(engine_path, template_path, data_path, output_path=None, check=Fa
     return result.returncode, result.stdout + result.stderr
 
 
+# --- Crossword gates and engine --------------------------------------------
+# Parallel to the newspaper helpers above; nothing here touches the newspaper
+# path. crossword.py mirrors newspaper.py's CLI (--check validates and exits
+# nonzero on FAIL without writing output; --output renders at 300 DPI), so the
+# crossword path runs the same check-then-render pattern.
+
+def crossword_violations(data):
+    """The runner's structural gate on the P4 crossword candidates: 25-30 of
+    them, every answer a single ALL-CAPS word, letters only, 3-15 characters,
+    each with a clue, and no duplicate answers. Mirrors newspaper_violations."""
+    v = []
+    cands = data.get("candidates") or []
+    n = len(cands)
+    if not (25 <= n <= 30):
+        v.append(f"there must be 25-30 candidates; found {n}.")
+    seen = {}
+    for i, c in enumerate(cands, 1):
+        a = str(c.get("answer", ""))
+        if not a:
+            v.append(f"candidate {i} has no answer.")
+        else:
+            if not a.isalpha():
+                v.append(f"candidate {i} answer '{a}' must be a single word, letters "
+                         f"only (no spaces, digits, or punctuation).")
+            elif a != a.upper():
+                v.append(f"candidate {i} answer '{a}' must be ALL CAPS.")
+            if not (3 <= len(a) <= 15):
+                v.append(f"candidate {i} answer '{a}' is {len(a)} characters; must be 3-15.")
+            seen[a.upper()] = seen.get(a.upper(), 0) + 1
+        if not str(c.get("clue", "")).strip():
+            v.append(f"candidate {i} ('{a}') has no clue.")
+    dupes = sorted(k for k, count in seen.items() if count > 1)
+    if dupes:
+        v.append("duplicate answers (each answer must be unique): " + ", ".join(dupes))
+    return v
+
+
+def crossword_copy_text(data):
+    """The clue text fed to the factual-grounding gate: title, subtitle, and
+    every answer/clue pair, so P4b can verify each clue against the research."""
+    parts = ["TITLE: " + str(data.get("title", "")),
+             "SUBTITLE: " + str(data.get("subtitle", ""))]
+    for c in (data.get("candidates") or []):
+        parts.append(f"{c.get('answer', '')}: {c.get('clue', '')}")
+    return "\n".join(parts)
+
+
+def crossword_engine_data(data, company, config):
+    """Map the P4 crossword output (title/subtitle/candidates) onto the
+    crossword engine's --data schema. The engine composes the rendered title
+    from company_name and places the best min..max candidates using seed."""
+    return {
+        "company_name": company,
+        # title is optional: the engine falls back to "THE {company} CROSSWORD"
+        # when it is empty, so passing P4's title through is safe either way.
+        "title": str(data.get("title", "")).strip(),
+        "subtitle": str(data.get("subtitle", "")),
+        "min_words": config.get("crossword_min_words", 15),
+        "max_words": config.get("crossword_max_words", 20),
+        "seed": config.get("crossword_seed", 42),
+        "candidates": [
+            {"answer": str(c.get("answer", "")).upper(), "clue": str(c.get("clue", ""))}
+            for c in (data.get("candidates") or [])
+        ],
+    }
+
+
+def run_crossword_engine(engine_path, template_path, data_path, output_path=None, check=False):
+    """Render or validate the crossword. crossword.py mirrors newspaper.py:
+    --check validates (and exits nonzero on FAIL) without writing output;
+    --output renders at 300 DPI. Same exit-code contract as the newspaper engine."""
+    cmd = [sys.executable, engine_path, "--template", template_path, "--data", data_path]
+    if check:
+        cmd.append("--check")
+    if output_path:
+        cmd += ["--output", output_path, "--print-dpi", "300"]
+    result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
+    return result.returncode, result.stdout + result.stderr
+
+
 # --- Factual grounding gate (text, not vision) -----------------------------
 # Catches fabricated/contradicted claims in the copy before a render exists.
 # More reliable than the post-render vision review for verifying text claims.
@@ -393,7 +473,8 @@ def _build_base_values(args, sender, research, fmt):
         "sender_proof": sender.get("proof_points", ""),
         "booking_link": sender.get("booking_link", ""),
         "sender_name": sender.get("sender_name", ""),
-        "format": "Newspaper Front Page" if fmt == "newspaper" else "Claymation Scene",
+        "format": {"newspaper": "Newspaper Front Page",
+                   "crossword": "Crossword"}.get(fmt, "Claymation Scene"),
     }
 
 
@@ -422,9 +503,12 @@ def _run_brief(config, folder, base_values, feedback_text=""):
 
 
 def _continue_after_brief(args, config, folder, base_values, brief, sender):
-    meta = _build_meta(args, fmt_of(args), brief, sender)
-    if fmt_of(args) == "newspaper":
+    fmt = fmt_of(args)
+    meta = _build_meta(args, fmt, brief, sender)
+    if fmt == "newspaper":
         _generate_newspaper(args, config, folder, base_values, brief, meta)
+    elif fmt == "crossword":
+        _generate_crossword(args, config, folder, base_values, brief, meta)
     else:
         _generate_claymation(args, config, folder, base_values, brief, meta)
 
@@ -438,8 +522,8 @@ def cmd_generate(args):
     config = load_config(args.config)
     sender = config["sender"]
     fmt = args.format.lower()
-    if fmt not in ("newspaper", "claymation"):
-        die("format must be 'newspaper' or 'claymation'.")
+    if fmt not in ("newspaper", "claymation", "crossword"):
+        die("format must be 'newspaper', 'claymation', or 'crossword'.")
 
     slug = f"{slugify(args.name)}-{slugify(args.company)}"
     folder = os.path.join(PIECES_DIR, slug)
@@ -652,6 +736,99 @@ def _extract_6b_leverage(sixb):
     return "Highest-leverage change: " + (body[:600] if body else "(see qc_recipient.md)")
 
 
+def _generate_crossword(args, config, folder, base_values, brief, meta):
+    """Crossword path. Mirrors _generate_newspaper: P4 (crossword branch) ->
+    structural + factual-grounding gates -> render via the crossword engine ->
+    the shared P6 -> P6B -> P7 chain. Nothing here touches the newspaper path."""
+    template = load_template("prompt4_copy_crossword.md")
+    brief_values = dict(base_values, **{
+        "core_problem": brief.get("core_problem", ""),
+        "key_metric": brief.get("key_metric", ""),
+        "environment": brief.get("environment", ""),
+        "moment": brief.get("moment", ""),
+        "problem_label": brief.get("problem_label", ""),
+        "operational_details": brief.get("operational_details", ""),
+    })
+
+    model = model_for(config, "p4")
+    research = base_values["research"]
+    attempt, feedback_block = 0, ""
+    while True:
+        attempt += 1
+        prompt = fill(template, dict(brief_values, feedback_block=feedback_block))
+        print(f"\n[prompt 4] writing crossword copy ({model}, attempt {attempt})...")
+        reply, data = cli_json(prompt, model)
+        copy_part, factcheck = split_factcheck(reply)
+
+        problems = list(crossword_violations(data))
+        print(f"[prompt 4b] factual grounding check ({model_for(config, 'p4b')})...")
+        grounded, issues = grounding_check(config, research, crossword_copy_text(data))
+        problems += [f"unsupported clue \"{i.get('claim', '')}\": {i.get('issue', '')}"
+                     for i in issues]
+
+        if not problems:
+            break
+        if attempt >= 2:
+            die("Prompt 4 crossword failed the gates twice (candidate structure "
+                "and/or factual grounding):\n  - " + "\n  - ".join(problems))
+        print("[gate] violations found, rerunning Prompt 4 once:")
+        for x in problems:
+            print(f"  - {x}")
+        feedback_block = ("YOUR PREVIOUS DRAFT FAILED THESE HARD CHECKS. Fix every one "
+                          "and keep everything else. Any 'unsupported clue' below is a "
+                          "fact the research does not support: drop that candidate or "
+                          "replace it with a fact the research does support.\n- "
+                          + "\n- ".join(problems))
+
+    write_file(os.path.join(folder, "copy.md"), copy_part)
+    write_file(os.path.join(folder, "factcheck.md"), factcheck or "(none returned)")
+
+    engine_data = crossword_engine_data(data, args.company, config)
+    data_path = os.path.join(folder, "data.json")
+    write_file(data_path, json.dumps(engine_data, indent=2))
+
+    engine_path = os.path.join(REPO_ROOT, config.get("crossword_engine", "crossword/crossword.py"))
+    template_path = os.path.join(
+        REPO_ROOT, config.get("crossword_template", "crossword/crossword_template.png"))
+    if not os.path.exists(engine_path):
+        die(f"crossword engine not found at {engine_path}. The engine ships separately; "
+            f"place crossword/crossword.py in the repo, or set 'crossword_engine' in "
+            f"config.json. (The P4 copy and data.json were written; only the render is "
+            f"blocked.)")
+    if not os.path.exists(template_path):
+        die(f"crossword template not found at {template_path}. Place "
+            f"crossword/crossword_template.png in the repo or set 'crossword_template' "
+            f"in config.json.")
+
+    print("\n[engine] running --check on data.json (grid placement + layout fit)...")
+    rc, out = run_crossword_engine(engine_path, template_path, data_path, check=True)
+    print(out.strip())
+    if rc != 0:
+        die("the crossword engine's --check FAILED. Nothing rendered. Fix the copy "
+            "or candidates and re-run. See the engine output above.")
+
+    output_path = os.path.join(folder, f"{slugify(args.name)}-{slugify(args.company)}.png")
+    print("\n[engine] rendering the print-ready crossword "
+          f"(placing {engine_data['min_words']}-{engine_data['max_words']} of "
+          f"{len(engine_data['candidates'])} candidates)...")
+    rc, out = run_crossword_engine(engine_path, template_path, data_path, output_path=output_path)
+    print(out.strip())
+    if rc != 0 or not os.path.exists(output_path):
+        die("the crossword render failed (see engine output above).")
+
+    meta["piece_reference"] = (
+        f'the "{args.company}" crossword, subtitle "{engine_data.get("subtitle", "")}"')
+    write_file(os.path.join(folder, "meta.json"), json.dumps(meta, indent=2))
+
+    print(f"\n[rendered] {os.path.relpath(output_path, REPO_ROOT)}")
+    print("[fact check] runner/.../factcheck.md holds the clue claims for your "
+          "sign-off before print.")
+    # A real rendered image exists, so the shared QC + follow-up chain runs now,
+    # exactly as it does for newspaper.
+    delivery_date = getattr(args, "delivery_date", "") or "to be confirmed on delivery"
+    run_chain_after_render(config, folder, output_path, delivery_date)
+
+
 def _generate_claymation(args, config, folder, base_values, brief, meta):
     template = load_template("prompt4_copy_claymation.md")
     values = dict(base_values, **{
@@ -764,7 +941,8 @@ def _p6(config, folder, image_path, meta, brief, research):
         txt = read_file(lp)
         idx = txt.find("LEGIBILITY CHECK:")
         legibility = txt[idx + len("LEGIBILITY CHECK:"):].strip() if idx != -1 else txt
-    fmt_label = "Newspaper Front Page" if meta["format"] == "newspaper" else "Claymation Scene"
+    fmt_label = {"newspaper": "Newspaper Front Page",
+                 "crossword": "Crossword"}.get(meta["format"], "Claymation Scene")
     values = {
         "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
         "recipient_company": meta["recipient_company"], "format": fmt_label,
@@ -811,7 +989,8 @@ def _p7(config, folder, delivery_date):
         verdict = "Not available (6B not run). Treat as WOULD ENGAGE IF FOLLOWED UP WELL."
         leverage = failure = stopped = "Not available (run qc first)."
 
-    fmt_label = "Newspaper Front Page" if meta["format"] == "newspaper" else "Claymation Scene"
+    fmt_label = {"newspaper": "Newspaper Front Page",
+                 "crossword": "Crossword"}.get(meta["format"], "Claymation Scene")
     values = {
         "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
         "recipient_company": meta["recipient_company"], "format": fmt_label,
@@ -923,7 +1102,7 @@ def _load_manifest(path):
         for k in ("name", "title", "company", "format"):
             if not e.get(k):
                 die(f"manifest entry missing '{k}': {e}")
-        if e["format"].lower() not in ("newspaper", "claymation"):
+        if e["format"].lower() not in ("newspaper", "claymation", "crossword"):
             die(f"manifest entry has bad format '{e['format']}': {e}")
     return entries, mdir
 
@@ -1121,7 +1300,7 @@ def main():
     g.add_argument("--name", required=True, help="recipient full name")
     g.add_argument("--title", required=True, help="recipient job title")
     g.add_argument("--company", required=True, help="recipient company")
-    g.add_argument("--format", required=True, help="newspaper or claymation")
+    g.add_argument("--format", required=True, help="newspaper, claymation, or crossword")
     g.add_argument("--research", help="path to the pasted research file (required unless --resume)")
     g.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     g.add_argument("--brief-only", action="store_true",
