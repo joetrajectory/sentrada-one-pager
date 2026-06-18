@@ -752,7 +752,24 @@ def _generate_crossword(args, config, folder, base_values, brief, meta):
 
     model = model_for(config, "p4")
     research = base_values["research"]
-    attempt, feedback_block = 0, ""
+    data_path = os.path.join(folder, "data.json")
+    engine_path = os.path.join(REPO_ROOT, config.get("crossword_engine", "crossword/crossword.py"))
+    template_path = os.path.join(
+        REPO_ROOT, config.get("crossword_template", "crossword/crossword_template.png"))
+    if not os.path.exists(engine_path):
+        die(f"crossword engine not found at {engine_path}. The engine ships separately; "
+            f"place crossword/crossword.py in the repo, or set 'crossword_engine' in "
+            f"config.json.")
+    if not os.path.exists(template_path):
+        die(f"crossword template not found at {template_path}. Place "
+            f"crossword/crossword_template.png in the repo or set 'crossword_template' "
+            f"in config.json.")
+
+    # Up to three attempts: P4 copy -> structural + factual gates -> engine
+    # --check (grid placement + clue fit). Unlike newspaper (where a --check FAIL
+    # just halts), a layout FAIL here feeds back into P4 so it can shorten or cut
+    # clues, because clue fit cannot be predicted from word counts alone.
+    attempt, feedback_block, engine_data = 0, "", None
     while True:
         attempt += 1
         prompt = fill(template, dict(brief_values, feedback_block=feedback_block))
@@ -766,46 +783,38 @@ def _generate_crossword(args, config, folder, base_values, brief, meta):
         problems += [f"unsupported clue \"{i.get('claim', '')}\": {i.get('issue', '')}"
                      for i in issues]
 
+        # Only run the engine layout check once the copy is structurally sound
+        # and factually grounded (no point validating layout on copy we'll redo).
         if not problems:
-            break
-        if attempt >= 2:
-            die("Prompt 4 crossword failed the gates twice (candidate structure "
-                "and/or factual grounding):\n  - " + "\n  - ".join(problems))
-        print("[gate] violations found, rerunning Prompt 4 once:")
+            engine_data = crossword_engine_data(data, args.company, config)
+            write_file(data_path, json.dumps(engine_data, indent=2))
+            print("[engine] running --check on data.json (grid placement + clue fit)...")
+            rc, out = run_crossword_engine(engine_path, template_path, data_path, check=True)
+            print(out.strip())
+            if rc == 0:
+                break
+            fails = [ln.strip().lstrip("[FAIL]").strip()
+                     for ln in out.splitlines() if "[FAIL]" in ln] or ["layout check failed"]
+            problems = ["the layout --check failed: " + f for f in fails]
+            if any("clue" in f.lower() for f in fails):
+                problems.append("Make the clues materially shorter (aim 4-8 words each, "
+                                "never more than 10) and favour shorter answers. Keep "
+                                "25-30 candidates; the grid uses the best 15-20.")
+
+        if attempt >= 3:
+            die("Prompt 4 crossword failed the gates after 3 attempts (candidate "
+                "structure, factual grounding, and/or engine layout fit):\n  - "
+                + "\n  - ".join(problems))
+        print("[gate] issues found, rerunning Prompt 4:")
         for x in problems:
             print(f"  - {x}")
-        feedback_block = ("YOUR PREVIOUS DRAFT FAILED THESE HARD CHECKS. Fix every one "
-                          "and keep everything else. Any 'unsupported clue' below is a "
-                          "fact the research does not support: drop that candidate or "
-                          "replace it with a fact the research does support.\n- "
-                          + "\n- ".join(problems))
+        feedback_block = ("YOUR PREVIOUS DRAFT FAILED THESE HARD CHECKS. Fix every one and "
+                          "keep everything else. Any 'unsupported clue' is a fact the "
+                          "research does not support: drop that candidate or replace it "
+                          "with one the research supports.\n- " + "\n- ".join(problems))
 
     write_file(os.path.join(folder, "copy.md"), copy_part)
     write_file(os.path.join(folder, "factcheck.md"), factcheck or "(none returned)")
-
-    engine_data = crossword_engine_data(data, args.company, config)
-    data_path = os.path.join(folder, "data.json")
-    write_file(data_path, json.dumps(engine_data, indent=2))
-
-    engine_path = os.path.join(REPO_ROOT, config.get("crossword_engine", "crossword/crossword.py"))
-    template_path = os.path.join(
-        REPO_ROOT, config.get("crossword_template", "crossword/crossword_template.png"))
-    if not os.path.exists(engine_path):
-        die(f"crossword engine not found at {engine_path}. The engine ships separately; "
-            f"place crossword/crossword.py in the repo, or set 'crossword_engine' in "
-            f"config.json. (The P4 copy and data.json were written; only the render is "
-            f"blocked.)")
-    if not os.path.exists(template_path):
-        die(f"crossword template not found at {template_path}. Place "
-            f"crossword/crossword_template.png in the repo or set 'crossword_template' "
-            f"in config.json.")
-
-    print("\n[engine] running --check on data.json (grid placement + layout fit)...")
-    rc, out = run_crossword_engine(engine_path, template_path, data_path, check=True)
-    print(out.strip())
-    if rc != 0:
-        die("the crossword engine's --check FAILED. Nothing rendered. Fix the copy "
-            "or candidates and re-run. See the engine output above.")
 
     output_path = os.path.join(folder, f"{slugify(args.name)}-{slugify(args.company)}.png")
     print("\n[engine] rendering the print-ready crossword "

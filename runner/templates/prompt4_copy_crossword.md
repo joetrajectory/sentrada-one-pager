@@ -76,9 +76,11 @@ of your candidates and builds the grid, so over-provide good ones.
   about 20% industry-specific (role titles, methodology names, category names,
   tools), about 10% short connecting words (DEAL, PIPE, LEAD, QUOTA) given a
   company-relevant clue.
-- Clues: one line, 15 words maximum, each demonstrating research depth. Mix
-  straightforward factual clues, insider-knowledge clues, and dry wit. Graduate the
-  difficulty: the first 5-7 easy, the last 5-7 hard, the middle medium.
+- Clues: short and tight. Aim for 4-8 words, never more than 10. Each must still
+  demonstrate research depth. Mix straightforward factual clues, insider-knowledge
+  clues, and dry wit. Graduate the difficulty: the first 5-7 easy, the last 5-7
+  hard, the middle medium. Long clues overflow the printed grid, so cut every word
+  that is not doing work.
 - Every clue must be factually accurate to the research. The recipient will know.
 - Title: "THE [COMPANY] CROSSWORD", using the recipient's company name.
 - Subtitle: one dry line, specific to this recipient's situation, not generic.
@@ -103,7 +105,7 @@ Every answer ALL CAPS, letters only, no spaces, 3-15 characters:
 ```
 
 Exactly 25-30 candidates. Each answer is a single ALL-CAPS word (letters only, no
-spaces, 3-15 characters) paired with a one-line clue of 15 words or fewer. Do not
+spaces, 3-15 characters) paired with a short clue of 4-8 words (10 maximum). Do not
 include any field not listed here. No em dashes anywhere.
 
 2) After the JSON block, a section headed exactly "FACT CHECK LIST:" listing every
