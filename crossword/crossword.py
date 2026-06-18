@@ -127,7 +127,7 @@ CONFIG = {
     # Credit ------------------------------------------------------------------
     "credit_text": "sentrada",
     "size_credit": 0.0135,
-    "credit_y": 0.946,           # credit baseline-ish band
+    "credit_bottom": 0.949,      # the credit's BOTTOM sits here, clear of the border
     # Separator rule weight (fraction of height) and colour matched to the ink.
     "sep_weight_frac": 0.0010,
     # Ink / paper realism (mirrors the newspaper engine). A faint sub-pixel blur
@@ -310,16 +310,26 @@ def render_grid(grid_cr, ctx, gridres):
                 grid_cr.rectangle(ox + c * cell, oy + r * cell, cell, cell)
                 grid_cr.fill()
 
-    # 2) Cell borders (stroked per cell; shared edges overstroke identically).
+    # 2) Cell borders. Drawn as a set of UNIQUE edges (in grid-line coordinates)
+    #    so an edge shared by two filled cells is struck exactly once. Stroking
+    #    each cell rectangle instead double-strikes interior edges, making them
+    #    read bolder than the outer ones.
     grid_cr.set_source_rgba(*cfg["grid_border"], 1.0)
     grid_cr.set_line_width(border)
-    grid_cr.set_line_join(cairo.LINE_JOIN_MITER)
+    grid_cr.set_line_cap(cairo.LINE_CAP_SQUARE)
+    edges = set()
     for r in range(rows):
         for c in range(cols):
-            if grid[r][c] is not None:
-                grid_cr.rectangle(ox + c * cell + border / 2.0, oy + r * cell + border / 2.0,
-                                  cell - border, cell - border)
-                grid_cr.stroke()
+            if grid[r][c] is None:
+                continue
+            edges.add(((c, r), (c + 1, r)))            # top
+            edges.add(((c, r + 1), (c + 1, r + 1)))    # bottom
+            edges.add(((c, r), (c, r + 1)))            # left
+            edges.add(((c + 1, r), (c + 1, r + 1)))    # right
+    for (a, b) in edges:
+        grid_cr.move_to(ox + a[0] * cell, oy + a[1] * cell)
+        grid_cr.line_to(ox + b[0] * cell, oy + b[1] * cell)
+        grid_cr.stroke()
 
     # 3) Clue numbers, small and bold, inset into each start cell's top-left.
     pad = cfg["grid_num_pad_frac"] * cell
@@ -449,7 +459,7 @@ def render_credit(cr, ctx, data):
     cl.set_text(text, -1)
     cw, ch = measure(cl)
     x = cfg["right_x"] * W - cw
-    y = cfg["credit_y"] * H
+    y = cfg["credit_bottom"] * H - ch     # anchor the BOTTOM so it clears the border
     draw_layout(cr, cl, x, y, ink)
 
 
