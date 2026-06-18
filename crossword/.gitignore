@@ -1,0 +1,11 @@
+# Generated renders and scratch previews (regenerable from test_cognism.json).
+# The blank template and the filled reference ARE tracked; renders are not.
+_*.png
+_*.jpg
+*_crossword.png
+*_crossword_*.png
+*_print*.png
+*_print*.jpg
+*.FAILED.png
+__pycache__/
+*.pyc

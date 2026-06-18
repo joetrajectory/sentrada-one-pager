@@ -1,0 +1,8 @@
+# Python dependencies for the crossword layout engine.
+# Same stack as the newspaper engine (see ../newspaper/setup.sh for the system
+# libraries: Pango, Cairo, fontconfig, gobject-introspection).
+# Install with: pip install -r requirements.txt
+pycairo>=1.26
+PyGObject>=3.50
+Pillow>=10.0
+# grid_generator.py is pure standard library (no third-party deps).
