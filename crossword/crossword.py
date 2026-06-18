@@ -116,7 +116,7 @@ CONFIG = {
     "sep_clue_gap": 0.026,       # separator rule -> ACROSS / DOWN headers
     "clue_bottom": 0.930,        # clues must end above this (credit sits below)
     "col_gap": 0.040,            # gap between the two clue columns
-    "clue_head_tracking": 0.22,  # ACROSS / DOWN letterspacing (spaced small caps)
+    "clue_head_tracking": 0.15,  # ACROSS / DOWN letterspacing (spaced small caps)
     "size_clue_head": 0.0130,    # ACROSS / DOWN header size, fraction of height
     "clue_head_gap": 0.020,      # header baseline -> first clue
     "clue_size_min": 0.0100,     # clue text auto-size range, fraction of height
