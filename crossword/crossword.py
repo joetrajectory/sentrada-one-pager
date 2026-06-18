@@ -105,8 +105,8 @@ CONFIG = {
     "title_subtitle_gap": 0.018, # title baseline -> subtitle
     "size_subtitle": 0.0150,     # subtitle size, fraction of height
     # Grid --------------------------------------------------------------------
-    "grid_top": 0.140,           # reserved grid rectangle, top...
-    "grid_bottom": 0.582,        # ...and bottom (centre the square grid within)
+    "grid_top": 0.178,           # reserved grid rectangle, top (clear of the subtitle)...
+    "grid_bottom": 0.600,        # ...and bottom (centre the square grid within)
     "grid_w_frac": 0.65,         # grid may use up to this much page width
     "grid_border_frac": 0.030,   # cell border weight as a fraction of cell size
     "grid_num_frac": 0.30,       # cell-number size as a fraction of cell size
@@ -263,12 +263,11 @@ def render_title(cr, ctx, data):
     draw_layout(cr, layout, x, y, ink)
     title_bottom = title_top + r.height
 
-    # Subtitle, centred beneath the title.
+    # Subtitle, centred beneath the title (measured natural width, centred by
+    # hand, exactly like the title, so it never picks up a stray alignment skew).
     subtitle = smarten(data.get("subtitle") or "How well do you know your own company?")
     sl = make_layout(cr)
     set_font(sl, cfg["font_subtitle"], cfg["size_subtitle"] * H)
-    sl.set_alignment(Pango.Alignment.CENTER)
-    sl.set_width(int(avail_w * SCALE))
     sl.set_text(subtitle, -1)
     sw, sh = measure(sl)
     sy = title_bottom + cfg["title_subtitle_gap"] * H
