@@ -105,9 +105,11 @@ CONFIG = {
     "title_subtitle_gap": 0.018, # title baseline -> subtitle
     "size_subtitle": 0.0150,     # subtitle size, fraction of height
     # Grid --------------------------------------------------------------------
-    "grid_top": 0.178,           # reserved grid rectangle, top (clear of the subtitle)...
-    "grid_bottom": 0.600,        # ...and bottom (centre the square grid within)
-    "grid_w_frac": 0.65,         # grid may use up to this much page width
+    "grid_top": 0.168,           # reserved grid rectangle, top (clear of the subtitle)...
+    "grid_bottom": 0.648,        # ...and bottom (centre the square grid within). The
+    # band is deliberately tall so the grid block reads as the A2 hero rather than
+    # floating small with wide dead margins.
+    "grid_w_frac": 0.74,         # grid may use up to this much page width
     "grid_border_frac": 0.030,   # cell border weight as a fraction of cell size
     "grid_num_frac": 0.30,       # cell-number size as a fraction of cell size
     "grid_num_pad_frac": 0.07,   # number inset from the cell's top-left corner
@@ -118,11 +120,11 @@ CONFIG = {
     "col_gap": 0.040,            # gap between the two clue columns
     "clue_head_tracking": 0.15,  # ACROSS / DOWN letterspacing (spaced small caps)
     "size_clue_head": 0.0130,    # ACROSS / DOWN header size, fraction of height
-    "clue_head_gap": 0.020,      # header baseline -> first clue
-    "clue_size_min": 0.0100,     # clue text auto-size range, fraction of height
-    "clue_size_max": 0.0190,
-    "clue_lead": 1.18,           # clue line leading (multiple of size)
-    "clue_gap_frac": 0.62,       # gap between clues as a multiple of clue size
+    "clue_head_gap": 0.018,      # header baseline -> first clue
+    "clue_size_min": 0.0080,     # clue text auto-size range, fraction of height
+    "clue_size_max": 0.0165,
+    "clue_lead": 1.15,           # clue line leading (multiple of size)
+    "clue_gap_frac": 0.50,       # gap between clues as a multiple of clue size
     "clue_num_gap_frac": 0.45,   # gap after the clue number, multiple of size
     # Credit ------------------------------------------------------------------
     "credit_text": "sentrada",
@@ -608,6 +610,85 @@ def assert_fonts_resolved(cr, cfg):
 # ---------------------------------------------------------------------------
 
 
+def _derive_runs(grid, rows, cols):
+    """Re-derive the across and down runs purely from the final grid geometry: a
+    maximal sequence of >=2 filled cells starting where the previous cell (along
+    the axis) is empty or off-grid. Returns two dicts keyed by start cell:
+    {(r, c): "LETTERS"} for across and for down. This is the independent source of
+    truth the solvability check compares the placed answers against."""
+    across, down = {}, {}
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r][c] is None:
+                continue
+            if (c == 0 or grid[r][c - 1] is None) and c + 1 < cols and grid[r][c + 1] is not None:
+                cc, letters = c, []
+                while cc < cols and grid[r][cc] is not None:
+                    letters.append(grid[r][cc]); cc += 1
+                across[(r, c)] = "".join(letters)
+            if (r == 0 or grid[r - 1][c] is None) and r + 1 < rows and grid[r + 1][c] is not None:
+                rr, letters = r, []
+                while rr < rows and grid[rr][c] is not None:
+                    letters.append(grid[rr][c]); rr += 1
+                down[(r, c)] = "".join(letters)
+    return across, down
+
+
+def verify_solvability(gridres):
+    """Assert the puzzle is actually solvable: every numbered run in the grid
+    geometry matches a placed answer (length and letters), there are no orphan
+    runs or unchecked letters, and clue numbers and grid runs are in bijection.
+    grid_generator places by real intersection so this holds by construction, but
+    nothing else asserts it: a future change to placement or numbering could
+    otherwise quietly ship a grid that breaks in the recipient's hands. All
+    findings are FAILs so --check exits non-zero and the runner halts before
+    render. Returns a list of (level, field, message)."""
+    out = []
+    grid, rows, cols = gridres["grid"], gridres["rows"], gridres["cols"]
+    d_across, d_down = _derive_runs(grid, rows, cols)
+    derived = {("across",) + k: w for k, w in d_across.items()}
+    derived.update({("down",) + k: w for k, w in d_down.items()})
+
+    placed = {}
+    for e in gridres["across"]:
+        placed[("across", e["row"], e["col"])] = e["answer"]
+    for e in gridres["down"]:
+        placed[("down", e["row"], e["col"])] = e["answer"]
+
+    # 1) Every placed answer must have a grid run of the same length and letters.
+    for (dirn, r, c), ans in placed.items():
+        run = derived.get((dirn, r, c))
+        if run is None:
+            out.append(("fail", "grid", f"{dirn} answer '{ans}' at {r},{c} has no grid run"))
+        elif run != ans:
+            out.append(("fail", "grid",
+                        f"{dirn} run at {r},{c} reads '{run}' but the clue answer is "
+                        f"'{ans}' (length/letter mismatch: crossings do not resolve)"))
+
+    # 2) No orphan runs: every >=2-cell run must be a real (clued) answer.
+    numbered = {tuple(int(v) for v in k.split(",")) for k in gridres["numbers"]}
+    for (dirn, r, c), run in derived.items():
+        if (dirn, r, c) not in placed:
+            out.append(("fail", "grid",
+                        f"orphan {dirn} run '{run}' at {r},{c} has no clue (unchecked entry)"))
+        if (r, c) not in numbered:
+            out.append(("fail", "grid", f"{dirn} run at {r},{c} is not numbered"))
+
+    # 3) No unchecked/orphan letters: every filled cell belongs to >=1 entry, so
+    #    there are no stray 1-cell lights or letters reachable from no clue.
+    covered = set()
+    for (dirn, r, c), run in derived.items():
+        for i in range(len(run)):
+            covered.add((r, c + i) if dirn == "across" else (r + i, c))
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r][c] is not None and (r, c) not in covered:
+                out.append(("fail", "grid",
+                            f"cell {r},{c} ('{grid[r][c]}') belongs to no across or down "
+                            f"entry (orphan letter)"))
+    return out
+
+
 def run_checks(ctx, gridres, cfg):
     out = []
     add = lambda lvl, field, msg: out.append((lvl, field, msg))
@@ -615,6 +696,12 @@ def run_checks(ctx, gridres, cfg):
         add("warn", "grid", f"placed only {gridres['word_count']} words, below min_words")
     if gridres["word_count"] < 3:
         add("fail", "grid", "fewer than 3 words placed; not a viable crossword")
+    # Solvability: the one place a bespoke crossword can quietly break.
+    for lvl, field, msg in verify_solvability(gridres):
+        add(lvl, field, msg)
+    # Designated heroes that could not be anchored into the grid.
+    for a in (gridres.get("anchors_missing") or []):
+        add("fail", "anchor", f"designated anchor '{a}' could not be placed in the grid")
     if ctx.get("clues_fit") is False:
         add("fail", "clues", "clues do not fit the two columns at the minimum size")
     sep = ctx.get("separator")
@@ -662,9 +749,14 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
             data["candidates"],
             min_words=data.get("min_words", cfg["min_words"]),
             max_words=data.get("max_words", cfg["max_words"]),
-            seed=eff_seed, attempts=cfg["grid_attempts"])
+            seed=eff_seed, attempts=cfg["grid_attempts"],
+            anchors=data.get("anchors"))
     print(f"[info] grid: {gridres['word_count']} words on {gridres['rows']}x{gridres['cols']} "
           f"({len(gridres['across'])} across, {len(gridres['down'])} down)")
+    if gridres.get("anchors"):
+        placed_anchors = [a for a in gridres["anchors"] if a not in gridres["anchors_missing"]]
+        print(f"[info] anchors: {len(placed_anchors)}/{len(gridres['anchors'])} placed"
+              + (f"; MISSING: {', '.join(gridres['anchors_missing'])}" if gridres["anchors_missing"] else ""))
 
     template = Image.open(template_path).convert("RGB")
     print(f"[info] template {os.path.basename(template_path)}: {template.width}x{template.height}px")

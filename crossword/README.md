@@ -115,10 +115,19 @@ top* of the paper) is composited over it.
 | `company_name` | yes | Used in the default title `THE [COMPANY] CROSSWORD`. |
 | `title` | optional | Overrides the default title verbatim. |
 | `subtitle` | optional | Defaults to "How well do you know your own company?" |
-| `candidates` | yes | 25–30 `{answer, clue}` pairs. Answers are upper-cased and stripped to A–Z. The generator picks the best-fitting 15–20. |
+| `candidates` | yes | 25–30 `{answer, clue}` pairs (each may also carry `"anchor": true`). Answers are upper-cased and stripped to A–Z. The generator picks the best-fitting 15–20. |
+| `anchors` | optional | List of raw answer strings to treat as heroes, as an alternative to the per-candidate `anchor` flag. |
 | `min_words` / `max_words` | optional | Placement target (default 15 / 20). |
 | `seed` | optional | Reproducible grid generation (CLI `--seed` overrides). |
 | `grid_data` | optional | A pre-solved grid (the `grid_generator.py` output) to render verbatim, skipping generation. |
+
+### Anchors (hero answers)
+
+A candidate marked `"anchor": true` (or listed in the top-level `anchors` array) is
+a designated hero the generator places first and tries hardest to land, so the
+concept the brief is built around anchors the grid rather than merely surviving as
+a clue. The longest anchor seeds the grid. If a designated anchor cannot be placed,
+`--check` reports it as a FAIL (so the runner halts) rather than quietly dropping it.
 
 ## CLI flags
 
@@ -133,3 +142,11 @@ behind: required fonts must resolve to their real faces (no silent substitution)
 and any layout failure (clues that will not fit, a grid overrunning the separator,
 a non-viable grid) writes a `*.FAILED.png` for inspection and leaves the
 deliverable path empty, exiting non-zero so a batch runner treats it as an error.
+
+**Solvability.** `--check` re-derives the across/down runs from the final grid
+geometry and asserts the puzzle is actually solvable, as a FAIL: every numbered run
+matches its placed answer (length and letters, so crossings resolve), there are no
+orphan runs or unchecked letters, and clue numbers and grid runs are in bijection.
+The generator places by real intersection so this holds by construction, but the
+assertion guards against any future change to placement or numbering silently
+shipping a grid that breaks in the recipient's hands.

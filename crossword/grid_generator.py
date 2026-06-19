@@ -174,16 +174,23 @@ def _candidate_word(cand):
     return "".join(ch for ch in cand["answer"].upper() if ch.isalpha())
 
 
-def _attempt(cands, max_words, rng):
-    """Build one grid greedily. Long words are placed first (they create the most
-    crossing opportunities); the opening word is laid across the origin and each
-    subsequent word takes its highest-scoring legal placement against the grid so
-    far. Returns a Grid (not yet finalised)."""
-    order = sorted(cands, key=lambda c: len(_candidate_word(c)), reverse=True)
-    # Light shuffle within equal-length runs so repeated seeds explore variants
-    # without losing the long-words-first bias.
-    rng.shuffle(order)
-    order.sort(key=lambda c: len(_candidate_word(c)), reverse=True)
+def _normalize(s):
+    """Normalise a raw answer string to uppercase A-Z (for anchor matching)."""
+    return "".join(ch for ch in str(s).upper() if ch.isalpha())
+
+
+def _attempt(cands, max_words, rng, anchors=frozenset()):
+    """Build one grid greedily. ANCHORS are placed first (longest first), so the
+    designated hero answers seed and shape the grid and have the best chance of a
+    legal placement; the longest anchor opens the grid at the origin. The rest
+    follow longest-first (the most crossing opportunities) with light jitter so
+    repeated seeds explore variants. Returns a Grid (not yet finalised)."""
+    anchor_cands = [c for c in cands if _candidate_word(c) in anchors]
+    other = [c for c in cands if _candidate_word(c) not in anchors]
+    anchor_cands.sort(key=lambda c: len(_candidate_word(c)), reverse=True)
+    rng.shuffle(other)
+    other.sort(key=lambda c: len(_candidate_word(c)), reverse=True)
+    order = anchor_cands + other
 
     grid = Grid()
     for cand in order:
@@ -236,28 +243,41 @@ def _quality(grid):
     return (len(grid.placed), round(fill * 0.6 + aspect * 0.4, 4))
 
 
-def generate_grid(candidates, min_words=15, max_words=20, seed=None, attempts=400):
+def generate_grid(candidates, min_words=15, max_words=20, seed=None, attempts=400,
+                  anchors=None):
     """Generate the best crossword grid from a candidate pool. Runs `attempts`
     seeded builds and keeps the strongest. Returns the finalised dict from
-    Grid.finalize(). Raises ValueError if no attempt reaches `min_words`... unless
-    none can, in which case it returns the fullest grid found with a soft warning
-    via the 'short' flag."""
+    Grid.finalize().
+
+    ANCHORS are designated hero answers that should anchor the grid (not merely
+    survive as clues). They come from candidates flagged ``"anchor": true`` and/or
+    an explicit `anchors` list of raw answer strings. Each attempt places them
+    first, and grid selection prioritises, in order: most anchors placed, then
+    meeting `min_words`, then most words, then compactness. The result records
+    `anchors` (all requested) and `anchors_missing` (any that could not be placed)
+    so --check can fail when a designated anchor did not land."""
+    anchor_set = {_candidate_word(c) for c in candidates if c.get("anchor")}
+    anchor_set |= {_normalize(a) for a in (anchors or [])}
+    anchor_set = frozenset(a for a in anchor_set if len(a) >= 3)
+
     base = random.Random(seed)
     best_grid, best_key = None, None
-    best_meeting_min = None
 
     for _ in range(attempts):
         rng = random.Random(base.random())
-        grid = _attempt(candidates, max_words, rng)
-        key = _quality(grid)
+        grid = _attempt(candidates, max_words, rng, anchor_set)
+        n_anchor = len(anchor_set & grid.answers)
+        meets_min = 1 if len(grid.placed) >= min_words else 0
+        # Composite ranking: anchors first, then meeting the floor, then the
+        # usual (word count, compactness) from _quality.
+        key = (n_anchor, meets_min) + _quality(grid)
         if best_key is None or key > best_key:
             best_key, best_grid = key, grid
-        if len(grid.placed) >= min_words:
-            if best_meeting_min is None or key > best_meeting_min[0]:
-                best_meeting_min = (key, grid)
 
-    chosen = best_meeting_min[1] if best_meeting_min else best_grid
-    result = chosen.finalize()
+    result = best_grid.finalize()
+    placed_words = {e["answer"] for e in result["placed"]}
+    result["anchors"] = sorted(anchor_set)
+    result["anchors_missing"] = sorted(anchor_set - placed_words)
     result["short"] = result["word_count"] < min_words
     result["seed"] = seed
     return result
@@ -290,10 +310,15 @@ def main():
         max_words=args.max_words or data.get("max_words", 20),
         seed=args.seed if args.seed is not None else data.get("seed"),
         attempts=args.attempts,
+        anchors=data.get("anchors"),
     )
     print(f"placed {result['word_count']} words on a {result['rows']}x{result['cols']} grid "
           f"({len(result['across'])} across, {len(result['down'])} down)"
           + ("  [short of min_words]" if result["short"] else ""))
+    if result["anchors"]:
+        placed_anchors = [a for a in result["anchors"] if a not in result["anchors_missing"]]
+        print(f"anchors: {len(placed_anchors)}/{len(result['anchors'])} placed"
+              + (f"; MISSING: {', '.join(result['anchors_missing'])}" if result["anchors_missing"] else ""))
     if args.ascii:
         print()
         print(to_ascii(result))

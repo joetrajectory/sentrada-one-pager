@@ -8,7 +8,7 @@
         {"answer": "COGNISM", "clue": "London-based sales intelligence company, founded 2015"},
         {"answer": "REVENUE", "clue": "What Chris Evans is ultimately responsible for"},
         {"answer": "PIPELINE", "clue": "Where deals live before they close"},
-        {"answer": "OUTBOUND", "clue": "The motion that powered 449,933 calls in 2025"},
+        {"answer": "OUTBOUND", "clue": "The motion that powered 449,933 calls in 2025", "anchor": true},
         {"answer": "ENTERPRISE", "clue": "The market segment the 2026 pivot targets"},
         {"answer": "DATA", "clue": "Core product category, now offered as-a-Service"},
         {"answer": "FLUENT", "clue": "First word of the February 2026 rebrand tagline"},
