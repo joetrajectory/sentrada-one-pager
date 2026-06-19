@@ -1,8 +1,9 @@
 # Sentrada chain runner
 
 Runs the Sentrada prompt chain to produce one-of-one physical outreach pieces. It
-feeds the newspaper layout engine in `../newspaper/`, or assembles a paste-ready
-claymation image prompt for you to run by hand.
+feeds a deterministic layout engine — the newspaper engine in `../newspaper/` or
+the crossword engine in `../crossword/` — or assembles a paste-ready claymation
+image prompt for you to run by hand.
 
 Model calls go through the **Claude Code CLI in headless mode (`claude -p`)**, so
 they draw on your **Max subscription's credit pool** rather than a pay-per-token
@@ -28,11 +29,18 @@ finished package for print. Everything else runs automatically.
      claim not supported by the research (names, places, numbers, dates). On any
      violation it reruns Prompt 4 **once** quoting them; if it fails twice it halts.
      It then runs the engine's `--check`, and only on pass renders the A2 PNG.
+   - **Crossword:** Claude returns a title, subtitle, and 25–30 answer/clue
+     candidates. The runner gates them on (a) candidate structure (25–30, single
+     ALL-CAPS words 3–15 chars, unique, each clued) **and** (b) the same **Prompt 4b
+     grounding check** on every clue. It then runs the crossword engine's `--check`
+     (grid placement + clue fit); a layout failure feeds **back into Prompt 4** to
+     shorten clues, up to 3 attempts, then renders the A2 PNG. The engine selects the
+     best 15–20 candidates and builds the interlocking grid.
    - **Claymation:** Claude returns the scene copy (also grounding-checked), then
      **Prompt 5** assembles the paste-ready image prompt. The chain stops here (no
      rendered image to QC automatically); run `qc`/`followup` after you generate
      and upscale the image.
-3. **Newspaper only — automatic QC + follow-up chain after render:**
+3. **Newspaper and crossword — automatic QC + follow-up chain after render:**
    - **Prompt 6** (vision) craft review. If **FAIL**, the chain stops and shows the
      reason and regeneration instructions; 6B and 7 do not run.
    - **Prompt 6B** (vision) recipient simulation. If **WOULD BIN**, the chain stops
@@ -77,9 +85,22 @@ python runner/sentrada_runner.py generate \
   --research path/to/your-research.md
 ```
 
-- `--format` is `newspaper` or `claymation`.
+- `--format` is `newspaper`, `crossword`, or `claymation`.
 - `--research` is a plain text/markdown file with the deep research you ran.
 - Output lands in `runner/pieces/jane-doe-acme-corp/`.
+
+For a crossword, swap `--format crossword`:
+
+```bash
+python runner/sentrada_runner.py generate \
+  --name "Jane Doe" --title "VP Sales" --company "Acme Corp" \
+  --format crossword \
+  --research path/to/your-research.md
+```
+
+The crossword engine (`../crossword/`) selects the best 15–20 of Prompt 4's
+candidates, builds a British-style interlocking grid, and renders the A2 PNG — same
+automatic QC + follow-up chain as newspaper.
 
 You will be asked to approve the brief once. After that the piece runs to
 completion on its own.
@@ -142,8 +163,9 @@ Runs Prompt 2 for everyone and writes, next to the manifest:
 ```bash
 python runner/sentrada_runner.py batch-build --manifest mybatch.json
 ```
-For each `APPROVE`, runs copy → grounding gate → render → P6 → P6B → P7 (newspaper),
-or copy → grounding → P5 paste-ready prompt (claymation). Writes `mybatch.summary.md`:
+For each `APPROVE`, runs copy → grounding gate → engine check → render → P6 → P6B →
+P7 (newspaper and crossword), or copy → grounding → P5 paste-ready prompt
+(claymation). Writes `mybatch.summary.md`:
 per-piece status (ready / **held: P6 FAIL** / **held: 6B WOULD BIN** / error), the
 P6 and 6B verdicts, and the total credit used. Held pieces are flagged for your
 attention rather than silently shipped.
@@ -164,6 +186,9 @@ meta.json            recipient + format + sender, so qc/followup run standalone
 # newspaper:
 data.json            engine input (engine schema fields ONLY)
 <name>-<company>.png the print-ready A2 newspaper at 300 DPI
+# crossword:
+data.json            engine input (company_name, subtitle, min/max, seed, candidates)
+<name>-<company>.png the print-ready A2 crossword at 300 DPI
 # claymation:
 claymation_copy.json scene, caption, in-scene text, hook
 image_prompt.txt     paste-ready image prompt (run + upscale by hand)
@@ -185,6 +210,7 @@ drives the engine.
 |---|---|
 | `prompt2_brief.md` | Brief Agent |
 | `prompt4_copy_newspaper.md` | Copy Agent (newspaper → engine schema) |
+| `prompt4_copy_crossword.md` | Copy Agent (crossword → answer/clue candidates) |
 | `prompt4_copy_claymation.md` | Copy Agent (claymation) |
 | `prompt4b_grounding.md` | Factual grounding gate (text fact-check on the copy) |
 | `prompt5_assembly_claymation.md` | Assembly Agent (claymation image prompt) |
