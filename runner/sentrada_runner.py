@@ -347,6 +347,10 @@ def crossword_violations(data):
     dupes = sorted(k for k, count in seen.items() if count > 1)
     if dupes:
         v.append("duplicate answers (each answer must be unique): " + ", ".join(dupes))
+    anchors = sum(1 for c in cands if c.get("anchor"))
+    if anchors > 3:
+        v.append(f"too many anchor candidates ({anchors}); mark at most 2-3 (the "
+                 "brief's central concept) or the grid cannot place them all.")
     return v
 
 
@@ -374,7 +378,14 @@ def crossword_engine_data(data, company, config):
         "max_words": config.get("crossword_max_words", 20),
         "seed": config.get("crossword_seed", 42),
         "candidates": [
-            {"answer": str(c.get("answer", "")).upper(), "clue": str(c.get("clue", ""))}
+            {
+                "answer": str(c.get("answer", "")).upper(),
+                "clue": str(c.get("clue", "")),
+                # Pass the optional anchor flag through so the engine places the
+                # brief's central concept first. Omitted when falsy (backward
+                # compatible: no anchors -> identical behaviour).
+                **({"anchor": True} if c.get("anchor") else {}),
+            }
             for c in (data.get("candidates") or [])
         ],
     }
@@ -800,6 +811,10 @@ def _generate_crossword(args, config, folder, base_values, brief, meta):
                 problems.append("Make the clues materially shorter (aim 4-8 words each, "
                                 "never more than 10) and favour shorter answers. Keep "
                                 "25-30 candidates; the grid uses the best 15-20.")
+            if any("anchor" in f.lower() for f in fails):
+                problems.append("An anchor answer could not be placed. Use at most one "
+                                "anchor, or choose a shorter, more letter-friendly anchor "
+                                "(common letters E S T A R N I O intersect best).")
 
         if attempt >= 3:
             die("Prompt 4 crossword failed the gates after 3 attempts (candidate "

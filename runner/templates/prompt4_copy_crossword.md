@@ -82,6 +82,13 @@ of your candidates and builds the grid, so over-provide good ones.
   hard, the middle medium. Long clues overflow the printed grid, so cut every word
   that is not doing work.
 - Every clue must be factually accurate to the research. The recipient will know.
+- Anchor the concept: mark the ONE candidate (two at most) that carries the brief's
+  central idea with `"anchor": true`. This is usually the answer tied to the key
+  metric or the recognition element. The grid generator places anchors first and
+  tries hardest to land them, so the puzzle is built around your concept rather than
+  leaving it to chance. Pick a letter-friendly anchor (common letters E S T A R N I O
+  intersect best); a very long or awkward answer may not place. Leave `anchor` off
+  every other candidate.
 - Title: "THE [COMPANY] CROSSWORD", using the recipient's company name.
 - Subtitle: one dry line, specific to this recipient's situation, not generic.
 
@@ -99,14 +106,17 @@ Every answer ALL CAPS, letters only, no spaces, 3-15 characters:
   "title": "THE [COMPANY] CROSSWORD",
   "subtitle": "one dry line, specific to this recipient",
   "candidates": [
-    {"answer": "COGNISM", "clue": "London-headquartered sales intelligence platform, founded 2015"}
+    {"answer": "OUTBOUND", "clue": "The motion behind 449,933 calls in 2025", "anchor": true},
+    {"answer": "COGNISM", "clue": "London sales intelligence platform, founded 2015"}
   ]
 }
 ```
 
 Exactly 25-30 candidates. Each answer is a single ALL-CAPS word (letters only, no
-spaces, 3-15 characters) paired with a short clue of 4-8 words (10 maximum). Do not
-include any field not listed here. No em dashes anywhere.
+spaces, 3-15 characters) paired with a short clue of 4-8 words (10 maximum). Mark the
+one candidate (two at most) carrying the brief's central concept with `"anchor": true`;
+omit `anchor` on every other candidate. Add no other field beyond answer, clue, and
+the optional anchor. No em dashes anywhere.
 
 2) After the JSON block, a section headed exactly "FACT CHECK LIST:" listing every
 factual claim used in the clues, each with its source and date from the research.
