@@ -1,0 +1,7 @@
+# Python dependencies for the newspaper layout engine.
+# Install with: pip install -r requirements.txt
+# These also need the system libraries listed in setup.sh (Pango, Cairo, fontconfig).
+pycairo>=1.26
+PyGObject>=3.50
+Pillow>=10.0
+pyphen>=0.14

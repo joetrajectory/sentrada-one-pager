@@ -1,0 +1,21 @@
+# Generated stand-in templates and rendered output.
+# NOTE: the real finalised template (newspaper_template_a2.png) IS tracked; only
+# the generated stand-ins (template_4x.png etc.), per-company renders and the
+# scratch QC crops are ignored.
+template_*.png
+*_final.png
+*_final_*.png
+out.png
+# Rendered pages and QC crops (large, regenerable from <company>.json).
+_*.png
+_*.jpg
+*_300.png
+mmc_*.png
+cognism_*.png
+# Rendered print exports (PNG masters and JPEG deliverables, regenerable).
+*_print_*.png
+*_print_*.jpg
+mmc_*.jpg
+cognism_*.jpg
+__pycache__/
+*.pyc

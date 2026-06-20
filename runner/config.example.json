@@ -1,0 +1,26 @@
+{
+  "sender": {
+    "company": "Sentrada",
+    "what_they_sell": "Bespoke physical outreach pieces, researched from scratch and delivered to one person's desk.",
+    "proof_points": "Founding pilot now open. Leave blank or describe real proof points; do not invent results.",
+    "booking_link": "https://sentrada.io",
+    "sender_name": "Joe Bloggs",
+    "problems": [
+      "First sender problem the recipient's company plausibly has, in plain language.",
+      "Second sender problem.",
+      "Optional third sender problem."
+    ]
+  },
+  "models": {
+    "p2": "opus",
+    "p4": "opus",
+    "p4b": "opus",
+    "p5": "sonnet",
+    "p7": "sonnet",
+    "p6": "opus",
+    "p6b": "opus"
+  },
+  "vision_backend": "cli",
+  "engine": "newspaper/newspaper.py",
+  "newspaper_template": "newspaper/Newspaper Template - Upscaled - 25mb.jpg"
+}
