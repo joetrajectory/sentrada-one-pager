@@ -34,10 +34,11 @@ Two things differ, both forced by the format:
   * The board is dark charcoal card stock, so the text is LIGHT (cream on the
     coloured segments, gold on the dark title ground). A literal multiply blend
     -- correct for dark ink on the newspaper's cream paper -- would erase light
-    ink on a dark ground. Instead the ink is modulated by the template's LOCAL
-    texture (a high-pass of the card grain and the moulded 3D shadows) and
-    composited normally, so the light ink still reads as printed into the stock
-    rather than pasted on top.
+    ink on a dark ground. Instead the text is DEBOSSED into the leather the way
+    the start arrow and finish laurel are moulded: the foil fills each stroke with
+    the card grain showing through, and the stroke gets a shadow on its top-left
+    rim and a highlight on its bottom-right rim, so it reads as pressed into the
+    stock rather than laid on top.
 """
 
 import argparse
@@ -121,13 +122,13 @@ CONFIG = {
     # Auto-size range as a fraction of image HEIGHT. Curved/short segments simply
     # resolve to the smaller end of the range; copy is never truncated.
     "copy_size_min": 0.0080,
-    "copy_size_max": 0.0210,
+    "copy_size_max": 0.0170,
     "copy_lead": 1.12,                      # line leading (multiple of size)
     "copy_rect_inset": 0.84,                # use this fraction of the detected usable rect
-    "copy_pad_frac": 0.10,                  # extra padding inside the rect (each side)
+    "copy_pad_frac": 0.16,                  # extra padding inside the rect (each side)
     # Segment numbers ---------------------------------------------------------
-    "number_size_frac": 0.012,              # fraction of image height
-    "number_inset_frac": 0.10,              # inset from the usable rect's top-left corner
+    "number_size_frac": 0.0105,              # fraction of image height
+    "number_inset_frac": 0.06,              # inset from the usable rect's top-left corner
     # Title zone --------------------------------------------------------------
     "title_the_frac": 0.34,                 # "THE" cap height as a fraction of the COMPANY line
     "title_gap_frac": 0.10,                 # gap between title lines (fraction of company size)
@@ -161,6 +162,12 @@ CONFIG = {
     "texture_lo": 0.72,
     "texture_hi": 1.10,
     "texture_strength": 0.85,               # 0 = no texture, 1 = full high-pass
+    # Deboss relief: foil pressed into the stock, lit from the top-left.
+    "foil_opacity": 0.90,                   # how solidly the foil fills the stroke
+    "emboss_blur_px": 1.1,                   # soften the coverage before taking rims
+    "emboss_shift_px": 2.2,                  # rim offset (the apparent depth)
+    "emboss_shadow": 0.95,                   # darkening on the near (top-left) rim
+    "emboss_highlight": 0.75,                # lightening on the far (bottom-right) rim
     # Detection ---------------------------------------------------------------
     # The coloured cards are thresholded off the near-black ground (a pixel is a
     # card if it is far enough from the sampled background OR saturated and bright
@@ -173,12 +180,15 @@ CONFIG = {
     "detect_val_floor": 33,                 # reject anything darker than this (deep shadow)
     "detect_close_frac": 0.010,             # solidify: close grain holes (frac of min dim)
     "detect_open_frac": 0.0085,             # ...then smooth the boundary
-    # Divider grooves are found as dark valleys in the centreline luminance.
-    "detect_lum_smooth_frac": 0.075,        # smooth the centreline luminance (x snake width)
+    # Divider grooves are found as dark valleys in the CROSS-SECTIONAL luminance
+    # (mean luminance across the snake at each centreline point).
+    "detect_cross_frac": 0.80,              # cross-section half-extent (x local half-width)
+    "detect_cross_samples": 9,              # samples across the snake
+    "detect_lum_smooth_frac": 0.075,        # smooth the cross-section luminance (x snake width)
     "detect_valley_step_frac": 0.016,       # arc resample step (x snake width)
     "detect_valley_shoulder_frac": 0.42,    # shoulder distance for the valley test (x card)
     "detect_valley_core_frac": 0.16,        # core window for the local minimum (x card)
-    "detect_valley_depth": 13,              # min luminance drop groove vs shoulders
+    "detect_valley_depth": 7,               # min cross-sectional luminance drop groove vs shoulders
     "detect_cluster_frac": 0.50,            # merge grooves within this (x snake width)
     "detect_cap_clear_frac": 0.40,          # ignore grooves within this of the caps (x width)
     "detect_gapfill_ratio": 1.55,           # safety net: recover a groove in a gap larger than this x median
@@ -432,20 +442,33 @@ def _arc_length(P):
 
 def _divider_cuts(img_rgb, path, P, s, dt, cfg):
     """Find the divider grooves directly, as dark VALLEYS in the luminance sampled
-    ALONG the centreline. Each groove crosses the centreline as a local minimum
-    that is meaningfully darker than the tile faces on either side; sampling on the
-    centreline (always inside the snake) avoids the background and the card grain.
-    This is far more reliable than fitting straight lines and then filling missed
-    ones by even spacing, which drifts off the real, irregular tile boundaries.
+    ACROSS the snake at each centreline point. A real divider is a dark line that
+    spans the FULL snake width, so its CROSS-SECTIONAL mean luminance dips sharply;
+    card grain and a dark tile face are local and barely move the cross-sectional
+    mean, so this separates true grooves from noise far better than sampling a
+    single centreline pixel. The cross-section is bounded to stay inside the snake
+    (using the local half-width) so it never reads the dark background at a curve.
     Returns the sorted interior groove arc-positions and the snake width."""
     cv2 = _load_cv()
     H, W = img_rgb.shape[:2]
     width = 2.0 * float(dt.max())
     total = s[-1]
     gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
-    xi = np.clip(P[:, 0].astype(int), 0, W - 1)
-    yi = np.clip(P[:, 1].astype(int), 0, H - 1)
-    lum = gray[yi, xi]
+    N = len(P)
+    half = dt[np.clip(P[:, 1].astype(int), 0, H - 1), np.clip(P[:, 0].astype(int), 0, W - 1)]
+    frac = cfg["detect_cross_frac"]
+    nsamp = cfg["detect_cross_samples"]
+    lum = np.empty(N)
+    for i in range(N):
+        j0, j1 = max(0, i - 3), min(N - 1, i + 3)
+        t = P[j1] - P[j0]
+        nl = math.hypot(t[0], t[1]) or 1.0
+        nx, ny = -t[1] / nl, t[0] / nl
+        hh = max(6.0, frac * half[i])
+        ds = np.linspace(-hh, hh, nsamp)
+        xs = np.clip((P[i][0] + nx * ds).astype(int), 0, W - 1)
+        ys = np.clip((P[i][1] + ny * ds).astype(int), 0, H - 1)
+        lum[i] = gray[ys, xs].mean()
     k = max(3, int(cfg["detect_lum_smooth_frac"] * width)) | 1
     lum = np.convolve(lum, np.ones(k) / k, mode="same")
 
@@ -716,13 +739,17 @@ def _draw_detection_overlay(img_rgb, seg_map, out_path):
 
 
 def _draw_rotated_centred(cr, cx, cy, angle_deg, layout, ink, dy=0.0):
-    """Draw a Pango layout centred at (cx, cy), rotated by angle_deg. dy shifts the
-    block along its own vertical axis (after rotation)."""
-    w, h = measure(layout)
+    """Draw a Pango layout centred at (cx, cy), rotated by angle_deg. Centres on the
+    INK extents (the actual inked glyphs), not the logical box: the logical box
+    carries line-leading and descent padding, so centring on it leaves the visible
+    text sitting high in the tile. dy shifts the block along its vertical axis."""
+    ink_r = layout.get_pixel_extents()[0]
+    ox = ink_r.x + ink_r.width / 2.0
+    oy = ink_r.y + ink_r.height / 2.0
     cr.save()
     cr.translate(cx, cy)
     cr.rotate(math.radians(angle_deg))
-    cr.translate(-w / 2.0, -h / 2.0 + dy)
+    cr.translate(-ox, -oy + dy)
     cr.set_source_rgb(*ink)
     cr.move_to(0, 0)
     PangoCairo.show_layout(cr, layout)
@@ -957,36 +984,69 @@ def cairo_to_pil(surface):
     return Image.open(buf).convert("RGBA")
 
 
-def composite_ink(template_rgb, text_rgba, cfg, W, ink_blur=None):
-    """Composite the light ink onto the dark card so it reads as printed into the
-    stock. A literal multiply (as on the newspaper's cream paper) would crush light
-    ink on a dark ground, so instead the ink is modulated by a HIGH-PASS of the
-    card luminance -- the local grain and moulded 3D shadows, normalised to ~1.0 --
-    and then alpha-composited. The texture shows through the ink; the ink keeps its
-    brightness."""
-    if ink_blur is None:
-        blur = min(cfg["ink_blur_cap"], cfg["text_blur_px"] * (W / float(cfg["blur_reference_width"])))
+def _shift(a, dy, dx):
+    """Shift a 2-D array by (dy, dx), filling vacated edges by replication (so the
+    relief never wraps text from the opposite border)."""
+    out = np.empty_like(a)
+    if dy > 0:
+        out[:dy] = a[:1]; out[dy:] = a[:-dy]
+    elif dy < 0:
+        out[dy:] = a[-1:]; out[:dy] = a[-dy:]
     else:
-        blur = ink_blur
-    if blur > 0:
-        text_rgba = text_rgba.filter(ImageFilter.GaussianBlur(blur))
+        out[:] = a
+    a = out
+    out = np.empty_like(a)
+    if dx > 0:
+        out[:, :dx] = a[:, :1]; out[:, dx:] = a[:, :-dx]
+    elif dx < 0:
+        out[:, dx:] = a[:, -1:]; out[:, :dx] = a[:, -dx:]
+    else:
+        out[:] = a
+    return out
 
+
+def composite_ink(template_rgb, text_rgba, cfg, W, ink_blur=None):
+    """Composite the text so it reads as DEBOSSED into the leather card -- foil
+    pressed in, the way the start arrow and finish laurel are moulded -- not flat
+    digital text laid on top.
+
+    A literal multiply (correct for dark ink on cream newsprint) would crush light
+    ink on this dark ground, so instead:
+      * the foil (cream copy / gold title) FILLS each stroke, modulated by a
+        high-pass of the card so the grain and moulded shadows show through it;
+      * each stroke is given relief for a light from the top-left: its top-left
+        rim is darkened (the near wall of the depression, in shadow) and its
+        bottom-right rim is lightened (the far wall catching the light). That
+        shadow/highlight pair is what makes the eye read the text as pressed into
+        the surface rather than sitting on it.
+    """
     card = np.asarray(template_rgb.convert("RGB"), dtype=np.float32)
     ink = np.asarray(text_rgba, dtype=np.float32)
-    rgb, alpha = ink[:, :, :3], ink[:, :, 3:4] / 255.0
+    foil = ink[:, :, :3]
+    A = ink[:, :, 3] / 255.0
+    res = W / float(cfg["blur_reference_width"])
 
-    # High-pass texture: luminance over a local Gaussian base, clamped.
-    lum = (0.299 * card[:, :, 0] + 0.587 * card[:, :, 1] + 0.114 * card[:, :, 2])
+    # Foil fill, grain showing through (high-pass of the card luminance).
+    lum = 0.299 * card[:, :, 0] + 0.587 * card[:, :, 1] + 0.114 * card[:, :, 2]
     radius = max(1.0, cfg["texture_base_frac"] * W)
     base = np.asarray(Image.fromarray(lum.astype(np.uint8)).filter(
         ImageFilter.GaussianBlur(radius)), dtype=np.float32)
-    ratio = lum / np.clip(base, 1.0, None)
-    ratio = np.clip(ratio, cfg["texture_lo"], cfg["texture_hi"])
-    strength = cfg["texture_strength"]
-    tex = (1.0 - strength) + strength * ratio
-    ink_mod = np.clip(rgb * tex[:, :, None], 0, 255)
+    ratio = np.clip(lum / np.clip(base, 1.0, None), cfg["texture_lo"], cfg["texture_hi"])
+    tex = (1.0 - cfg["texture_strength"]) + cfg["texture_strength"] * ratio
+    foil_t = np.clip(foil * tex[:, :, None], 0, 255)
 
-    out = card * (1.0 - alpha) + ink_mod * alpha
+    # Relief rims from the (softly blurred) coverage.
+    sblur = max(0.4, cfg["emboss_blur_px"] * res)
+    As = np.asarray(Image.fromarray((A * 255).astype(np.uint8)).filter(
+        ImageFilter.GaussianBlur(sblur)), dtype=np.float32) / 255.0
+    d = max(1, int(round(cfg["emboss_shift_px"] * res)))
+    tl_rim = np.clip(As - _shift(As, -d, -d), 0.0, 1.0)   # near (top-left) wall -> shadow
+    br_rim = np.clip(As - _shift(As, d, d), 0.0, 1.0)     # far (bottom-right) wall -> highlight
+
+    a3 = (A * cfg["foil_opacity"])[:, :, None]
+    out = card * (1.0 - a3) + foil_t * a3
+    out = out - (tl_rim * cfg["emboss_shadow"] * 255.0)[:, :, None]
+    out = out + (br_rim * cfg["emboss_highlight"] * 255.0)[:, :, None]
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
 
 

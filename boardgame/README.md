@@ -60,12 +60,11 @@ plain colour threshold fills the whole snake into one blob. Detection therefore:
    snake.
 2. **Thin** the snake to a 1px centreline and order it from the bottom-left start
    cap to the top-right finish cap by a breadth-first walk between the two tips.
-3. **Find the dividers** as dark VALLEYS in the luminance sampled along the
-   centreline: each groove crosses the centreline as a local minimum that is
-   meaningfully darker than the tile faces either side. Sampling on the centreline
-   (always inside the snake) avoids the background and the card grain, and the
-   valleys land on the real, irregular tile boundaries rather than an even-spaced
-   estimate.
+3. **Find the dividers** as dark VALLEYS in the CROSS-SECTIONAL luminance (the mean
+   luminance across the snake at each centreline point). A real divider is a dark
+   line spanning the full width, so its cross-sectional mean dips sharply, while
+   card grain and a dark tile face barely move it -- this separates true grooves
+   from noise, and the valleys land on the real, irregular tile boundaries.
 4. **Recover** any low-contrast groove the valley pass missed (a divider between
    two similarly coloured tiles is only a shallow dip): for a gap well over the
    median card length, snap a recovered cut to the deepest valley within it. The
@@ -133,16 +132,23 @@ Punctuation is normalised to typographic forms at render time.
   emblems on the end caps.
 - **Sentrada credit** lowercase, letterspaced, gold, in the bottom-right corner.
 
-## Compositing: light ink on dark stock
+## Compositing: text debossed into the leather
 
 A literal multiply blend (correct for the newspaper's dark ink on cream paper)
-would crush light ink on this dark ground. Instead the ink is modulated by a
-**high-pass of the card luminance** (the local grain and the moulded 3D shadows,
-normalised to ~1.0) and composited normally, so the light ink keeps its
-brightness while the stock texture still shows through it. The result reads as
-printed into the card, not pasted on top. A faint, resolution-scaled ink-spread
-blur (capped low) finishes the effect; override per run with `--ink-blur` (0 for
-dead sharp).
+would crush light ink on this dark ground, and flat alpha-composited text reads as
+digital text laid on top. Instead the text is **debossed into the stock**, the way
+the start arrow and finish laurel are moulded into the cap leather:
+
+- the foil (cream copy, gold title) fills each stroke, modulated by a high-pass of
+  the card so the grain and moulded shadows show through it;
+- the stroke is given relief for a light from the top-left -- its top-left rim is
+  darkened (the near wall of the depression, in shadow) and its bottom-right rim is
+  lightened (the far wall catching the light).
+
+That shadow/highlight pair is what makes the eye read the text as pressed into the
+surface. The relief offset scales with resolution, so it holds from the small
+template up to the 8x print master. The `emboss_*`, `foil_opacity` and `texture_*`
+keys in `CONFIG` tune the depth and grain.
 
 ## Print resolution
 
