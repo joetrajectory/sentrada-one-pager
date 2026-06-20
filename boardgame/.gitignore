@@ -1,0 +1,14 @@
+# Generated renders and scratch previews (regenerable from test_qflow.json).
+# The blank template, the segment map + overlay and the filled reference ARE
+# tracked; print masters and scratch crops are not.
+_*.png
+_*.jpg
+*_boardgame_*.png
+*_boardgame_*.jpg
+*_360.png
+*_300.png
+*_print*.png
+*_print*.jpg
+*.FAILED.png
+__pycache__/
+*.pyc

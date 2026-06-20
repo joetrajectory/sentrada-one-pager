@@ -1,0 +1,12 @@
+# Python dependencies for the board game layout engine.
+# Same core stack as the newspaper / crossword engines (see ../newspaper/setup.sh
+# for the system libraries: Pango, Cairo, fontconfig, gobject-introspection), plus
+# NumPy and OpenCV for the one-off segment detection (`detect`).
+# Install with: pip install -r requirements.txt
+pycairo>=1.26
+PyGObject>=3.50
+Pillow>=10.0
+numpy>=1.24
+# opencv-contrib (NOT plain opencv): detection uses cv2.ximgproc.thinning for the
+# path centreline. Only `detect` needs OpenCV; `render` runs on the core stack.
+opencv-contrib-python>=4.8
