@@ -60,11 +60,16 @@ plain colour threshold fills the whole snake into one blob. Detection therefore:
    snake.
 2. **Thin** the snake to a 1px centreline and order it from the bottom-left start
    cap to the top-right finish cap by a breadth-first walk between the two tips.
-3. **Find the dividers** as straight lines spanning the snake width (Canny +
-   Hough, rejecting the card grain and the snake's own edge), project them onto
-   the centreline and cluster them into cuts.
-4. **Recover** any divider the Hough missed by the median card length (gap fill),
-   protecting the longer end caps so they stay single segments.
+3. **Find the dividers** as dark VALLEYS in the luminance sampled along the
+   centreline: each groove crosses the centreline as a local minimum that is
+   meaningfully darker than the tile faces either side. Sampling on the centreline
+   (always inside the snake) avoids the background and the card grain, and the
+   valleys land on the real, irregular tile boundaries rather than an even-spaced
+   estimate.
+4. **Recover** any low-contrast groove the valley pass missed (a divider between
+   two similarly coloured tiles is only a shallow dip): for a gap well over the
+   median card length, snap a recovered cut to the deepest valley within it. The
+   longer end caps are protected so they stay single segments.
 5. **Build geometry** for each segment from the centreline and the local width: a
    centroid, a band polygon, a usable text rectangle and a path-direction angle.
 
@@ -101,9 +106,11 @@ across resolutions.
 | `segments[].type` | `content` (2-3 lines of company copy), `instruction` (a one-liner like "Roll again.") or `empty` (number only). |
 | `segments[].text` | The copy. Empty string for `empty` segments. |
 
-Target mix for a ~30-segment board: roughly 15-18 `content`, 5-6 `instruction`,
-the rest `empty`. Segment 1 (start cap) and segment N (finish cap) are best left
-`empty` so the START / FINISH labels own them.
+The number of segments is whatever `detect` finds for the template (this one
+resolves to 34; run detection and read the count from `segment_map.json`). Aim
+for roughly half `content`, a handful of `instruction`, the rest `empty`. Segment
+1 (start cap) and the last segment (finish cap) are best left `empty` so the
+START / FINISH labels own them.
 
 **Copy is immutable.** The engine never truncates or squeezes text to fit. Each
 segment's copy is auto-sized to its card; on a tight or curved card the type

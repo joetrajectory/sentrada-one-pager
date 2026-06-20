@@ -32,6 +32,10 @@
     { "index": 27, "type": "instruction", "text": "Roll again." },
     { "index": 28, "type": "content",     "text": "Rework on site hits a record low. Move ahead 2." },
     { "index": 29, "type": "content",     "text": "Handover pack built in one click. Move ahead 2." },
-    { "index": 30, "type": "empty",       "text": "" }
+    { "index": 30, "type": "content",     "text": "Defect rate drops below one percent. Move ahead 2." },
+    { "index": 31, "type": "instruction", "text": "Miss a go." },
+    { "index": 32, "type": "content",     "text": "A government mandate makes you the standard. Move ahead 3." },
+    { "index": 33, "type": "content",     "text": "The IPO bell rings. The board applauds. Move ahead 2." },
+    { "index": 34, "type": "empty",       "text": "" }
   ]
 }

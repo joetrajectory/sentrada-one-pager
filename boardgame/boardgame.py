@@ -173,17 +173,16 @@ CONFIG = {
     "detect_val_floor": 33,                 # reject anything darker than this (deep shadow)
     "detect_close_frac": 0.010,             # solidify: close grain holes (frac of min dim)
     "detect_open_frac": 0.0085,             # ...then smooth the boundary
-    "detect_inner_erode_frac": 0.0066,      # erode the snake before edge-finding (drop the rim)
-    "detect_canny_blur": 1.2,               # pre-Canny Gaussian sigma
-    "detect_canny_lo": 30,
-    "detect_canny_hi": 90,
-    "detect_hough_thresh": 38,              # Hough accumulator threshold
-    "detect_hough_minlen_frac": 0.50,       # min divider length (x snake width)
-    "detect_hough_maxgap": 10,
-    "detect_hough_maxlen_frac": 1.50,       # drop "dividers" longer than this (edge runs)
-    "detect_cluster_frac": 0.55,            # merge cuts within this (x snake width)
-    "detect_cap_clear_frac": 0.35,          # ignore cuts within this of the caps (x width)
-    "detect_gapfill_ratio": 1.50,           # split an interior gap larger than this x median card
+    # Divider grooves are found as dark valleys in the centreline luminance.
+    "detect_lum_smooth_frac": 0.075,        # smooth the centreline luminance (x snake width)
+    "detect_valley_step_frac": 0.016,       # arc resample step (x snake width)
+    "detect_valley_shoulder_frac": 0.42,    # shoulder distance for the valley test (x card)
+    "detect_valley_core_frac": 0.16,        # core window for the local minimum (x card)
+    "detect_valley_depth": 13,              # min luminance drop groove vs shoulders
+    "detect_cluster_frac": 0.50,            # merge grooves within this (x snake width)
+    "detect_cap_clear_frac": 0.40,          # ignore grooves within this of the caps (x width)
+    "detect_gapfill_ratio": 1.55,           # safety net: recover a groove in a gap larger than this x median
+    "detect_valley_snap_frac": 0.28,        # snap a recovered cut to the deepest valley within this (x median)
     "detect_inset_along": 0.86,             # usable rect: fraction of card length used
     "detect_inset_across": 0.86,            # ...and of card width
     "detect_title_erode_frac": 0.022,       # clearance from cards for the title zone (frac width)
@@ -432,54 +431,80 @@ def _arc_length(P):
 
 
 def _divider_cuts(img_rgb, path, P, s, dt, cfg):
-    """Find the divider grooves as straight lines spanning the snake width,
-    project their midpoints onto the centreline (as arc positions), and cluster
-    them. Returns sorted, clustered cut arc-positions (interior only)."""
+    """Find the divider grooves directly, as dark VALLEYS in the luminance sampled
+    ALONG the centreline. Each groove crosses the centreline as a local minimum
+    that is meaningfully darker than the tile faces on either side; sampling on the
+    centreline (always inside the snake) avoids the background and the card grain.
+    This is far more reliable than fitting straight lines and then filling missed
+    ones by even spacing, which drifts off the real, irregular tile boundaries.
+    Returns the sorted interior groove arc-positions and the snake width."""
     cv2 = _load_cv()
+    H, W = img_rgb.shape[:2]
     width = 2.0 * float(dt.max())
-    inner = cv2.erode(path, _kernel(int(cfg["detect_inner_erode_frac"] * min(img_rgb.shape[:2]))))
-    gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
-    edges = cv2.Canny(cv2.GaussianBlur(gray, (0, 0), cfg["detect_canny_blur"]),
-                      cfg["detect_canny_lo"], cfg["detect_canny_hi"])
-    edges = cv2.bitwise_and(edges, inner)
-    lines = cv2.HoughLinesP(edges, 1, np.pi / 180.0,
-                            threshold=cfg["detect_hough_thresh"],
-                            minLineLength=int(width * cfg["detect_hough_minlen_frac"]),
-                            maxLineGap=cfg["detect_hough_maxgap"])
     total = s[-1]
+    gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    xi = np.clip(P[:, 0].astype(int), 0, W - 1)
+    yi = np.clip(P[:, 1].astype(int), 0, H - 1)
+    lum = gray[yi, xi]
+    k = max(3, int(cfg["detect_lum_smooth_frac"] * width)) | 1
+    lum = np.convolve(lum, np.ones(k) / k, mode="same")
+
+    # Resample to a uniform arc step, then run a valley detector: a point is a
+    # groove if it is the local minimum of a small core window AND darker than the
+    # brighter of its two shoulders (about half a card away) by a depth threshold.
+    step = max(1.0, cfg["detect_valley_step_frac"] * width)
+    su = np.arange(0.0, total, step)
+    lu = np.interp(su, s, lum)
+    card = width  # cards are roughly square, so the snake width sets the card scale
+    sh = max(2, int(cfg["detect_valley_shoulder_frac"] * card / step))
+    win = max(1, int(cfg["detect_valley_core_frac"] * card / step))
+    depth = cfg["detect_valley_depth"]
     raw = []
-    for l in (lines if lines is not None else []):
-        x1, y1, x2, y2 = l[0]
-        if np.hypot(x2 - x1, y2 - y1) > width * cfg["detect_hough_maxlen_frac"]:
-            continue  # a run along the snake edge, not a perpendicular divider
-        mx, my = (x1 + x2) / 2.0, (y1 + y2) / 2.0
-        i = int(np.argmin((P[:, 0] - mx) ** 2 + (P[:, 1] - my) ** 2))
-        raw.append(s[i])
+    for i in range(sh, len(lu) - sh):
+        if lu[i] > lu[i - win:i + win + 1].min() + 0.5:
+            continue
+        shoulder = min(lu[i - sh:i - win].max(), lu[i + win:i + sh].max())
+        if shoulder - lu[i] >= depth:
+            raw.append((su[i], lu[i]))
+
+    # Merge valleys closer than half a card, keeping the deeper one.
     raw.sort()
-    if not raw:
-        return [], width
-    bw = cfg["detect_cluster_frac"] * width
-    clusters, cur = [], [raw[0]]
-    for c in raw[1:]:
-        if c - cur[-1] <= bw:
-            cur.append(c)
-        else:
-            clusters.append(float(np.mean(cur)))
-            cur = [c]
-    clusters.append(float(np.mean(cur)))
+    merge = cfg["detect_cluster_frac"] * width
+    grooves = []
+    for arc, val in raw:
+        if grooves and arc - grooves[-1][0] < merge:
+            if val < grooves[-1][1]:
+                grooves[-1] = (arc, val)
+            continue
+        grooves.append((arc, val))
     edge = cfg["detect_cap_clear_frac"] * width
-    clusters = [c for c in clusters if edge < c < total - edge]
-    return clusters, width
+    grooves = [g[0] for g in grooves if edge < g[0] < total - edge]
+    return grooves, width, su, lu
 
 
-def _fill_cuts(clusters, total, cfg):
-    """Recover divider grooves missed by Hough using the median card length, but
-    protect the first and last intervals (the longer end caps) from being split."""
-    allc = np.array([0.0] + clusters + [total])
+def _fill_cuts(grooves, total, cfg, su, lu):
+    """Recover a divider the valley pass missed (a low-contrast groove between two
+    similarly coloured tiles shows up only as a shallow dip): for any interior gap
+    well over the median card length, insert the expected number of cuts, but SNAP
+    each to the deepest luminance valley in a window around its even-spaced guess
+    so the recovered cut lands on the real (faint) groove, not an even-spaced
+    estimate that would drift off the tile. The first and last intervals (the
+    longer end caps) are protected from splitting."""
+    allc = np.array([0.0] + list(grooves) + [total])
     gaps = np.diff(allc)
     interior = gaps[1:-1] if len(gaps) > 2 else gaps
     m = float(np.median(interior)) if len(interior) else total / 30.0
     n = len(allc)
+    snap = cfg["detect_valley_snap_frac"] * m
+
+    def deepest_valley(centre):
+        lo, hi = centre - snap, centre + snap
+        win = (su >= lo) & (su <= hi)
+        if not np.any(win):
+            return centre
+        idx = np.where(win)[0]
+        return float(su[idx[int(np.argmin(lu[idx]))]])
+
     out = []
     for gi, (a, b) in enumerate(zip(allc[:-1], allc[1:])):
         out.append(a)
@@ -488,7 +513,7 @@ def _fill_cuts(clusters, total, cfg):
         if (not is_cap) and g > cfg["detect_gapfill_ratio"] * m:
             k = int(round(g / m)) - 1
             for j in range(1, k + 1):
-                out.append(a + g * j / (k + 1))
+                out.append(deepest_valley(a + g * j / (k + 1)))
     out.append(total)
     return sorted(set(round(x, 2) for x in out)), m
 
@@ -539,11 +564,11 @@ def detect(template_path, output_path, cfg=CONFIG, overlay_path=None):
     print(f"[info] centreline: {len(P)} points, arc length {s[-1]:.0f}px, "
           f"snake width ~{2 * dt.max():.0f}px")
 
-    clusters, width = _divider_cuts(img, path, P, s, dt, cfg)
-    cuts, card_len = _fill_cuts(clusters, s[-1], cfg)
+    grooves, width, su, lu = _divider_cuts(img, path, P, s, dt, cfg)
+    cuts, card_len = _fill_cuts(grooves, s[-1], cfg, su, lu)
     nseg = len(cuts) - 1
-    print(f"[info] dividers: {len(clusters)} detected, median card {card_len:.0f}px "
-          f"-> {nseg} segments after gap fill")
+    print(f"[info] grooves: {len(grooves)} detected (luminance valleys), median card "
+          f"{card_len:.0f}px -> {nseg} segments after gap recovery")
 
     segments = []
     for i in range(nseg):
