@@ -123,12 +123,12 @@ CONFIG = {
     # resolve to the smaller end of the range; copy is never truncated.
     "copy_size_min": 0.0080,
     "copy_size_max": 0.0170,
-    "copy_lead": 1.12,                      # line leading (multiple of size)
+    "copy_lead": 1.24,                      # line leading (multiple of size)
     "copy_rect_inset": 0.84,                # use this fraction of the detected usable rect
     "copy_pad_frac": 0.16,                  # extra padding inside the rect (each side)
     # Segment numbers ---------------------------------------------------------
-    "number_size_frac": 0.0105,              # fraction of image height
-    "number_inset_frac": 0.06,              # inset from the usable rect's top-left corner
+    "number_size_frac": 0.0095,              # fraction of image height
+    "number_inset_frac": 0.035,              # inset from the usable rect's top-left corner
     # Title zone --------------------------------------------------------------
     "title_the_frac": 0.34,                 # "THE" cap height as a fraction of the COMPANY line
     "title_gap_frac": 0.10,                 # gap between title lines (fraction of company size)
@@ -159,15 +159,15 @@ CONFIG = {
     # is a Gaussian of the luminance at this radius (fraction of width); the
     # modulation is clamped to [lo, hi].
     "texture_base_frac": 0.012,
-    "texture_lo": 0.72,
+    "texture_lo": 0.86,
     "texture_hi": 1.10,
     "texture_strength": 0.85,               # 0 = no texture, 1 = full high-pass
     # Deboss relief: foil pressed into the stock, lit from the top-left.
-    "foil_opacity": 0.90,                   # how solidly the foil fills the stroke
+    "foil_opacity": 0.96,                   # how solidly the foil fills the stroke
     "emboss_blur_px": 1.1,                   # soften the coverage before taking rims
     "emboss_shift_px": 2.2,                  # rim offset (the apparent depth)
-    "emboss_shadow": 0.95,                   # darkening on the near (top-left) rim
-    "emboss_highlight": 0.75,                # lightening on the far (bottom-right) rim
+    "emboss_shadow": 0.78,                   # darkening on the near (top-left) rim
+    "emboss_highlight": 0.92,                # lightening on the far (bottom-right) rim
     # Detection ---------------------------------------------------------------
     # The coloured cards are thresholded off the near-black ground (a pixel is a
     # card if it is far enough from the sampled background OR saturated and bright
