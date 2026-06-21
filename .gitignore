@@ -5,6 +5,10 @@ node_modules/
 # Generated per-campaign output (see CLAUDE.md > Git tracking)
 /pipeline/
 
+# Per-recipient research (campaign input; contains personal data and delivery
+# addresses — keep out of git so it is never pushed to a remote).
+research/
+
 # Chain runner: generated per-piece output and the filled-in config (secrets/profile)
 runner/pieces/
 runner/config.json
