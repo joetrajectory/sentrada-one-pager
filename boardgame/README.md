@@ -139,8 +139,13 @@ would crush light ink on this dark ground, and flat alpha-composited text reads 
 digital text laid on top. Instead the text is **debossed into the stock**, the way
 the start arrow and finish laurel are moulded into the cap leather:
 
-- the foil (cream copy, gold title) fills each stroke, modulated by a high-pass of
-  the card so the grain and moulded shadows show through it;
+- a darkened **well** is recessed under the copy's footprint (the coverage dilated
+  and softened): the card there is flattened toward its local mean and darkened, so
+  the foil always sits on a consistent dark, calm ground regardless of the tile
+  colour -- this is what keeps the copy legible on the light gold and sage tiles --
+  and it reads as a stamped, recessed panel;
+- the foil (cream copy in Inter Medium, gold title) fills each stroke, modulated by
+  a high-pass of the card so the grain and moulded shadows show through it;
 - the stroke is given relief for a light from the top-left -- its top-left rim is
   darkened (the near wall of the depression, in shadow) and its bottom-right rim is
   lightened (the far wall catching the light).

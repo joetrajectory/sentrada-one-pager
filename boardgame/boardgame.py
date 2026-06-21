@@ -114,7 +114,7 @@ CONFIG = {
     # Fonts -------------------------------------------------------------------
     "font_title": "Fraunces Bold",          # THE / COMPANY / GAME (premium display serif)
     "font_subtitle": "Fraunces Italic",     # elegant italic strapline
-    "font_copy": "Inter",                   # segment copy (clean sans)
+    "font_copy": "Inter Medium",            # segment copy (clean sans, medium weight holds the deboss)
     "font_label": "Inter Bold",             # START / FINISH
     "font_number": "Inter",                 # segment numbers
     "font_credit": "Inter",                 # sentrada credit
@@ -162,6 +162,13 @@ CONFIG = {
     "texture_lo": 0.86,
     "texture_hi": 1.10,
     "texture_strength": 0.85,               # 0 = no texture, 1 = full high-pass
+    # Darkened "well" recessed under the copy so contrast is consistent on every
+    # tile colour (and the text reads as a stamped, recessed panel).
+    "well_grow_px": 2.6,                     # dilate the text footprint by this (the well margin)
+    "well_blur_px": 2.6,                     # soften the well edge
+    "well_flatten_px": 6.0,                  # radius the card is blended toward (calms the texture)
+    "well_flatten": 0.6,                     # how much to flatten the texture under the copy
+    "well_darken": 0.44,                     # how much to darken the well
     # Deboss relief: foil pressed into the stock, lit from the top-left.
     "foil_opacity": 0.96,                   # how solidly the foil fills the stroke
     "emboss_blur_px": 1.1,                   # soften the coverage before taking rims
@@ -1026,8 +1033,24 @@ def composite_ink(template_rgb, text_rgba, cfg, W, ink_blur=None):
     A = ink[:, :, 3] / 255.0
     res = W / float(cfg["blur_reference_width"])
 
-    # Foil fill, grain showing through (high-pass of the card luminance).
-    lum = 0.299 * card[:, :, 0] + 0.587 * card[:, :, 1] + 0.114 * card[:, :, 2]
+    # WELL: recess a darker, calmer patch under the text footprint, so the foil
+    # always sits on a consistent dark ground regardless of the tile colour (the
+    # legibility on the light gold and sage tiles depends on this) and reads as a
+    # stamped, recessed panel. The footprint is the coverage dilated a little and
+    # softened; under it the card is blended toward its local mean (flattening the
+    # moulded scale texture that competes with small glyphs) and darkened.
+    grow = max(1, int(round(cfg["well_grow_px"] * res)))
+    wmask = Image.fromarray((A * 255).astype(np.uint8)).filter(
+        ImageFilter.MaxFilter(grow * 2 + 1)).filter(
+        ImageFilter.GaussianBlur(max(0.6, cfg["well_blur_px"] * res)))
+    well = (np.asarray(wmask, dtype=np.float32) / 255.0)[:, :, None]
+    card_flat = np.asarray(Image.fromarray(card.astype(np.uint8)).filter(
+        ImageFilter.GaussianBlur(max(1.0, cfg["well_flatten_px"] * res))), dtype=np.float32)
+    bedded = card * (1.0 - cfg["well_flatten"] * well) + card_flat * (cfg["well_flatten"] * well)
+    bedded = bedded * (1.0 - cfg["well_darken"] * well)
+
+    # Foil fill, grain showing through (high-pass of the bedded card luminance).
+    lum = 0.299 * bedded[:, :, 0] + 0.587 * bedded[:, :, 1] + 0.114 * bedded[:, :, 2]
     radius = max(1.0, cfg["texture_base_frac"] * W)
     base = np.asarray(Image.fromarray(lum.astype(np.uint8)).filter(
         ImageFilter.GaussianBlur(radius)), dtype=np.float32)
@@ -1044,7 +1067,7 @@ def composite_ink(template_rgb, text_rgba, cfg, W, ink_blur=None):
     br_rim = np.clip(As - _shift(As, d, d), 0.0, 1.0)     # far (bottom-right) wall -> highlight
 
     a3 = (A * cfg["foil_opacity"])[:, :, None]
-    out = card * (1.0 - a3) + foil_t * a3
+    out = bedded * (1.0 - a3) + foil_t * a3
     out = out - (tl_rim * cfg["emboss_shadow"] * 255.0)[:, :, None]
     out = out + (br_rim * cfg["emboss_highlight"] * 255.0)[:, :, None]
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
