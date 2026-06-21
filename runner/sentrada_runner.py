@@ -624,9 +624,9 @@ def _generate_newspaper(args, config, folder, base_values, brief, meta):
 
         if not problems:
             break
-        if attempt >= 2:
-            die("Prompt 4 newspaper failed the gates twice (word count and/or "
-                "factual grounding):\n  - " + "\n  - ".join(problems))
+        if attempt >= 3:
+            die("Prompt 4 newspaper failed the gates after 3 attempts (word count "
+                "and/or factual grounding):\n  - " + "\n  - ".join(problems))
         print("[gate] violations found, rerunning Prompt 4 once:")
         for x in problems:
             print(f"  - {x}")
