@@ -63,6 +63,12 @@ into the content, not listed.
 
 ## Newspaper content rules
 
+SUBJECT RULE (read first): The front page is journalism about the recipient and
+their company. Never present the sender, its results, client names, tenure, or proof
+points as article content, headlines, sidebars, or quotes. The sender's pitch belongs
+only on the companion card, never in the newspaper. Write the whole piece as if the
+sender does not exist; the only permitted sender mark is the small "sentrada" credit.
+
 - Lead article: EXACTLY 600-640 words (target 620). Count before outputting. Over
   640, cut. Under 600, expand. This is a hard production constraint.
 - Each sidebar story: headline 5-9 words, body 60-80 words. Exactly three of them.
