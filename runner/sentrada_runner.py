@@ -394,12 +394,13 @@ def crossword_engine_data(data, company, config):
 def run_crossword_engine(engine_path, template_path, data_path, output_path=None, check=False):
     """Render or validate the crossword. crossword.py mirrors newspaper.py:
     --check validates (and exits nonzero on FAIL) without writing output;
-    --output renders at 300 DPI. Same exit-code contract as the newspaper engine."""
+    --output renders at 360 DPI (matching the newspaper output). Same exit-code
+    contract as the newspaper engine."""
     cmd = [sys.executable, engine_path, "--template", template_path, "--data", data_path]
     if check:
         cmd.append("--check")
     if output_path:
-        cmd += ["--output", output_path, "--print-dpi", "300"]
+        cmd += ["--output", output_path, "--print-dpi", "360"]
     result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
     return result.returncode, result.stdout + result.stderr
 

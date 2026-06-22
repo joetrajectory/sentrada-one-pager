@@ -188,7 +188,7 @@ data.json            engine input (engine schema fields ONLY)
 <name>-<company>.png the print-ready A2 newspaper at 300 DPI
 # crossword:
 data.json            engine input (company_name, subtitle, min/max, seed, candidates)
-<name>-<company>.png the print-ready A2 crossword at 300 DPI
+<name>-<company>.png the print-ready A2 crossword at 360 DPI
 # claymation:
 claymation_copy.json scene, caption, in-scene text, hook
 image_prompt.txt     paste-ready image prompt (run + upscale by hand)
