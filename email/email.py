@@ -89,15 +89,16 @@ CLAY = (0xC0 / 255, 0x59 / 255, 0x33 / 255)   # Sentrada accent (default avatar)
 # Geometry, as fractions of W or H. Tuned to a desktop Gmail reading pane that
 # fills the whole sheet (no surrounding app grey: full bleed).
 G = dict(
-    margin_x=0.078,      # left/right content margin (frac W)
+    margin_x=0.072,      # left/right content margin (frac W)
     toolbar_y=0.030,     # toolbar baseline (frac H)
-    subject_y=0.072,     # subject top (frac H)
-    subject_size=0.0258, # frac H
-    body_size=0.0143,
-    meta_size=0.0128,
-    small_size=0.0112,
-    avatar=0.044,        # avatar diameter (frac H)
-    line_lead=1.46,      # body leading multiple
+    subject_y=0.074,     # subject top (frac H)
+    subject_size=0.0300, # frac H
+    body_size=0.0172,    # larger body: fills the A2 and reads across a desk
+    meta_size=0.0150,
+    small_size=0.0128,
+    avatar=0.050,        # avatar diameter (frac H)
+    line_lead=1.52,      # body leading multiple
+    para_gap=0.022,      # gap after a paragraph (frac H)
     hairline=0.0007,     # stroke width (frac H), clamped to >= 1px
 )
 
@@ -283,6 +284,11 @@ def icon(cr, kind, cx, cy, s, lw, col=ICONG):
         cr.line_to(cx - h * 0.3, cy)
         cr.line_to(cx + h * 0.3, cy + h * 0.5)
         cr.stroke()
+    elif kind == "chevR":
+        cr.move_to(cx - h * 0.3, cy - h * 0.5)
+        cr.line_to(cx + h * 0.3, cy)
+        cr.line_to(cx - h * 0.3, cy + h * 0.5)
+        cr.stroke()
     elif kind == "chevD":
         cr.move_to(cx - h * 0.5, cy - h * 0.25)
         cr.line_to(cx, cy + h * 0.25)
@@ -335,14 +341,17 @@ def render(data, W, H, check=False):
     for k in ["back", "archive", "spam", "trash", "mail", "snooze", "kebab"]:
         icon(cr, k, x, ty, isz, lw * 1.7)
         x += gap
-    # right: "1 of N" with prev/next chevrons
+    # right: "1 of N" then the prev/next nav chevrons, right-aligned to the
+    # content edge (Gmail order: count, then < >). Laid out left of each other
+    # so nothing overlaps the digits.
     unread = data.get("account", {}).get("unread_count")
     if unread:
         pos = layout(cr, f"1 of {unread:,}", G["small_size"] * H, color=SUB)
-        pw = measure(pos)[0]
-        rx = W - mx - isz / 2
-        icon(cr, "chevL", rx - isz * 2.4, ty, isz, lw * 1.7, col=FAINT)
-        show(cr, pos, rx - isz * 2.0 - pw, ty - measure(pos)[1] / 2)
+        pw, ph = measure(pos)
+        redge = ix + iw
+        icon(cr, "chevR", redge - isz * 0.5, ty, isz, lw * 1.7, col=FAINT)
+        icon(cr, "chevL", redge - isz * 1.7, ty, isz, lw * 1.7, col=FAINT)
+        show(cr, pos, redge - isz * 2.4 - pw, ty - ph / 2)
 
     # --- subject + label chip --------------------------------------------
     y = G["subject_y"] * H
@@ -408,7 +417,7 @@ def render(data, W, H, check=False):
     for kind, payload in blocks:
         if kind == "p":
             lay = layout(cr, payload, bs, w=iw, color=INK, lead=G["line_lead"])
-            y += show(cr, lay, ix, y)[1] + 0.017 * H
+            y += show(cr, lay, ix, y)[1] + G["para_gap"] * H
         elif kind == "bullet":
             cr.save()
             cr.set_source_rgb(*INK)
