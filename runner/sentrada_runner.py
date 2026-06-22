@@ -1201,7 +1201,8 @@ def _p6(config, folder, image_path, meta, brief, research):
         idx = txt.find("LEGIBILITY CHECK:")
         legibility = txt[idx + len("LEGIBILITY CHECK:"):].strip() if idx != -1 else txt
     fmt_label = {"newspaper": "Newspaper Front Page",
-                 "crossword": "Crossword"}.get(meta["format"], "Claymation Scene")
+                 "crossword": "Crossword",
+                 "email": "The Email"}.get(meta["format"], "Claymation Scene")
     values = {
         "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
         "recipient_company": meta["recipient_company"], "format": fmt_label,
@@ -1249,7 +1250,8 @@ def _p7(config, folder, delivery_date):
         leverage = failure = stopped = "Not available (run qc first)."
 
     fmt_label = {"newspaper": "Newspaper Front Page",
-                 "crossword": "Crossword"}.get(meta["format"], "Claymation Scene")
+                 "crossword": "Crossword",
+                 "email": "The Email"}.get(meta["format"], "Claymation Scene")
     values = {
         "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
         "recipient_company": meta["recipient_company"], "format": fmt_label,
