@@ -39,7 +39,7 @@ SUBJECT = "We printed this so you’d actually read it"
 SENDER_NAME = "Sentrada"
 SENDER_ADDR = "<hello@sentrada.io>"
 TO_LINE = "to James  ⌄"
-TIME = "09:14 (3 days ago)"
+TIME = "09:14"
 
 BODY = [
     ("p", "Hi James,"),
@@ -52,12 +52,11 @@ BODY = [
     ("b", "One of your audit trails settled a site dispute in four minutes. The industry "
           "tends to measure that in weeks."),
     ("b", "You have logged more deliveries before 9 a.m. than most platforms manage in a day."),
-    ("p", "Which brings us to the one thing we noticed that you may not have. There is a gap "
-          "between what arrives on site and what gets recorded, and we have worked out roughly "
-          "what it is costing you."),
-    ("p", "We are not going to write the number down. Partly because it is a little rude, and "
-          "partly because it is the one honest reason for you to reply to this. Twenty minutes "
-          "and it is yours."),
+    ("p", "Which brings us to what we actually noticed. There is a gap between what arrives on "
+          "site and what gets recorded, and at your volumes it is large enough to be worth a "
+          "short conversation."),
+    ("p", "I have put the Qflow numbers into a one-page view. Fifteen minutes on Thursday and I "
+          "will walk you through it. If it is not useful, keep the A2 and I will leave you alone."),
     ("sig", "Joe\nSentrada"),
 ]
 CREDIT = "sentrada.io   ·   physical outreach, one company at a time"
