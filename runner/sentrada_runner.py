@@ -491,8 +491,7 @@ def email_engine_data(data, args, sender, config):
         # copy overrides it; otherwise the house line is always present.
         "postscript": data.get("postscript") or config.get(
             "email_postscript",
-            "I had this printed at A2 and delivered to your desk, rather than "
-            "sent as one more email you would never open."),
+            "Yes, I printed an email at A2 and had it delivered to your desk."),
     }
 
 
