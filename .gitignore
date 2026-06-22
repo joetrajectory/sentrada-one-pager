@@ -8,6 +8,8 @@ node_modules/
 # Chain runner: generated per-piece output and the filled-in config (secrets/profile)
 runner/pieces/
 runner/config.json
+# Scratch research inputs used for local end-to-end test runs
+runner/research_*.md
 __pycache__/
 *.pyc
 
