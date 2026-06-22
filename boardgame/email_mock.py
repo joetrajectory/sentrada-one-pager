@@ -43,20 +43,22 @@ TIME = "09:14 (3 days ago)"
 
 BODY = [
     ("p", "Hi James,"),
-    ("p", "We sent this as an email on Tuesday. It is still unopened, somewhere between "
-          "a calendar invite and a newsletter you also did not open. No hard feelings. "
-          "Nobody opens the email."),
-    ("p", "So we printed it. At A2, on foam board. It is now taking up most of your desk, "
-          "which is roughly the amount of attention we were hoping for."),
-    ("p", "Here is the part we wanted you to read. We spent some time on Qflow, and a few "
-          "things stood out:"),
+    ("p", "This is a cold email. You can tell, because it is sitting on your desk at A2 "
+          "rather than in the folder where the other ones quietly go to die."),
+    ("p", "Making it impossible to ignore is the easy part. Earning the next sixty seconds "
+          "is the part we take seriously, so here is what we actually wanted to say."),
+    ("p", "We spent some time on Qflow. A few things stood out:"),
     ("b", "Your first tier-one pour was logged before you had finished arguing about the logo."),
     ("b", "One of your audit trails settled a site dispute in four minutes. The industry "
           "tends to measure that in weeks."),
     ("b", "You have logged more deliveries before 9 a.m. than most platforms manage in a day."),
     ("p", "Which brings us to the one thing we noticed that you may not have. There is a gap "
-          "between what arrives on site and what gets recorded, and right now it is quietly "
-          "costing you roughly—"),
+          "between what arrives on site and what gets recorded, and we have worked out roughly "
+          "what it is costing you."),
+    ("p", "We are not going to write the number down. Partly because it is a little rude, and "
+          "partly because it is the one honest reason for you to reply to this. Twenty minutes "
+          "and it is yours."),
+    ("sig", "Joe\nSentrada"),
 ]
 CREDIT = "sentrada.io   ·   physical outreach, one company at a time"
 
@@ -133,10 +135,15 @@ def measure_card(cr, iw, pad):
     y += 92 + 30                       # sender row
     y += 48                            # hairline + gap
     for kind, txt in BODY:
+        if kind == "sig":
+            y += 24
+            for line in txt.split("\n"):
+                y += lay(cr, line, SANS, 30, lead=1.3)[0].get_pixel_size()[1] + 4
+            continue
         w = iw if kind == "p" else iw-44
         d = lay(cr, txt, SANS, 30, w=w, lead=1.46)[0].get_pixel_size()[1]
         y += d + (26 if kind == "p" else 16)
-    y += 14 + 92 + 56                  # clip box
+    y += 40                            # gap before buttons
     y += 70                            # reply/forward buttons
     return y + 70                      # bottom padding
 
@@ -194,21 +201,19 @@ def render():
         if kind == "p":
             d = draw(cr, lay(cr, txt, SANS, 30, w=iw, color=INK, lead=1.46), ix, y)
             y += d[1] + 26
+        elif kind == "sig":
+            y += 24
+            for i, line in enumerate(txt.split("\n")):
+                col = INK if i == 0 else SUB
+                wt = "Semibold" if i == 0 else None
+                d = draw(cr, lay(cr, line, SANS, 30, color=col, weight=wt, lead=1.3), ix, y)
+                y += d[1] + 4
         else:  # bullet
             cr.save(); cr.set_source_rgb(*INK); cr.arc(ix+12, y+22, 4.5, 0, 2*math.pi); cr.fill(); cr.restore()
             d = draw(cr, lay(cr, txt, SANS, 30, w=iw-44, color=INK, lead=1.46), ix+44, y)
             y += d[1] + 16
 
-    # the gap: native "[Message clipped]" treatment
-    y += 14
-    rr(cr, ix-14, y, iw+28, 92, 12); cr.set_source_rgb(*CLIPBG); cr.fill()
-    cr.set_source_rgb(*HAIR); cr.set_line_width(1.4); rr(cr, ix-14, y, iw+28, 92, 12); cr.stroke()
-    msg = lay(cr, "[Message clipped]", SANS, 28, color=SUB)
-    mw = msg[0].get_pixel_size()[0]
-    draw(cr, msg, ix+30, y+30)
-    vlay = lay(cr, "View entire message", SANS, 28, color=LINK, weight="Medium")
-    draw(cr, vlay, ix+30+mw+24, y+30)
-    y += 92 + 56
+    y += 40
 
     # reply / forward buttons
     for i, (lbl, k) in enumerate([("Reply", "reply"), ("Forward", "mail")]):
