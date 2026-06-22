@@ -900,14 +900,15 @@ def _generate_crossword(args, config, folder, base_values, brief, meta):
     data_path = os.path.join(folder, "data.json")
     engine_path = os.path.join(REPO_ROOT, config.get("crossword_engine", "crossword/crossword.py"))
     template_path = os.path.join(
-        REPO_ROOT, config.get("crossword_template", "crossword/crossword_template.png"))
+        REPO_ROOT, config.get("crossword_template",
+                              "crossword/Blank crossword template 25mb - upscaled.jpg"))
     if not os.path.exists(engine_path):
         die(f"crossword engine not found at {engine_path}. The engine ships separately; "
             f"place crossword/crossword.py in the repo, or set 'crossword_engine' in "
             f"config.json.")
     if not os.path.exists(template_path):
-        die(f"crossword template not found at {template_path}. Place "
-            f"crossword/crossword_template.png in the repo or set 'crossword_template' "
+        die(f"crossword template not found at {template_path}. Place the upscaled "
+            f"crossword template in crossword/ or set 'crossword_template' "
             f"in config.json.")
 
     # Up to three attempts: P4 copy -> structural + factual gates -> engine

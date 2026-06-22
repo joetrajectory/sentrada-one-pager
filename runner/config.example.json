@@ -26,7 +26,7 @@
   "newspaper_template": "newspaper/Newspaper Template - Upscaled - 25mb.jpg",
 
   "crossword_engine": "crossword/crossword.py",
-  "crossword_template": "crossword/crossword_template.png",
+  "crossword_template": "crossword/Blank crossword template 25mb - upscaled.jpg",
   "crossword_min_words": 15,
   "crossword_max_words": 20,
   "crossword_seed": 42,

@@ -6,7 +6,7 @@ Generates a British-style crossword from a company's answer/clue candidates and
 renders a print-ready A2 puzzle page onto a blank cream template, with real,
 perfect text every time.
 
-    python crossword.py --template crossword_template.png \
+    python crossword.py --template "Blank crossword template 25mb - upscaled.jpg" \
         --data test_cognism.json --output cognism_crossword.png
 
 Sibling of the newspaper engine (../newspaper/newspaper.py): same Pango/Cairo text
@@ -71,6 +71,11 @@ from gi.repository import GLib, Pango, PangoCairo  # noqa: E402
 
 import cairo  # noqa: E402
 from PIL import Image, ImageChops, ImageCms, ImageDraw, ImageFilter  # noqa: E402
+
+# The production template is a deliberately high-resolution, trusted asset
+# (the upscaled A2 blank is well over Pillow's default decompression-bomb
+# guard of ~89M pixels). Lift the guard so loading it neither warns nor fails.
+Image.MAX_IMAGE_PIXELS = None
 
 SCALE = Pango.SCALE
 
