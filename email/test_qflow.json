@@ -1,0 +1,26 @@
+{
+  "copy_source": "authored",
+  "account": { "unread_count": 1284 },
+  "sender": {
+    "name": "Joe",
+    "email": "joe@sentrada.io",
+    "avatar_initial": "J",
+    "avatar_color": "#C05933"
+  },
+  "recipient": { "name": "James" },
+  "subject": "We printed this so you’d actually read it",
+  "timestamp": "09:14",
+  "label": "Inbox",
+  "body": [
+    { "type": "p", "text": "Hi James," },
+    { "type": "p", "text": "This is a cold email. You can tell, because it is sitting on your desk at A2 rather than in the folder where the other ones quietly go to die." },
+    { "type": "p", "text": "Making it impossible to ignore is the easy part. Earning the next sixty seconds is the part we take seriously, so here is what we actually wanted to say." },
+    { "type": "p", "text": "We spent some time on Qflow. A few things stood out:" },
+    { "type": "bullet", "text": "Your first tier-one pour was logged before you had finished arguing about the logo." },
+    { "type": "bullet", "text": "One of your audit trails settled a site dispute in four minutes. The industry tends to measure that in weeks." },
+    { "type": "bullet", "text": "You have logged more deliveries before 9 a.m. than most platforms manage in a day." },
+    { "type": "p", "text": "Which brings us to what we actually noticed. There is a gap between what arrives on site and what gets recorded, and at your volumes it is large enough to be worth a short conversation." },
+    { "type": "p", "text": "I have put the Qflow numbers into a one-page view. Fifteen minutes on Thursday and I will walk you through it. If it is not useful, keep the A2 and I will leave you alone." },
+    { "type": "signature", "lines": ["Joe", "Sentrada"] }
+  ]
+}
