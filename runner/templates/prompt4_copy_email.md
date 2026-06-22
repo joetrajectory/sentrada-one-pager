@@ -99,10 +99,10 @@ genuinely better, recipient-specific postscript, supply it as a top-level
 
 ## Subject line
 
-One subject line, under 90 characters, in the same sincere register as the body:
-specific to the recipient and their stated priority, not clickbait, no emoji. It may
-make a single quiet nod to the fact that this is outreach, but it must not undercut
-the seriousness of the email. Earnest and specific beats clever.
+One subject line in the same sincere register as the body: specific to the recipient
+and their stated priority, not clickbait, no emoji. Keep it to a single line: aim for
+six to nine words, ideally under 60 characters and never over 90, so it does not wrap
+across multiple lines in the Gmail header. Earnest and specific beats clever.
 
 {{feedback_block}}
 

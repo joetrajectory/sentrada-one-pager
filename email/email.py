@@ -25,6 +25,7 @@ import ctypes
 import json
 import math
 import os
+import re
 import sys
 
 # ---------------------------------------------------------------------------
@@ -175,6 +176,19 @@ def measure(lc):
     return lc[0].get_pixel_size()
 
 
+def ellip_layout(cr, txt, size, w, color=INK, weight=None):
+    """A single-line layout that ellipsises at the end if it exceeds width w, so a
+    long sender name or email address never collides with the right-hand meta."""
+    lay = PangoCairo.create_layout(cr)
+    fd = Pango.FontDescription.from_string(SANS + (f" {weight}" if weight else ""))
+    fd.set_absolute_size(size * S)
+    lay.set_font_description(fd)
+    lay.set_width(int(max(0, w) * S))
+    lay.set_ellipsize(Pango.EllipsizeMode.END)
+    lay.set_text(txt, -1)
+    return lay, color
+
+
 def rrect(cr, x, y, w, h, r):
     cr.new_sub_path()
     cr.arc(x + w - r, y + r, r, -math.pi / 2, 0)
@@ -194,106 +208,93 @@ def hairline(cr, x0, x1, y, lw):
     cr.restore()
 
 
-def icon(cr, kind, cx, cy, s, lw, col=ICONG):
-    """Forensic-ish Gmail toolbar glyphs, drawn centred on (cx, cy), box size s."""
+# The real Material Symbols (outlined, 24x24 viewBox) vector paths Gmail itself
+# uses for these controls, so the chrome is pixel-accurate rather than an
+# approximation. Filled with the even-odd rule (the outlined glyphs are filled
+# regions with opposite-wound holes). The "report spam" dot is appended as a
+# bezier circle (it ships as an <svg> <circle>, not in the path data).
+ICON_PATHS = {
+    "back": "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
+    "archive": "M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM6.24 5h11.52l.81.97H5.44l.8-.97zM5 19V8h14v11H5zm8.45-9h-2.9v3H8l4 4 4-4h-2.55z",
+    "spam": "M15.73 3H8.27L3 8.27v7.46L8.27 21h7.46L21 15.73V8.27L15.73 3zM19 14.9L14.9 19H9.1L5 14.9V9.1L9.1 5h5.8L19 9.1v5.8z M11 7h2v7h-2z M13 16C13 16.5523 12.5523 17 12 17C11.4477 17 11 16.5523 11 16C11 15.4477 11.4477 15 12 15C12.5523 15 13 15.4477 13 16Z",
+    "trash": "M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-3.5l-1-1zM18 7H6v12c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7z",
+    "mail": "M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6zm-2 0l-8 5-8-5h16zm0 12H4V8l8 5 8-5v10z",
+    "snooze": "M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z",
+    "kebab": "M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z",
+    "chevL": "M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59z",
+    "chevR": "M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6-6-6z",
+    "chevD": "M7 10l5 5 5-5H7z",
+    "star": "M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z",
+    "reply": "M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z",
+    "replyall": "M7 8V5l-7 7 7 7v-3l-4-4 4-4zm6 1V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z",
+    "forward": "M14 8.83L17.17 12 14 15.17V14H6v-4h8V8.83M12 4v4H4v8h8v4l8-8-8-8z",
+}
+
+_PATH_TOKEN = re.compile(r"([MmLlHhVvCcSsZz])|(-?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?)")
+
+
+def _svg_path(cr, d):
+    """Trace an SVG path string (the subset Material icons use: M L H V C S Z,
+    absolute and relative) into the current cairo path, in 24x24 user space."""
+    toks = [m.group(1) if m.group(1) else float(m.group(2))
+            for m in _PATH_TOKEN.finditer(d)]
+    i, n = 0, len(toks)
+    cx = cy = sx = sy = pcx = pcy = 0.0
+    cmd, prev_cubic = None, False
+    while i < n:
+        if isinstance(toks[i], str):
+            cmd = toks[i]
+            i += 1
+        c = cmd
+        if c in ("M", "m"):
+            x, y = toks[i], toks[i + 1]; i += 2
+            if c == "m": x += cx; y += cy
+            cr.move_to(x, y); cx, cy = x, y; sx, sy = x, y
+            cmd = "l" if c == "m" else "L"; prev_cubic = False
+        elif c in ("L", "l"):
+            x, y = toks[i], toks[i + 1]; i += 2
+            if c == "l": x += cx; y += cy
+            cr.line_to(x, y); cx, cy = x, y; prev_cubic = False
+        elif c in ("H", "h"):
+            x = toks[i]; i += 1
+            if c == "h": x += cx
+            cr.line_to(x, cy); cx = x; prev_cubic = False
+        elif c in ("V", "v"):
+            y = toks[i]; i += 1
+            if c == "v": y += cy
+            cr.line_to(cx, y); cy = y; prev_cubic = False
+        elif c in ("C", "c"):
+            x1, y1, x2, y2, x, y = toks[i:i + 6]; i += 6
+            if c == "c":
+                x1 += cx; y1 += cy; x2 += cx; y2 += cy; x += cx; y += cy
+            cr.curve_to(x1, y1, x2, y2, x, y)
+            pcx, pcy = x2, y2; cx, cy = x, y; prev_cubic = True
+        elif c in ("S", "s"):
+            x2, y2, x, y = toks[i:i + 4]; i += 4
+            if c == "s":
+                x2 += cx; y2 += cy; x += cx; y += cy
+            x1, y1 = (2 * cx - pcx, 2 * cy - pcy) if prev_cubic else (cx, cy)
+            cr.curve_to(x1, y1, x2, y2, x, y)
+            pcx, pcy = x2, y2; cx, cy = x, y; prev_cubic = True
+        elif c in ("Z", "z"):
+            cr.close_path(); cx, cy = sx, sy; prev_cubic = False
+        else:
+            break
+
+
+def icon(cr, kind, cx, cy, s, col=ICONG):
+    """Draw a Material icon, filled, centred on (cx, cy) with box size s."""
+    d = ICON_PATHS.get(kind)
+    if not d:
+        return
     cr.save()
     cr.set_source_rgb(*col)
-    cr.set_line_width(lw)
-    cr.set_line_cap(cairo.LINE_CAP_ROUND)
-    cr.set_line_join(cairo.LINE_JOIN_ROUND)
-    h = s / 2
-    if kind == "back":
-        cr.move_to(cx + h, cy)
-        cr.line_to(cx - h, cy)
-        cr.move_to(cx - h * 0.35, cy - h * 0.45)
-        cr.line_to(cx - h, cy)
-        cr.line_to(cx - h * 0.35, cy + h * 0.45)
-        cr.stroke()
-    elif kind == "archive":
-        cr.rectangle(cx - h, cy - h * 0.55, s, h * 0.5)
-        cr.rectangle(cx - h * 0.85, cy - h * 0.05, s * 0.85, h * 0.85)
-        cr.move_to(cx - h * 0.28, cy + h * 0.2)
-        cr.line_to(cx + h * 0.28, cy + h * 0.2)
-        cr.stroke()
-    elif kind == "spam":  # ! in a circle
-        cr.arc(cx, cy, h, 0, 2 * math.pi)
-        cr.move_to(cx, cy - h * 0.45)
-        cr.line_to(cx, cy + h * 0.15)
-        cr.stroke()
-        cr.arc(cx, cy + h * 0.5, lw * 0.7, 0, 2 * math.pi)
-        cr.fill()
-    elif kind == "trash":
-        cr.move_to(cx - h * 0.75, cy - h * 0.5)
-        cr.line_to(cx + h * 0.75, cy - h * 0.5)
-        cr.stroke()
-        cr.move_to(cx - h * 0.3, cy - h * 0.5)
-        cr.line_to(cx - h * 0.3, cy - h * 0.72)
-        cr.line_to(cx + h * 0.3, cy - h * 0.72)
-        cr.line_to(cx + h * 0.3, cy - h * 0.5)
-        cr.stroke()
-        cr.move_to(cx - h * 0.55, cy - h * 0.5)
-        cr.line_to(cx - h * 0.42, cy + h * 0.72)
-        cr.line_to(cx + h * 0.42, cy + h * 0.72)
-        cr.line_to(cx + h * 0.55, cy - h * 0.5)
-        cr.stroke()
-    elif kind == "mail":  # mark as unread
-        cr.rectangle(cx - h, cy - h * 0.6, s, h * 1.2)
-        cr.move_to(cx - h, cy - h * 0.6)
-        cr.line_to(cx, cy + h * 0.1)
-        cr.line_to(cx + h, cy - h * 0.6)
-        cr.stroke()
-    elif kind == "snooze":  # clock
-        cr.arc(cx, cy, h, 0, 2 * math.pi)
-        cr.move_to(cx, cy - h * 0.5)
-        cr.line_to(cx, cy)
-        cr.line_to(cx + h * 0.4, cy + h * 0.25)
-        cr.stroke()
-    elif kind == "kebab":
-        for dy in (-h * 0.6, 0, h * 0.6):
-            cr.arc(cx, cy + dy, lw * 0.85, 0, 2 * math.pi)
-            cr.fill()
-    elif kind == "star":
-        for i in range(5):
-            a = -math.pi / 2 + i * 2 * math.pi / 5
-            px, py = cx + math.cos(a) * h, cy + math.sin(a) * h
-            cr.line_to(px, py) if i else cr.move_to(px, py)
-            a2 = a + math.pi / 5
-            cr.line_to(cx + math.cos(a2) * h * 0.44, cy + math.sin(a2) * h * 0.44)
-        cr.close_path()
-        cr.stroke()
-    elif kind == "reply":
-        cr.move_to(cx - h * 0.2, cy - h * 0.6)
-        cr.line_to(cx - h * 0.8, cy)
-        cr.line_to(cx - h * 0.2, cy + h * 0.6)
-        cr.stroke()
-        cr.move_to(cx - h * 0.8, cy)
-        cr.line_to(cx + h * 0.3, cy)
-        cr.curve_to(cx + h, cy, cx + h, cy + h * 0.5, cx + h, cy + h * 0.9)
-        cr.stroke()
-    elif kind == "forward":
-        cr.move_to(cx + h * 0.2, cy - h * 0.6)
-        cr.line_to(cx + h * 0.8, cy)
-        cr.line_to(cx + h * 0.2, cy + h * 0.6)
-        cr.stroke()
-        cr.move_to(cx + h * 0.8, cy)
-        cr.line_to(cx - h * 0.3, cy)
-        cr.curve_to(cx - h, cy, cx - h, cy + h * 0.5, cx - h, cy + h * 0.9)
-        cr.stroke()
-    elif kind == "chevL":
-        cr.move_to(cx + h * 0.3, cy - h * 0.5)
-        cr.line_to(cx - h * 0.3, cy)
-        cr.line_to(cx + h * 0.3, cy + h * 0.5)
-        cr.stroke()
-    elif kind == "chevR":
-        cr.move_to(cx - h * 0.3, cy - h * 0.5)
-        cr.line_to(cx + h * 0.3, cy)
-        cr.line_to(cx - h * 0.3, cy + h * 0.5)
-        cr.stroke()
-    elif kind == "chevD":
-        cr.move_to(cx - h * 0.5, cy - h * 0.25)
-        cr.line_to(cx, cy + h * 0.25)
-        cr.line_to(cx + h * 0.5, cy - h * 0.25)
-        cr.stroke()
+    cr.translate(cx - s / 2.0, cy - s / 2.0)
+    cr.scale(s / 24.0, s / 24.0)
+    cr.new_path()
+    _svg_path(cr, d)
+    cr.set_fill_rule(cairo.FILL_RULE_EVEN_ODD)
+    cr.fill()
     cr.restore()
 
 
@@ -349,7 +350,7 @@ def flow(cr, data, W, H, bscale, draw):
         gap = 0.040 * W
         x = mx + isz / 2
         for k in ["back", "archive", "spam", "trash", "mail", "snooze", "kebab"]:
-            icon(cr, k, x, ty, isz, lw * 1.7)
+            icon(cr, k, x, ty, isz)
             x += gap
         # right: "1 of N" then the prev/next nav chevrons, right-aligned.
         unread = data.get("account", {}).get("unread_count")
@@ -357,14 +358,22 @@ def flow(cr, data, W, H, bscale, draw):
             pos = layout(cr, f"1 of {unread:,}", G["small_size"] * H, color=SUB)
             pw, ph = measure(pos)
             redge = ix + iw
-            icon(cr, "chevR", redge - isz * 0.5, ty, isz, lw * 1.7, col=FAINT)
-            icon(cr, "chevL", redge - isz * 1.7, ty, isz, lw * 1.7, col=FAINT)
+            icon(cr, "chevR", redge - isz * 0.5, ty, isz, col=FAINT)
+            icon(cr, "chevL", redge - isz * 1.7, ty, isz, col=FAINT)
             show(cr, pos, redge - isz * 2.4 - pw, ty - ph / 2)
 
     # --- subject + label chip (fixed) -------------------------------------
+    # The subject is fixed-size chrome, but a long one is shrunk just enough to
+    # stay within two lines (down to a floor) rather than pushing the sender row
+    # down the page.
     y = G["subject_y"] * H
-    sub = layout(cr, subject, G["subject_size"] * H, w=iw - 0.18 * W,
-                 weight="Medium", color=INK, lead=1.14)
+    subw = iw - 0.18 * W
+    ssize = G["subject_size"] * H
+    sfloor = ssize * 0.70
+    sub = layout(cr, subject, ssize, w=subw, weight="Medium", color=INK, lead=1.14)
+    while sub[0].get_line_count() > 2 and ssize > sfloor:
+        ssize *= 0.94
+        sub = layout(cr, subject, ssize, w=subw, weight="Medium", color=INK, lead=1.14)
     sh = measure(sub)[1]
     if draw:
         show(cr, sub, ix, y)
@@ -381,25 +390,67 @@ def flow(cr, data, W, H, bscale, draw):
     # --- sender row (fixed) -----------------------------------------------
     av = G["avatar"] * H
     if draw:
-        acol = sender.get("avatar_color")
-        if acol:
-            acol = tuple(int(acol.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4))
-        else:
-            acol = CLAY
-        cr.arc(ix + av / 2, y + av / 2, av / 2, 0, 2 * math.pi)
-        cr.set_source_rgb(*acol)
-        cr.fill()
-        initial = sender.get("avatar_initial") or sender["name"].strip()[:1].upper()
-        ini = layout(cr, initial, av * 0.52, color=WHITE, weight="Medium")
-        iw2, ih2 = measure(ini)
-        show(cr, ini, ix + av / 2 - iw2 / 2, y + av / 2 - ih2 / 2)
+        # avatar: a supplied logo/photo clipped to the disc, else a coloured disc
+        # with the sender's initial
+        img_path = sender.get("avatar_image")
+        avatar_drawn = False
+        if img_path and os.path.exists(img_path):
+            try:
+                side = max(1, int(round(av)))
+                pim = Image.open(img_path).convert("RGB").resize((side, side))
+                pim.putalpha(255)                       # opaque: ARGB32 premult == straight
+                buf = bytearray(pim.tobytes("raw", "BGRA"))
+                isurf = cairo.ImageSurface.create_for_data(
+                    buf, cairo.FORMAT_ARGB32, side, side, side * 4)
+                cr.save()
+                cr.arc(ix + av / 2, y + av / 2, av / 2, 0, 2 * math.pi)
+                cr.clip()
+                cr.set_source_surface(isurf, ix, y)
+                cr.paint()
+                cr.restore()
+                avatar_drawn = True
+            except Exception:
+                avatar_drawn = False
+        if not avatar_drawn:
+            acol = sender.get("avatar_color")
+            if acol:
+                acol = tuple(int(acol.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4))
+            else:
+                acol = CLAY
+            cr.arc(ix + av / 2, y + av / 2, av / 2, 0, 2 * math.pi)
+            cr.set_source_rgb(*acol)
+            cr.fill()
+            initial = sender.get("avatar_initial") or sender["name"].strip()[:1].upper()
+            ini = layout(cr, initial, av * 0.52, color=WHITE, weight="Medium")
+            iw2, ih2 = measure(ini)
+            show(cr, ini, ix + av / 2 - iw2 / 2, y + av / 2 - ih2 / 2)
 
+        # right-hand meta first, so name/address know where they must stop
+        ts = data.get("timestamp", "")
+        if ts:
+            tsl = layout(cr, ts, G["small_size"] * H, color=SUB)
+            tslw = measure(tsl)[0]
+            show(cr, tsl, ix + iw - tslw - 0.10 * W, y + av * 0.10)
+            mright = ix + iw - tslw - 0.10 * W
+        else:
+            mright = ix + iw - 0.090 * W
+        mright -= 0.015 * W                              # gap before the right meta
+        icon(cr, "star", ix + iw - 0.066 * W, y + av * 0.30, 0.022 * H, col=FAINT)
+        icon(cr, "reply", ix + iw - 0.030 * W, y + av * 0.30, 0.022 * H, col=ICONG)
+
+        # name (bold) then <address> (grey), each ellipsised so a long name or
+        # email never runs into the meta on the right
         nx = ix + av + 0.022 * W
-        name = layout(cr, sender["name"], G["meta_size"] * H, weight="Bold", color=INK)
+        msize = G["meta_size"] * H
+        avail = max(0.0, mright - nx)
+        name = ellip_layout(cr, sender["name"], msize, avail * 0.62, color=INK, weight="Bold")
         nw = measure(name)[0]
         show(cr, name, nx, y + av * 0.06)
-        addr = layout(cr, f"  <{sender['email']}>", G["meta_size"] * H, color=SUB)
-        show(cr, addr, nx + nw, y + av * 0.08)
+        addr_avail = mright - (nx + nw)
+        if addr_avail > 0.05 * W:
+            addr = ellip_layout(cr, f"  <{sender['email']}>", msize, addr_avail, color=SUB)
+            show(cr, addr, nx + nw, y + av * 0.08)
+
         to_label = data.get("recipient", {}).get("to_label")
         if not to_label:
             # The artefact is the recipient's own inbox view, so the forensic
@@ -408,15 +459,7 @@ def flow(cr, data, W, H, bscale, draw):
         tol = layout(cr, to_label + "  ", G["small_size"] * H, color=SUB)
         tw = measure(tol)[0]
         show(cr, tol, nx, y + av * 0.52)
-        icon(cr, "chevD", nx + tw + 0.004 * W, y + av * 0.62, 0.012 * H, lw * 1.5, col=SUB)
-
-        ts = data.get("timestamp", "")
-        if ts:
-            tsl = layout(cr, ts, G["small_size"] * H, color=SUB)
-            tslw = measure(tsl)[0]
-            show(cr, tsl, ix + iw - tslw - 0.10 * W, y + av * 0.10)
-        icon(cr, "star", ix + iw - 0.066 * W, y + av * 0.30, 0.020 * H, lw * 1.7, col=FAINT)
-        icon(cr, "reply", ix + iw - 0.030 * W, y + av * 0.30, 0.020 * H, lw * 1.7, col=ICONG)
+        icon(cr, "chevD", nx + tw + 0.006 * W, y + av * 0.60, 0.020 * H, col=SUB)
     y += av + 0.022 * H
     if draw:
         hairline(cr, ix, ix + iw, y, lw)
@@ -468,7 +511,7 @@ def flow(cr, data, W, H, bscale, draw):
     bh = 0.030 * H
     if draw:
         bx = ix
-        for lbl, k in [("Reply", "reply"), ("Reply all", "reply"), ("Forward", "forward")]:
+        for lbl, k in [("Reply", "reply"), ("Reply all", "replyall"), ("Forward", "forward")]:
             ll = layout(cr, lbl, G["small_size"] * H, color=SUB, weight="Medium")
             lwid = measure(ll)[0]
             bw = lwid + 0.064 * W
@@ -476,7 +519,7 @@ def flow(cr, data, W, H, bscale, draw):
             cr.set_source_rgb(*HAIR)
             cr.set_line_width(lw)
             cr.stroke()
-            icon(cr, k, bx + 0.026 * W, y + bh / 2, 0.016 * H, lw * 1.6, col=SUB)
+            icon(cr, k, bx + 0.030 * W, y + bh / 2, 0.018 * H, col=SUB)
             show(cr, ll, bx + 0.046 * W, y + bh / 2 - measure(ll)[1] / 2)
             bx += bw + 0.018 * W
     return y + bh

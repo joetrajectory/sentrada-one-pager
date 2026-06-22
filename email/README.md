@@ -85,6 +85,7 @@ fallback, so no system font install is needed. Override the font directory with
 | `sender.name` / `sender.email` | Whoever is sending. They sign the piece. Required. |
 | `sender.avatar_initial` | Optional; derived from the name if absent. |
 | `sender.avatar_color` | Optional hex for the avatar disc (defaults to Sentrada clay). |
+| `sender.avatar_image` | Optional path to a logo/photo, clipped to the avatar disc. Overrides the initial/colour disc; falls back to it if the file is missing or unreadable. |
 | `recipient.name` | Used only to set the "to" line; defaults to the forensic "to me". Override with `recipient.to_label`. |
 | `subject` | The hook. Required. |
 | `timestamp` | The time shown in the header, e.g. "09:14". Optional. |
@@ -122,11 +123,16 @@ came from:
 ## What the engine draws
 
 - **Toolbar** (back, archive, report spam, delete, mark unread, snooze, more) with
-  the "1 of N" inbox position and prev chevron on the right.
-- **Subject** in Roboto Medium with the folder label chip ("Inbox").
-- **Sender row**: a coloured avatar disc with the sender's initial, the sender name
-  in bold with `<email>` beside it, the "to me" line, the timestamp, and the star /
-  reply / controls.
+  the "1 of N" inbox position and prev/next chevrons on the right. The glyphs are the
+  real Material Symbols vectors Gmail uses, filled (even-odd), so they are pixel
+  accurate rather than approximations.
+- **Subject** in Roboto Medium with the folder label chip ("Inbox"). A long subject
+  is auto-shrunk just enough to stay within two lines (down to a floor) rather than
+  pushing the sender row down.
+- **Sender row**: a coloured avatar disc with the sender's initial (or a supplied
+  logo/photo clipped to the disc), the sender name in bold with `<email>` beside it,
+  the "to me" line, the timestamp, and the star / reply / controls. The name and
+  address ellipsise if long, so they never collide with the right-hand meta.
 - **Body**: the cold email itself, paragraphs and bullets in Roboto, with the
   sign-off in bold.
 - **The P.S.**: the ever-present postscript after the signature, the format's one

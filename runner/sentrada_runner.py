@@ -479,6 +479,9 @@ def email_engine_data(data, args, sender, config):
             "email": sender.get("sender_email", ""),
             "avatar_initial": sender_name.strip()[:1].upper() if sender_name else "S",
             "avatar_color": config.get("email_avatar_color", "#C05933"),
+            # optional sender logo/photo, clipped to the avatar disc if set
+            **({"avatar_image": sender["avatar_image"]}
+               if sender.get("avatar_image") else {}),
         },
         "recipient": {"name": args.name.split()[0] if args.name else "me"},
         "subject": str(data.get("subject", "")),
