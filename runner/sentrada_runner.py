@@ -555,10 +555,18 @@ def claymation_copy_text(clay):
     return "\n\n".join(parts)
 
 
-def grounding_check(config, research, copy_text):
-    """Return (grounded: bool, issues: list of {claim, issue})."""
+def grounding_check(config, research, copy_text, sender_facts=""):
+    """Return (grounded: bool, issues: list of {claim, issue}).
+
+    sender_facts (optional) are facts the sender may legitimately assert about
+    ITSELF: its proof points, named customers, results, and what it sells. The
+    Email is written from the sender and cites its own track record, so a claim
+    those facts support counts as supported. Left empty for newspaper/crossword,
+    whose grounding stays strictly research-only."""
     prompt = fill(load_template("prompt4b_grounding.md"),
-                  {"research": research, "copy_text": copy_text})
+                  {"research": research, "copy_text": copy_text,
+                   "sender_facts": sender_facts.strip()
+                   or "(none provided - verify every claim against the research only)"})
     _, data = cli_json(prompt, model_for(config, "p4b"))
     issues = data.get("unsupported") or []
     grounded = bool(data.get("grounded", True)) and not issues
@@ -1026,6 +1034,12 @@ def _generate_email(args, config, folder, base_values, brief, meta):
             "operational_details": brief.get("operational_details", ""),
         })
         model = model_for(config, "p4")
+        # The Email is written from the sender and cites the sender's own track
+        # record, so give the grounding gate the sender's stated facts alongside
+        # the recipient research; otherwise true proof points read as fabricated.
+        sender_facts = "\n".join(
+            f"- {x}" for x in (sender.get("company", ""), sender.get("what_they_sell", ""),
+                               sender.get("proof_points", "")) if str(x).strip())
         attempt, feedback_block = 0, ""
         while True:
             attempt += 1
@@ -1036,7 +1050,8 @@ def _generate_email(args, config, folder, base_values, brief, meta):
 
             problems = list(email_violations(data))
             print(f"[prompt 4b] factual grounding check ({model_for(config, 'p4b')})...")
-            grounded, issues = grounding_check(config, research, email_copy_text(data))
+            grounded, issues = grounding_check(config, research, email_copy_text(data),
+                                               sender_facts=sender_facts)
             problems += [f"unsupported claim \"{i.get('claim', '')}\": {i.get('issue', '')}"
                          for i in issues]
 
