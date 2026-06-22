@@ -583,8 +583,12 @@ def main():
         print(f"[fatal] deliverable withheld; wrote {quarantine} for inspection")
         sys.exit(1)
 
-    img.save(args.output, icc_profile=srgb_bytes())
-    print(f"wrote {args.output} ({W}x{H}, sRGB)")
+    save_kwargs = {"icc_profile": srgb_bytes()}
+    if args.print_dpi:
+        save_kwargs["dpi"] = (args.print_dpi, args.print_dpi)
+    img.save(args.output, **save_kwargs)
+    print(f"wrote {args.output} ({W}x{H}, sRGB"
+          + (f", {args.print_dpi} DPI)" if args.print_dpi else ")"))
 
 
 if __name__ == "__main__":

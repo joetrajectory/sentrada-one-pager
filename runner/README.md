@@ -185,7 +185,7 @@ factcheck.md         claims + sources, for your sign-off before print
 meta.json            recipient + format + sender, so qc/followup run standalone
 # newspaper:
 data.json            engine input (engine schema fields ONLY)
-<name>-<company>.png the print-ready A2 newspaper at 300 DPI
+<name>-<company>.png the print-ready A2 newspaper at 360 DPI
 # crossword:
 data.json            engine input (company_name, subtitle, min/max, seed, candidates)
 <name>-<company>.png the print-ready A2 crossword at 360 DPI

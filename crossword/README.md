@@ -47,6 +47,20 @@ standard library.
 pip install -r requirements.txt
 ```
 
+Run the engine with the Python interpreter whose PyGObject (`gi`) bindings
+match the installed Pango/Cairo. The binding is a compiled extension tied to a
+specific Python version, so if `import gi` fails with a `_gi` import error
+(often surfaced as a misleading "circular import"), you are almost certainly on
+the wrong interpreter. Check with:
+
+```bash
+python3 -c "import gi; gi.require_version('Pango','1.0'); from gi.repository import Pango"
+```
+
+If that fails, try a sibling interpreter (e.g. `python3.12 crossword.py ...`).
+The chain runner invokes the engine via `sys.executable`, so simply launch the
+runner with the interpreter that has working bindings.
+
 The fonts (Playfair Display, Lora) are the ones bundled in `../fonts`, registered
 with fontconfig at runtime, so no system font install is needed. Override the
 location with `SENTRADA_FONT_DIR`.

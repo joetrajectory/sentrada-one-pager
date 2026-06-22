@@ -308,7 +308,7 @@ def run_engine(engine_path, template_path, data_path, output_path=None, check=Fa
     if check:
         cmd.append("--check")
     if output_path:
-        cmd += ["--output", output_path, "--print-dpi", "300"]
+        cmd += ["--output", output_path, "--print-dpi", "360"]
     result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
     return result.returncode, result.stdout + result.stderr
 
@@ -517,12 +517,12 @@ def load_client_email(path):
 def run_email_engine(engine_path, data_path, output_path=None, check=False):
     """Render or validate The Email. email.py has no --template (procedural
     chrome). Same exit-code contract as the other engines: --check validates and
-    exits nonzero on FAIL; --output renders at 300 DPI."""
+    exits nonzero on FAIL; --output renders at 360 DPI."""
     cmd = [sys.executable, engine_path, "--data", data_path]
     if check:
         cmd.append("--check")
     if output_path:
-        cmd += ["--output", output_path, "--print-dpi", "300"]
+        cmd += ["--output", output_path, "--print-dpi", "360"]
     result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
     return result.returncode, result.stdout + result.stderr
 
