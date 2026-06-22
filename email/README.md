@@ -28,15 +28,28 @@ python email.py --data test_qflow.json --output qflow_email.png
 # Validate at print resolution without writing an image (gates a build)
 python email.py --data test_qflow.json --check --print-dpi 300
 
-# Render a print master: exact A2 at 300 DPI, sRGB tagged
-python email.py --data test_qflow.json --output print.png --print-dpi 300
+# Render the print master: exact A2 at 360 DPI (5953 x 8419 px), sRGB tagged
+python email.py --data test_qflow.json --output print.png --print-dpi 360
 ```
 
-`--print-dpi` renders straight to an exact A2 (420 x 594 mm) at that DPI; text is
-drawn as real glyphs at the output resolution, so sharpness comes from the render
-size. `--print-size WIDTHxHEIGHT` overrides the trim, and `--render-size` sets a
-preview size (default 1488x2105, roughly 90 DPI). Every saved file carries an
-sRGB ICC profile.
+### No template, no upscale: render straight to 360 DPI
+
+Unlike the newspaper and crossword engines, this format has **no background
+template** to create, upscale and commit. Those templates exist because their
+backgrounds are raster artwork (newsprint texture, the masthead band, the engraved
+grid) that the engine composites text onto and that must be pre-rendered at print
+size. The Email has no such artwork: every pixel is flat vector and type (white
+field, hairlines, the Material icon vectors, Roboto text), so the engine draws the
+whole piece mathematically at any resolution with no source bitmap. It is therefore
+resolution-independent by construction.
+
+The practical consequence: `--print-dpi 360` renders the final A2 master in one
+step, razor sharp, with no template and no upscaling round-trip. It produces an
+exact A2 (420 x 594 mm) at 5953 x 8419 px, every saved file tagged with both an
+sRGB ICC profile and the physical resolution (pHYs/DPI) so the print RIP reads the
+trim unambiguously. `--print-size WIDTHxHEIGHT` overrides the trim, and
+`--render-size` sets a preview size (default 1488x2105, roughly 90 DPI). The runner
+renders the master at `email_print_dpi` (default 360).
 
 ## Setup
 

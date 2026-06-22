@@ -595,7 +595,7 @@ def main():
     ap.add_argument("--check", action="store_true",
                     help="validate at the chosen size and exit non-zero on any failure")
     ap.add_argument("--print-dpi", type=int, default=None,
-                    help="render straight to an exact A2 at this DPI (e.g. 300)")
+                    help="render straight to an exact A2 at this DPI (e.g. 360)")
     ap.add_argument("--print-size", default=None, help="explicit WIDTHxHEIGHT override")
     ap.add_argument("--render-size", default=None,
                     help="WIDTHxHEIGHT for preview renders (default 1488x2105)")
@@ -618,16 +618,20 @@ def main():
         return
 
     img = surface_to_pil(surf)
+    # Declare the physical resolution so the print RIP reads the file as an exact
+    # A2 (the pixel dimensions already encode it; this makes the DPI explicit).
+    eff_dpi = round(W / (A2_MM[0] / 25.4))
+    save_kwargs = {"icc_profile": srgb_bytes(), "dpi": (eff_dpi, eff_dpi)}
     if failures:
         quarantine = os.path.splitext(args.output)[0] + ".FAILED.png"
-        img.save(quarantine, icc_profile=srgb_bytes())
+        img.save(quarantine, **save_kwargs)
         for field, msg in failures:
             print(f"  [FAIL] {field}: {msg}")
         print(f"[fatal] deliverable withheld; wrote {quarantine} for inspection")
         sys.exit(1)
 
-    img.save(args.output, icc_profile=srgb_bytes())
-    print(f"wrote {args.output} ({W}x{H}, sRGB)")
+    img.save(args.output, **save_kwargs)
+    print(f"wrote {args.output} ({W}x{H}, {eff_dpi} dpi, sRGB)")
 
 
 if __name__ == "__main__":

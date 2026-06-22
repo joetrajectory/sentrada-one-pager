@@ -27,6 +27,7 @@
   "crossword_engine": "crossword/crossword.py",
   "crossword_template": "crossword/crossword_template.png",
   "email_engine": "email/email.py",
+  "email_print_dpi": 360,
   "email_avatar_color": "#C05933",
   "email_timestamp": "09:14",
   "email_unread_count": 1284,

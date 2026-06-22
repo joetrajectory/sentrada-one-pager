@@ -517,15 +517,16 @@ def load_client_email(path):
             "body": [{"type": "p", "text": p} for p in paras]}
 
 
-def run_email_engine(engine_path, data_path, output_path=None, check=False):
-    """Render or validate The Email. email.py has no --template (procedural
-    chrome). Same exit-code contract as the other engines: --check validates and
-    exits nonzero on FAIL; --output renders at 300 DPI."""
+def run_email_engine(engine_path, data_path, output_path=None, check=False, dpi=360):
+    """Render or validate The Email. email.py has no --template (procedural,
+    fully vector/type chrome), so it renders straight to an exact A2 at the given
+    DPI with no upscale step. Same exit-code contract as the other engines:
+    --check validates and exits nonzero on FAIL; --output renders the master."""
     cmd = [sys.executable, engine_path, "--data", data_path]
     if check:
         cmd.append("--check")
     if output_path:
-        cmd += ["--output", output_path, "--print-dpi", "300"]
+        cmd += ["--output", output_path, "--print-dpi", str(dpi)]
     result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
     return result.returncode, result.stdout + result.stderr
 
@@ -1074,7 +1075,8 @@ def _generate_email(args, config, folder, base_values, brief, meta):
 
     output_path = os.path.join(folder, f"{slugify(args.name)}-{slugify(args.company)}.png")
     print("\n[engine] rendering the print-ready email...")
-    rc, out = run_email_engine(engine_path, data_path, output_path=output_path)
+    rc, out = run_email_engine(engine_path, data_path, output_path=output_path,
+                               dpi=config.get("email_print_dpi", 360))
     print(out.strip())
     if rc != 0 or not os.path.exists(output_path):
         die("the email render failed (see engine output above).")
