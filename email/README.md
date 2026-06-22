@@ -89,6 +89,7 @@ fallback, so no system font install is needed. Override the font directory with
 | `subject` | The hook. Required. |
 | `timestamp` | The time shown in the header, e.g. "09:14". Optional. |
 | `body[]` | Ordered blocks: `p` (paragraph), `bullet`, or `signature` (`lines: [...]`). The signature is best last. |
+| `postscript` | The ever-present P.S.: the format's single wink, rendered after the signature. The one line that acknowledges the email has been printed at A2 and hand delivered, not left in an inbox. Optional here; the runner injects a house default so every send has one. |
 
 Punctuation is normalised to typographic forms at render time (curly quotes,
 ellipsis). The engine never manufactures an em dash (house rule). House copy
@@ -121,6 +122,8 @@ came from:
   reply / controls.
 - **Body**: the cold email itself, paragraphs and bullets in Roboto, with the
   sign-off in bold.
+- **The P.S.**: the ever-present postscript after the signature, the format's one
+  acknowledgement that this email was printed at A2 and hand delivered.
 - **Action pills**: Reply, Reply all, Forward.
 
 ## Pre-render check

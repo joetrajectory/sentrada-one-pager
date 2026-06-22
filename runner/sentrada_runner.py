@@ -485,6 +485,14 @@ def email_engine_data(data, args, sender, config):
         "timestamp": data.get("timestamp", config.get("email_timestamp", "09:14")),
         "label": "Inbox",
         "body": body,
+        # The ever-present P.S. is a house device of this format: the single
+        # acknowledgement that the email has been printed at A2 and hand
+        # delivered rather than left in an inbox. A tailored postscript in the
+        # copy overrides it; otherwise the house line is always present.
+        "postscript": data.get("postscript") or config.get(
+            "email_postscript",
+            "I had this printed at A2 and delivered to your desk, rather than "
+            "sent as one more email you would never open."),
     }
 
 

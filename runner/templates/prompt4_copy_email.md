@@ -88,6 +88,15 @@ METRIC FRAMING RULE: If the company publishes a number as an achievement, lead w
 it in their framing, then name the gap it does not close. Never invert a published
 positive into its negative.
 
+## The postscript (do not write it into the body)
+
+The piece carries one ever-present P.S. after the sign-off, acknowledging that the
+email has been printed at A2 and hand delivered rather than left in an inbox. The
+engine adds this house line automatically, so it must NOT appear in your body. Keep
+the body and sign-off entirely sincere; the wink lives only in the P.S. If you have a
+genuinely better, recipient-specific postscript, supply it as a top-level
+`"postscript"` string, but never put the printing gag inside the email itself.
+
 ## Subject line
 
 One subject line, under 90 characters, in the same sincere register as the body:

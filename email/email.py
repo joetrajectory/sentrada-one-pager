@@ -425,6 +425,18 @@ def render(data, W, H, check=False):
                 lay = layout(cr, line, bs, color=col, weight=wt, lead=1.3)
                 y += show(cr, lay, ix, y)[1] + bs * 0.12
 
+    # --- the ever-present P.S.: the format's one wink, placed after a wholly
+    # sincere email so it lands without undercutting the body. This is to The
+    # Email what the unsolvable clue is to the crossword: a signature device.
+    ps = data.get("postscript")
+    if ps:
+        ps = typographic(str(ps).strip())
+        if not ps.lower().startswith("p.s"):
+            ps = "P.S. " + ps
+        y += 0.016 * H
+        lay = layout(cr, ps, bs, w=iw, color=INK, lead=G["line_lead"])
+        y += show(cr, lay, ix, y)[1] + 0.017 * H
+
     # --- reply / forward action pills ------------------------------------
     y += 0.026 * H
     bx = ix
