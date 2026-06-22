@@ -404,6 +404,122 @@ def run_crossword_engine(engine_path, template_path, data_path, output_path=None
     return result.returncode, result.stdout + result.stderr
 
 
+# --- The Email gates and engine --------------------------------------------
+# Parallel to the newspaper/crossword helpers. email.py has NO template image
+# (the Gmail chrome is drawn procedurally), so its run helper omits --template.
+# Two copy sources: authored (P4 writes the cold email from the brief) or
+# client-supplied (rendered verbatim, fit-checked only). Both feed one schema.
+
+def email_copy_text(data):
+    """The text fed to the factual-grounding gate: subject, every body block,
+    and the sign-off, so P4b can verify each claim against the research."""
+    parts = ["SUBJECT: " + str(data.get("subject", ""))]
+    for b in (data.get("body") or []):
+        if b.get("type") == "signature":
+            lines = b.get("lines") or [x for x in (b.get("name"), b.get("detail")) if x]
+            parts.append("SIGN-OFF: " + " / ".join(lines))
+        else:
+            parts.append(str(b.get("text", "")))
+    return "\n".join(parts)
+
+
+def email_violations(data):
+    """Structural + house-style gate on the P4 email output: a subject, a body of
+    p/bullet/signature blocks signed off, no em dashes, no exclamation marks, and
+    a rough word budget before the engine's exact fit --check. Authored copy only;
+    client copy is rendered verbatim. Mirrors newspaper/crossword_violations."""
+    v = []
+    subject = str(data.get("subject", "")).strip()
+    if not subject:
+        v.append("the email has no subject.")
+    elif len(subject) > 90:
+        v.append(f"subject is {len(subject)} characters; keep it under 90 so it does "
+                 f"not wrap awkwardly in the header.")
+    body = data.get("body") or []
+    if not body:
+        v.append("the email body is empty.")
+    paras = [b for b in body if b.get("type") in (None, "p", "bullet", "li")]
+    if len(paras) < 2:
+        v.append("the body needs at least two paragraphs of real copy.")
+    if not any(b.get("type") == "signature" for b in body):
+        v.append("the email has no signature block (the sender must sign off).")
+    text = email_copy_text(data)
+    if "—" in text or "--" in text or " - " in text:
+        v.append("remove em dashes and spaced hyphens (house rule: no em dashes).")
+    if "!" in text:
+        v.append("remove exclamation marks (house rule: no exclamation marks in "
+                 "professional copy).")
+    words = sum(len(str(b.get("text", "")).split()) for b in body)
+    if words > 230:
+        v.append(f"the email is ~{words} words; trim to about 200 so it fills the A2 "
+                 f"without overflowing.")
+    return v
+
+
+def email_engine_data(data, args, sender, config):
+    """Assemble the engine's --data from the email copy plus the sender identity
+    (config) and recipient (args). The sender signs the piece, so name/email/
+    avatar always come from config, never from the model."""
+    sender_name = sender.get("sender_name") or sender.get("company", "Sentrada")
+    body = []
+    for b in (data.get("body") or []):
+        t = b.get("type", "p")
+        if t == "signature":
+            lines = b.get("lines") or [x for x in (b.get("name"), b.get("detail")) if x]
+            body.append({"type": "signature", "lines": lines})
+        elif t in ("bullet", "li"):
+            body.append({"type": "bullet", "text": str(b.get("text", ""))})
+        else:
+            body.append({"type": "p", "text": str(b.get("text", ""))})
+    return {
+        "copy_source": data.get("copy_source", "authored"),
+        "account": {"unread_count": config.get("email_unread_count", 1284)},
+        "sender": {
+            "name": sender_name,
+            "email": sender.get("sender_email", ""),
+            "avatar_initial": sender_name.strip()[:1].upper() if sender_name else "S",
+            "avatar_color": config.get("email_avatar_color", "#C05933"),
+        },
+        "recipient": {"name": args.name.split()[0] if args.name else "me"},
+        "subject": str(data.get("subject", "")),
+        "timestamp": data.get("timestamp", config.get("email_timestamp", "09:14")),
+        "label": "Inbox",
+        "body": body,
+    }
+
+
+def load_client_email(path):
+    """Load a client-supplied email. A .json file is used as the copy (subject +
+    body blocks). A plain-text file is split on blank lines into paragraphs, with
+    an optional 'Subject:' first line. Either way copy_source is 'client'."""
+    raw = read_file(path)
+    if path.lower().endswith(".json"):
+        d = json.loads(raw)
+        d["copy_source"] = "client"
+        return d
+    lines = raw.strip().split("\n")
+    subject = ""
+    if lines and lines[0].lower().startswith("subject:"):
+        subject = lines[0].split(":", 1)[1].strip()
+        lines = lines[1:]
+    paras = [p.strip() for p in "\n".join(lines).split("\n\n") if p.strip()]
+    return {"copy_source": "client", "subject": subject,
+            "body": [{"type": "p", "text": p} for p in paras]}
+
+
+def run_email_engine(engine_path, data_path, output_path=None, check=False):
+    """Render or validate The Email. email.py has no --template (procedural
+    chrome). Same exit-code contract as the other engines: --check validates and
+    exits nonzero on FAIL; --output renders at 300 DPI."""
+    cmd = [sys.executable, engine_path, "--data", data_path]
+    if check:
+        cmd.append("--check")
+    if output_path:
+        cmd += ["--output", output_path, "--print-dpi", "300"]
+    result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
+    return result.returncode, result.stdout + result.stderr
+
+
 # --- Factual grounding gate (text, not vision) -----------------------------
 # Catches fabricated/contradicted claims in the copy before a render exists.
 # More reliable than the post-render vision review for verifying text claims.
@@ -485,7 +601,8 @@ def _build_base_values(args, sender, research, fmt):
         "booking_link": sender.get("booking_link", ""),
         "sender_name": sender.get("sender_name", ""),
         "format": {"newspaper": "Newspaper Front Page",
-                   "crossword": "Crossword"}.get(fmt, "Claymation Scene"),
+                   "crossword": "Crossword",
+                   "email": "The Email"}.get(fmt, "Claymation Scene"),
     }
 
 
@@ -520,6 +637,8 @@ def _continue_after_brief(args, config, folder, base_values, brief, sender):
         _generate_newspaper(args, config, folder, base_values, brief, meta)
     elif fmt == "crossword":
         _generate_crossword(args, config, folder, base_values, brief, meta)
+    elif fmt == "email":
+        _generate_email(args, config, folder, base_values, brief, meta)
     else:
         _generate_claymation(args, config, folder, base_values, brief, meta)
 
@@ -533,8 +652,8 @@ def cmd_generate(args):
     config = load_config(args.config)
     sender = config["sender"]
     fmt = args.format.lower()
-    if fmt not in ("newspaper", "claymation", "crossword"):
-        die("format must be 'newspaper', 'claymation', or 'crossword'.")
+    if fmt not in ("newspaper", "claymation", "crossword", "email"):
+        die("format must be 'newspaper', 'claymation', 'crossword', or 'email'.")
 
     slug = f"{slugify(args.name)}-{slugify(args.company)}"
     folder = os.path.join(PIECES_DIR, slug)
@@ -849,6 +968,115 @@ def _generate_crossword(args, config, folder, base_values, brief, meta):
           "sign-off before print.")
     # A real rendered image exists, so the shared QC + follow-up chain runs now,
     # exactly as it does for newspaper.
+    delivery_date = getattr(args, "delivery_date", "") or "to be confirmed on delivery"
+    run_chain_after_render(config, folder, output_path, delivery_date)
+
+
+def _generate_email(args, config, folder, base_values, brief, meta):
+    """The Email path. Two sources. Authored: P4 writes the cold email from the
+    brief, then the structural/house-style gate, the factual-grounding gate and
+    the engine fit --check run (up to three attempts, feeding failures back like
+    crossword). Client-supplied (--email-copy): rendered verbatim, fit-checked
+    only, no house-rule lint and no grounding. Both feed the same engine and the
+    shared P6 -> P6B -> P7 chain. Nothing here touches the other format paths."""
+    research = base_values["research"]
+    sender = config["sender"]
+    data_path = os.path.join(folder, "data.json")
+    engine_path = os.path.join(REPO_ROOT, config.get("email_engine", "email/email.py"))
+    if not os.path.exists(engine_path):
+        die(f"email engine not found at {engine_path}. Place email/email.py in the "
+            f"repo or set 'email_engine' in config.json.")
+
+    client_copy = getattr(args, "email_copy", "") or ""
+    if client_copy:
+        if not os.path.exists(client_copy):
+            die(f"--email-copy file not found: {client_copy}")
+        data = load_client_email(client_copy)
+        if not str(data.get("subject", "")).strip() or not data.get("body"):
+            die("the client email needs a subject and a non-empty body. For a plain "
+                "text file, put 'Subject: ...' on the first line and separate "
+                "paragraphs with blank lines, or supply a JSON file.")
+        engine_data = email_engine_data(data, args, sender, config)
+        write_file(data_path, json.dumps(engine_data, indent=2))
+        write_file(os.path.join(folder, "copy.md"),
+                   "Client-supplied email, rendered verbatim.")
+        write_file(os.path.join(folder, "factcheck.md"),
+                   "Client-supplied copy: not fact-checked by the runner. The client "
+                   "owns its claims.")
+        print("[engine] running --check on data.json (fit at print size)...")
+        rc, out = run_email_engine(engine_path, data_path, check=True)
+        print(out.strip())
+        if rc != 0:
+            die("the client email overflows the A2 at print size. Ask the client to "
+                "shorten it; the engine never squeezes copy.")
+    else:
+        template = load_template("prompt4_copy_email.md")
+        brief_values = dict(base_values, **{
+            "core_problem": brief.get("core_problem", ""),
+            "key_metric": brief.get("key_metric", ""),
+            "environment": brief.get("environment", ""),
+            "moment": brief.get("moment", ""),
+            "problem_label": brief.get("problem_label", ""),
+            "operational_details": brief.get("operational_details", ""),
+        })
+        model = model_for(config, "p4")
+        attempt, feedback_block = 0, ""
+        while True:
+            attempt += 1
+            prompt = fill(template, dict(brief_values, feedback_block=feedback_block))
+            print(f"\n[prompt 4] writing the cold email ({model}, attempt {attempt})...")
+            reply, data = cli_json(prompt, model)
+            copy_part, factcheck = split_factcheck(reply)
+
+            problems = list(email_violations(data))
+            print(f"[prompt 4b] factual grounding check ({model_for(config, 'p4b')})...")
+            grounded, issues = grounding_check(config, research, email_copy_text(data))
+            problems += [f"unsupported claim \"{i.get('claim', '')}\": {i.get('issue', '')}"
+                         for i in issues]
+
+            if not problems:
+                engine_data = email_engine_data(data, args, sender, config)
+                write_file(data_path, json.dumps(engine_data, indent=2))
+                print("[engine] running --check on data.json (fit at print size)...")
+                rc, out = run_email_engine(engine_path, data_path, check=True)
+                print(out.strip())
+                if rc == 0:
+                    break
+                fails = [ln.strip() for ln in out.splitlines() if "[FAIL]" in ln] \
+                    or ["fit check failed"]
+                problems = ["the layout --check failed: " + f for f in fails]
+                problems.append("Shorten the body so it fits the A2 at print size.")
+
+            if attempt >= 3:
+                die("Prompt 4 email failed the gates after 3 attempts (structure, "
+                    "house style, factual grounding, and/or fit):\n  - "
+                    + "\n  - ".join(problems))
+            print("[gate] issues found, rerunning Prompt 4:")
+            for x in problems:
+                print(f"  - {x}")
+            feedback_block = ("YOUR PREVIOUS DRAFT FAILED THESE HARD CHECKS. Fix every one "
+                              "and keep everything else. Any 'unsupported claim' is a fact "
+                              "the research does not support: cut it or replace it with one "
+                              "the research supports.\n- " + "\n- ".join(problems))
+
+        write_file(os.path.join(folder, "copy.md"), copy_part)
+        write_file(os.path.join(folder, "factcheck.md"), factcheck or "(none returned)")
+
+    output_path = os.path.join(folder, f"{slugify(args.name)}-{slugify(args.company)}.png")
+    print("\n[engine] rendering the print-ready email...")
+    rc, out = run_email_engine(engine_path, data_path, output_path=output_path)
+    print(out.strip())
+    if rc != 0 or not os.path.exists(output_path):
+        die("the email render failed (see engine output above).")
+
+    final = json.loads(read_file(data_path))
+    meta["piece_reference"] = (f'a cold email printed at A2, subject '
+                               f'"{final.get("subject", "")}"')
+    write_file(os.path.join(folder, "meta.json"), json.dumps(meta, indent=2))
+
+    print(f"\n[rendered] {os.path.relpath(output_path, REPO_ROOT)}")
+    print("[fact check] runner/.../factcheck.md holds the copy claims for your "
+          "sign-off before print.")
     delivery_date = getattr(args, "delivery_date", "") or "to be confirmed on delivery"
     run_chain_after_render(config, folder, output_path, delivery_date)
 
@@ -1324,7 +1552,11 @@ def main():
     g.add_argument("--name", required=True, help="recipient full name")
     g.add_argument("--title", required=True, help="recipient job title")
     g.add_argument("--company", required=True, help="recipient company")
-    g.add_argument("--format", required=True, help="newspaper, claymation, or crossword")
+    g.add_argument("--format", required=True,
+                   help="newspaper, claymation, crossword, or email")
+    g.add_argument("--email-copy", default="",
+                   help="email format only: path to a client-supplied email "
+                        "(JSON or .txt) to render verbatim instead of writing copy")
     g.add_argument("--research", help="path to the pasted research file (required unless --resume)")
     g.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     g.add_argument("--brief-only", action="store_true",

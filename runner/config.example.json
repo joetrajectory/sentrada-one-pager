@@ -5,6 +5,7 @@
     "proof_points": "Founding pilot now open. Leave blank or describe real proof points; do not invent results.",
     "booking_link": "https://sentrada.io",
     "sender_name": "Joe Bloggs",
+    "sender_email": "joe@sentrada.io",
     "problems": [
       "First sender problem the recipient's company plausibly has, in plain language.",
       "Second sender problem.",
@@ -22,5 +23,11 @@
   },
   "vision_backend": "cli",
   "engine": "newspaper/newspaper.py",
-  "newspaper_template": "newspaper/Newspaper Template - Upscaled - 25mb.jpg"
+  "newspaper_template": "newspaper/Newspaper Template - Upscaled - 25mb.jpg",
+  "crossword_engine": "crossword/crossword.py",
+  "crossword_template": "crossword/crossword_template.png",
+  "email_engine": "email/email.py",
+  "email_avatar_color": "#C05933",
+  "email_timestamp": "09:14",
+  "email_unread_count": 1284
 }

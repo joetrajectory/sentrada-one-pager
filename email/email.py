@@ -73,7 +73,7 @@ S = Pango.SCALE
 A2_MM = (420.0, 594.0)
 DEFAULT_SIZE = (1488, 2105)  # ~90 dpi preview; use --print-dpi for print masters
 
-SANS = "Inter"  # Gmail ships Roboto/Arial; Inter is the closest face we bundle
+SANS = "Roboto"  # Gmail's actual UI/body face, bundled in ./fonts for fidelity
 
 # Forensic Gmail palette
 WHITE = (1.0, 1.0, 1.0)
@@ -123,7 +123,9 @@ def typographic(s):
     sender's words otherwise untouched."""
     if not s:
         return s
-    s = s.replace("--", "—").replace("...", "…")
+    # No "--" -> em dash conversion: the house rule forbids em dashes, so the
+    # engine must never manufacture one. Only ellipsis and curly quotes.
+    s = s.replace("...", "…")
     s = s.replace("'", "’")
     # straight double quotes -> curly, naive but adequate for body copy
     out, open_q = [], True

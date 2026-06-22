@@ -63,6 +63,7 @@ Does the image match the selected format's visual rules?
 - If Newspaper: broadsheet layout, headline style, column structure, realistic newsprint feel
 - If Claymation Scene: handcrafted clay figures with visible fingerprints, miniature set from real materials, warm studio lighting, shallow depth of field, no laptops (use wall boards instead), recurring motif of colleague arriving through door with bad news
 - If Board Game (parked but may be used for individual sends): photorealistic board game, winding path with mostly blank squares and 6-7 event squares, real game pieces, no illustrated characters inside squares
+- If The Email: forensic Gmail reading pane filling the sheet edge to edge (no surrounding app grey), a real subject line, sender row with avatar, the body legible as an actual email, and the Reply/Reply all/Forward controls. The chrome must read as a genuine screenshot, not a designed poster. The body must read as a brilliant hand-written cold email: specific to this company, dryly self-aware, with a clear research flex and a concrete CTA. Judge the narrative arc in the copy (attention earned, research proven, the noticed gap named, a specific ask), exactly as for Newspaper. It is text by design and must NOT fail for being visually static. FAIL if the copy could have been sent to any company, if it mocks the recipient, or if the chrome looks fake or off
 - PASS: Matches the format's visual rules
 - FAIL: Deviates significantly from format expectations. Specify what's wrong.
 

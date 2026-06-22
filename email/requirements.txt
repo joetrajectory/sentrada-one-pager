@@ -1,0 +1,8 @@
+# Python dependencies for "The Email" layout engine.
+# Same stack as the newspaper and crossword engines (see ../newspaper/setup.sh
+# for the system libraries: Pango, Cairo, fontconfig, gobject-introspection).
+# Install with: pip install -r requirements.txt
+pycairo>=1.26
+PyGObject>=3.50
+Pillow>=10.0
+# No OpenCV: there is no template image to detect, the chrome is procedural.

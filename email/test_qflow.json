@@ -2,25 +2,21 @@
   "copy_source": "authored",
   "account": { "unread_count": 1284 },
   "sender": {
-    "name": "Joe",
-    "email": "joe@sentrada.io",
-    "avatar_initial": "J",
-    "avatar_color": "#C05933"
+    "name": "Brittany",
+    "email": "brittany@qualisflow.com",
+    "avatar_initial": "B",
+    "avatar_color": "#2E7D5B"
   },
-  "recipient": { "name": "James" },
-  "subject": "We printed this so you’d actually read it",
-  "timestamp": "09:14",
+  "recipient": { "name": "Leo" },
+  "subject": "Protecting your 3%+ margin: the as-built truth layer",
+  "timestamp": "08:32",
   "label": "Inbox",
   "body": [
-    { "type": "p", "text": "Hi James," },
-    { "type": "p", "text": "This is a cold email. You can tell, because it is sitting on your desk at A2 rather than in the folder where the other ones quietly go to die." },
-    { "type": "p", "text": "Making it impossible to ignore is the easy part. Earning the next sixty seconds is the part we take seriously, so here is what we actually wanted to say." },
-    { "type": "p", "text": "We spent some time on Qflow. A few things stood out:" },
-    { "type": "bullet", "text": "Your first tier-one pour was logged before you had finished arguing about the logo." },
-    { "type": "bullet", "text": "One of your audit trails settled a site dispute in four minutes. The industry tends to measure that in weeks." },
-    { "type": "bullet", "text": "You have logged more deliveries before 9 a.m. than most platforms manage in a day." },
-    { "type": "p", "text": "Which brings us to what we actually noticed. There is a gap between what arrives on site and what gets recorded, and at your volumes it is large enough to be worth a short conversation." },
-    { "type": "p", "text": "I have put the Qflow numbers into a one-page view. Fifteen minutes on Thursday and I will walk you through it. If it is not useful, keep the A2 and I will leave you alone." },
-    { "type": "signature", "lines": ["Joe", "Sentrada"] }
+    { "type": "p", "text": "Leo," },
+    { "type": "p", "text": "I understand your Build to Last strategy depends on Lean and Trusted delivery, improving predictability, reducing waste and protecting your 3%+ construction margin. I also understand that rework and unverifiable site data still drive a large share of cost volatility." },
+    { "type": "p", "text": "For these reasons, I thought you’d want to know about a way to provide your teams with an as-built truth layer that removes the 5–11% of materials budget typically lost each project." },
+    { "type": "p", "text": "This would support margin stability whilst directly advancing the Lean and Trusted pillars by reducing waste, strengthening bid discipline and giving earlier, cleaner signals on cost and programme risk." },
+    { "type": "p", "text": "If you see value in hearing how Tier-1 contractors like Bouygues are applying this as-built truth layer to improve financial performance on complex projects, just let me know." },
+    { "type": "signature", "lines": ["Best regards,", "Brittany"] }
   ]
 }

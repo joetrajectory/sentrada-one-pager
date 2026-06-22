@@ -74,16 +74,19 @@ Data flows via JSON files in /pipeline/{campaign-id}/. Each step reads the previ
 Use Opus for: research-agent, review-agent, format-agent (complex reasoning)
 Use Sonnet for: brief-agent, copy-agent, prompt-agent, followup-agent (structured tasks)
 
-## Format library (4 launch formats, v8.0 - all A2 on foam core)
+## Format library (5 launch formats, v9.0 - all A2 on foam core)
 
-Authority tier: Newspaper Front Page (validated)
-Humour/Recognition tier: Board Game (their industry as a custom board game, photorealistic, most keepable)
-Humour/Warmth tier: Claymation Scene (stop-motion Aardman style, most versatile, signature Sentrada aesthetic)
+Authority tier: Newspaper Front Page (validated, engine-rendered)
+Engagement/Keepability tier: Crossword (their company as an A2 crossword with one near-unsolvable clue that prompts a reply, engine-rendered)
+Humour/Recognition tier: The Email (a cold email enlarged to A2 as a forensic Gmail screenshot; the brand thesis made physical, engine-rendered, no image gen)
+Humour/Warmth tier: Claymation Scene (stop-motion Aardman style, most versatile, signature Sentrada aesthetic, image gen)
 Impact tier: Postcard from the Future (validated for image gen, positive frame)
+
+Engine-rendered formats (Newspaper, Crossword, The Email) define their visual rules in code (the layout engine), not an image-gen Layer A module, and never pass through image generation. The text-from-code formats are immune to the AI garbled-text failure mode.
 
 All formats printed at A2 (594 x 420mm) on foam core (5-6mm, rigid, self-standing).
 Retired: Cartoon (too close to Heinecke's signature format, replaced by Claymation and Board Game)
-Parked: Horoscope (visually stunning, conversion mechanism uncertain)
+Parked: Board Game (built and functional but not yet sellable; engine in /boardgame), Horoscope (visually stunning, conversion mechanism uncertain), Encyclopaedia entry (on the potentials list)
 Future candidates: Magazine Cover, Vintage Ad Parody, Book Cover, Vintage Travel Poster
 
 Each format has a Layer A module in .claude/skills/{format-name}/SKILL.md
