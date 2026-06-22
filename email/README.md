@@ -96,10 +96,17 @@ ellipsis). The engine never manufactures an em dash (house rule). House copy
 rules (British English, no em dashes, no exclamation marks) apply to our authored
 copy; client-supplied copy is rendered verbatim.
 
-**Copy is immutable.** The engine never truncates or squeezes text to fit. If the
-body overflows the sheet at the chosen size, that is a hard `--check` failure for
-P4 (or the client) to shorten, never an edit. On a normal render an overflow
-withholds the deliverable and writes a `*.FAILED.png` for inspection.
+**The body auto-sizes to fill the sheet.** A short email grows to command the A2,
+a long one shrinks to fit, like the newspaper engine sizing copy to its zone. Only
+the body, signature and P.S. (and their spacing) scale; the Gmail chrome (toolbar,
+subject, sender row, action pills) stays fixed, as it does in a real client. The
+engine searches for the largest body size whose content reaches the fill target
+without overrunning, between `BODY_SCALE_MIN` and `BODY_SCALE_MAX`.
+
+**Copy is immutable.** The engine never truncates or squeezes text to fit. If an
+email is too long to fit even at the minimum body size, that is a hard `--check`
+failure for P4 (or the client) to shorten, never an edit. On a normal render the
+overflow withholds the deliverable and writes a `*.FAILED.png` for inspection.
 
 ## Two copy sources
 

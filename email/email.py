@@ -317,158 +317,198 @@ def build_blocks(data):
     return out
 
 
-def render(data, W, H, check=False):
-    """Draw the artefact at (W, H). Returns (cairo.Surface, failures[])."""
-    surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, W, H)
-    cr = cairo.Context(surf)
-    cr.set_source_rgb(*WHITE)
-    cr.paint()
+# The body auto-sizes to fill the sheet: a short email grows to command the A2, a
+# long one shrinks to fit. Only the body/signature/P.S. and their spacing scale;
+# the Gmail chrome (toolbar, subject, sender row, action pills) stays fixed, as it
+# is in a real client. The search aims the content bottom at FILL_TARGET; an email
+# too long to fit even at BODY_SCALE_MIN is a hard overflow failure (copy is never
+# squeezed, only flagged for shortening).
+BODY_SCALE_MIN, BODY_SCALE_MAX = 0.60, 1.45
+FILL_TARGET = 0.94
+HARD_LIMIT = 0.97
 
-    failures = []
+
+def flow(cr, data, W, H, bscale, draw):
+    """Lay the artefact out with the body at scale `bscale`. With draw=False no
+    marks are made (measurement only) and the y of the content bottom is returned,
+    so the caller can search for the scale that best fills the sheet."""
     mx = G["margin_x"] * W
     ix, iw = mx, W - 2 * mx
     lw = max(1.0, G["hairline"] * H)
-
     sender = data["sender"]
     subject = typographic(data["subject"])
     blocks = build_blocks(data)
 
-    # --- toolbar ----------------------------------------------------------
-    ty = G["toolbar_y"] * H
-    isz = 0.020 * H
-    gap = 0.040 * W
-    x = mx + isz / 2
-    for k in ["back", "archive", "spam", "trash", "mail", "snooze", "kebab"]:
-        icon(cr, k, x, ty, isz, lw * 1.7)
-        x += gap
-    # right: "1 of N" then the prev/next nav chevrons, right-aligned to the
-    # content edge (Gmail order: count, then < >). Laid out left of each other
-    # so nothing overlaps the digits.
-    unread = data.get("account", {}).get("unread_count")
-    if unread:
-        pos = layout(cr, f"1 of {unread:,}", G["small_size"] * H, color=SUB)
-        pw, ph = measure(pos)
-        redge = ix + iw
-        icon(cr, "chevR", redge - isz * 0.5, ty, isz, lw * 1.7, col=FAINT)
-        icon(cr, "chevL", redge - isz * 1.7, ty, isz, lw * 1.7, col=FAINT)
-        show(cr, pos, redge - isz * 2.4 - pw, ty - ph / 2)
+    if draw:
+        cr.set_source_rgb(*WHITE)
+        cr.paint()
 
-    # --- subject + label chip --------------------------------------------
+        # --- toolbar (fixed) ----------------------------------------------
+        ty = G["toolbar_y"] * H
+        isz = 0.020 * H
+        gap = 0.040 * W
+        x = mx + isz / 2
+        for k in ["back", "archive", "spam", "trash", "mail", "snooze", "kebab"]:
+            icon(cr, k, x, ty, isz, lw * 1.7)
+            x += gap
+        # right: "1 of N" then the prev/next nav chevrons, right-aligned.
+        unread = data.get("account", {}).get("unread_count")
+        if unread:
+            pos = layout(cr, f"1 of {unread:,}", G["small_size"] * H, color=SUB)
+            pw, ph = measure(pos)
+            redge = ix + iw
+            icon(cr, "chevR", redge - isz * 0.5, ty, isz, lw * 1.7, col=FAINT)
+            icon(cr, "chevL", redge - isz * 1.7, ty, isz, lw * 1.7, col=FAINT)
+            show(cr, pos, redge - isz * 2.4 - pw, ty - ph / 2)
+
+    # --- subject + label chip (fixed) -------------------------------------
     y = G["subject_y"] * H
     sub = layout(cr, subject, G["subject_size"] * H, w=iw - 0.18 * W,
                  weight="Medium", color=INK, lead=1.14)
-    sh = show(cr, sub, ix, y)[1]
-    label = data.get("label", "Inbox")
-    chip = layout(cr, label, G["small_size"] * H, color=SUB, weight="Medium")
-    cw = measure(chip)[0]
-    ch = measure(chip)[1]
-    pad = 0.014 * W
-    rrect(cr, ix + iw - cw - 2 * pad, y + sh * 0.12, cw + 2 * pad, ch + pad, 0.006 * H)
-    cr.set_source_rgb(*CHIP)
-    cr.fill()
-    show(cr, chip, ix + iw - cw - pad, y + sh * 0.12 + pad / 2)
+    sh = measure(sub)[1]
+    if draw:
+        show(cr, sub, ix, y)
+        label = data.get("label", "Inbox")
+        chip = layout(cr, label, G["small_size"] * H, color=SUB, weight="Medium")
+        cw, chh = measure(chip)
+        pad = 0.014 * W
+        rrect(cr, ix + iw - cw - 2 * pad, y + sh * 0.12, cw + 2 * pad, chh + pad, 0.006 * H)
+        cr.set_source_rgb(*CHIP)
+        cr.fill()
+        show(cr, chip, ix + iw - cw - pad, y + sh * 0.12 + pad / 2)
     y += sh + 0.034 * H
 
-    # --- sender row -------------------------------------------------------
+    # --- sender row (fixed) -----------------------------------------------
     av = G["avatar"] * H
-    acol = sender.get("avatar_color")
-    if acol:
-        acol = tuple(int(acol.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4))
-    else:
-        acol = CLAY
-    cr.arc(ix + av / 2, y + av / 2, av / 2, 0, 2 * math.pi)
-    cr.set_source_rgb(*acol)
-    cr.fill()
-    initial = sender.get("avatar_initial") or sender["name"].strip()[:1].upper()
-    ini = layout(cr, initial, av * 0.52, color=WHITE, weight="Medium")
-    iw2, ih2 = measure(ini)
-    show(cr, ini, ix + av / 2 - iw2 / 2, y + av / 2 - ih2 / 2)
+    if draw:
+        acol = sender.get("avatar_color")
+        if acol:
+            acol = tuple(int(acol.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4))
+        else:
+            acol = CLAY
+        cr.arc(ix + av / 2, y + av / 2, av / 2, 0, 2 * math.pi)
+        cr.set_source_rgb(*acol)
+        cr.fill()
+        initial = sender.get("avatar_initial") or sender["name"].strip()[:1].upper()
+        ini = layout(cr, initial, av * 0.52, color=WHITE, weight="Medium")
+        iw2, ih2 = measure(ini)
+        show(cr, ini, ix + av / 2 - iw2 / 2, y + av / 2 - ih2 / 2)
 
-    nx = ix + av + 0.022 * W
-    name = layout(cr, sender["name"], G["meta_size"] * H, weight="Bold", color=INK)
-    nw = measure(name)[0]
-    show(cr, name, nx, y + av * 0.06)
-    addr = layout(cr, f"  <{sender['email']}>", G["meta_size"] * H, color=SUB)
-    show(cr, addr, nx + nw, y + av * 0.08)
-    to_label = data.get("recipient", {}).get("to_label")
-    if not to_label:
-        # The artefact is the recipient's own inbox view, so the forensic
-        # default is "to me" (what Gmail actually shows them), not their name.
-        to_label = "to me"
-    tol = layout(cr, to_label + "  ", G["small_size"] * H, color=SUB)
-    tw = measure(tol)[0]
-    show(cr, tol, nx, y + av * 0.52)
-    icon(cr, "chevD", nx + tw + 0.004 * W, y + av * 0.62, 0.012 * H, lw * 1.5, col=SUB)
+        nx = ix + av + 0.022 * W
+        name = layout(cr, sender["name"], G["meta_size"] * H, weight="Bold", color=INK)
+        nw = measure(name)[0]
+        show(cr, name, nx, y + av * 0.06)
+        addr = layout(cr, f"  <{sender['email']}>", G["meta_size"] * H, color=SUB)
+        show(cr, addr, nx + nw, y + av * 0.08)
+        to_label = data.get("recipient", {}).get("to_label")
+        if not to_label:
+            # The artefact is the recipient's own inbox view, so the forensic
+            # default is "to me" (what Gmail actually shows them), not their name.
+            to_label = "to me"
+        tol = layout(cr, to_label + "  ", G["small_size"] * H, color=SUB)
+        tw = measure(tol)[0]
+        show(cr, tol, nx, y + av * 0.52)
+        icon(cr, "chevD", nx + tw + 0.004 * W, y + av * 0.62, 0.012 * H, lw * 1.5, col=SUB)
 
-    # right meta: timestamp, star, reply, kebab
-    ts = data.get("timestamp", "")
-    if ts:
-        tsl = layout(cr, ts, G["small_size"] * H, color=SUB)
-        tslw = measure(tsl)[0]
-        show(cr, tsl, ix + iw - tslw - 0.10 * W, y + av * 0.10)
-    icon(cr, "star", ix + iw - 0.066 * W, y + av * 0.30, 0.020 * H, lw * 1.7, col=FAINT)
-    icon(cr, "reply", ix + iw - 0.030 * W, y + av * 0.30, 0.020 * H, lw * 1.7, col=ICONG)
+        ts = data.get("timestamp", "")
+        if ts:
+            tsl = layout(cr, ts, G["small_size"] * H, color=SUB)
+            tslw = measure(tsl)[0]
+            show(cr, tsl, ix + iw - tslw - 0.10 * W, y + av * 0.10)
+        icon(cr, "star", ix + iw - 0.066 * W, y + av * 0.30, 0.020 * H, lw * 1.7, col=FAINT)
+        icon(cr, "reply", ix + iw - 0.030 * W, y + av * 0.30, 0.020 * H, lw * 1.7, col=ICONG)
     y += av + 0.022 * H
-    hairline(cr, ix, ix + iw, y, lw)
+    if draw:
+        hairline(cr, ix, ix + iw, y, lw)
     y += 0.030 * H
 
-    # --- body -------------------------------------------------------------
-    bs = G["body_size"] * H
+    # --- body (auto-scaled) -----------------------------------------------
+    bs = G["body_size"] * H * bscale
+    pg = G["para_gap"] * H * bscale
     for kind, payload in blocks:
         if kind == "p":
             lay = layout(cr, payload, bs, w=iw, color=INK, lead=G["line_lead"])
-            y += show(cr, lay, ix, y)[1] + G["para_gap"] * H
+            if draw:
+                show(cr, lay, ix, y)
+            y += measure(lay)[1] + pg
         elif kind == "bullet":
-            cr.save()
-            cr.set_source_rgb(*INK)
-            cr.arc(ix + bs * 0.32, y + bs * 0.78, bs * 0.13, 0, 2 * math.pi)
-            cr.fill()
-            cr.restore()
             lay = layout(cr, payload, bs, w=iw - bs * 1.4, color=INK, lead=G["line_lead"])
-            y += show(cr, lay, ix + bs * 1.4, y)[1] + 0.011 * H
+            if draw:
+                cr.save()
+                cr.set_source_rgb(*INK)
+                cr.arc(ix + bs * 0.32, y + bs * 0.78, bs * 0.13, 0, 2 * math.pi)
+                cr.fill()
+                cr.restore()
+                show(cr, lay, ix + bs * 1.4, y)
+            y += measure(lay)[1] + 0.011 * H * bscale
         elif kind == "sig":
-            y += 0.013 * H
+            y += 0.013 * H * bscale
             for i, line in enumerate(payload):
                 col = INK if i == 0 else SUB
                 wt = "Bold" if i == 0 else None
                 lay = layout(cr, line, bs, color=col, weight=wt, lead=1.3)
-                y += show(cr, lay, ix, y)[1] + bs * 0.12
+                if draw:
+                    show(cr, lay, ix, y)
+                y += measure(lay)[1] + bs * 0.12
 
-    # --- the ever-present P.S.: the format's one wink, placed after a wholly
-    # sincere email so it lands without undercutting the body. This is to The
-    # Email what the unsolvable clue is to the crossword: a signature device.
+    # --- the ever-present P.S.: the format's one wink (auto-scaled) --------
     ps = data.get("postscript")
     if ps:
         ps = typographic(str(ps).strip())
         if not ps.lower().startswith("p.s"):
             ps = "P.S. " + ps
-        y += 0.016 * H
+        y += 0.016 * H * bscale
         lay = layout(cr, ps, bs, w=iw, color=INK, lead=G["line_lead"])
-        y += show(cr, lay, ix, y)[1] + 0.017 * H
+        if draw:
+            show(cr, lay, ix, y)
+        y += measure(lay)[1] + 0.017 * H * bscale
 
-    # --- reply / forward action pills ------------------------------------
+    # --- reply / forward action pills (fixed) -----------------------------
     y += 0.026 * H
-    bx = ix
     bh = 0.030 * H
-    for lbl, k in [("Reply", "reply"), ("Reply all", "reply"), ("Forward", "forward")]:
-        ll = layout(cr, lbl, G["small_size"] * H, color=SUB, weight="Medium")
-        lwid = measure(ll)[0]
-        bw = lwid + 0.064 * W
-        rrect(cr, bx, y, bw, bh, bh / 2)
-        cr.set_source_rgb(*HAIR)
-        cr.set_line_width(lw)
-        cr.stroke()
-        icon(cr, k, bx + 0.026 * W, y + bh / 2, 0.016 * H, lw * 1.6, col=SUB)
-        show(cr, ll, bx + 0.046 * W, y + bh / 2 - measure(ll)[1] / 2)
-        bx += bw + 0.018 * W
+    if draw:
+        bx = ix
+        for lbl, k in [("Reply", "reply"), ("Reply all", "reply"), ("Forward", "forward")]:
+            ll = layout(cr, lbl, G["small_size"] * H, color=SUB, weight="Medium")
+            lwid = measure(ll)[0]
+            bw = lwid + 0.064 * W
+            rrect(cr, bx, y, bw, bh, bh / 2)
+            cr.set_source_rgb(*HAIR)
+            cr.set_line_width(lw)
+            cr.stroke()
+            icon(cr, k, bx + 0.026 * W, y + bh / 2, 0.016 * H, lw * 1.6, col=SUB)
+            show(cr, ll, bx + 0.046 * W, y + bh / 2 - measure(ll)[1] / 2)
+            bx += bw + 0.018 * W
+    return y + bh
 
-    # immutable-copy guard: did the content overrun the sheet?
-    bottom_limit = H * 0.97
-    if y + bh > bottom_limit:
-        failures.append(("body", f"content overflows the sheet "
-                                 f"(reaches {int(y + bh)}px of {int(bottom_limit)}px). "
-                                 f"Shorten the email; the engine never squeezes copy."))
 
+def render(data, W, H, check=False):
+    """Draw the artefact at (W, H), auto-sizing the body to fill the sheet.
+    Returns (cairo.Surface, failures[])."""
+    surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, W, H)
+    cr = cairo.Context(surf)
+
+    target = H * FILL_TARGET
+    lo, hi = BODY_SCALE_MIN, BODY_SCALE_MAX
+    if flow(cr, data, W, H, lo, draw=False) > target:
+        scale = lo                       # even smallest body overruns the target
+    elif flow(cr, data, W, H, hi, draw=False) <= target:
+        scale = hi                       # even largest body underfills: cap it
+    else:
+        for _ in range(28):              # largest scale whose bottom <= target
+            mid = (lo + hi) / 2
+            if flow(cr, data, W, H, mid, draw=False) <= target:
+                lo = mid
+            else:
+                hi = mid
+        scale = lo
+
+    bottom = flow(cr, data, W, H, scale, draw=True)
+    failures = []
+    if bottom > H * HARD_LIMIT:
+        failures.append(("body", f"content overflows the sheet even at the minimum "
+                         f"text size (reaches {int(bottom)}px of {int(H * HARD_LIMIT)}px). "
+                         f"Shorten the email; the engine never squeezes copy."))
     return surf, failures
 
 
