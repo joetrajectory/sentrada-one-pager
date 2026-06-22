@@ -442,11 +442,11 @@ def flow(cr, data, W, H, bscale, draw):
                 show(cr, lay, ix + bs * 1.4, y)
             y += measure(lay)[1] + 0.011 * H * bscale
         elif kind == "sig":
+            # A typed sign-off is plain body text, not a designed block: same
+            # ink and weight as the body, no bold on "Best regards,".
             y += 0.013 * H * bscale
-            for i, line in enumerate(payload):
-                col = INK if i == 0 else SUB
-                wt = "Bold" if i == 0 else None
-                lay = layout(cr, line, bs, color=col, weight=wt, lead=1.3)
+            for line in payload:
+                lay = layout(cr, line, bs, color=INK, lead=1.3)
                 if draw:
                     show(cr, lay, ix, y)
                 y += measure(lay)[1] + bs * 0.12
