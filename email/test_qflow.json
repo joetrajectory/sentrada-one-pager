@@ -1,0 +1,23 @@
+{
+  "copy_source": "authored",
+  "account": { "unread_count": 1284 },
+  "sender": {
+    "name": "Brittany",
+    "email": "brittany@qualisflow.com",
+    "avatar_initial": "B",
+    "avatar_color": "#2E7D5B"
+  },
+  "recipient": { "name": "Leo" },
+  "subject": "Protecting your 3%+ margin: the as-built truth layer",
+  "timestamp": "08:32",
+  "label": "Inbox",
+  "body": [
+    { "type": "p", "text": "Leo," },
+    { "type": "p", "text": "I understand your Build to Last strategy depends on Lean and Trusted delivery, improving predictability, reducing waste and protecting your 3%+ construction margin. I also understand that rework and unverifiable site data still drive a large share of cost volatility." },
+    { "type": "p", "text": "For these reasons, I thought you’d want to know about a way to provide your teams with an as-built truth layer that removes the 5–11% of materials budget typically lost each project." },
+    { "type": "p", "text": "This would support margin stability whilst directly advancing the Lean and Trusted pillars by reducing waste, strengthening bid discipline and giving earlier, cleaner signals on cost and programme risk." },
+    { "type": "p", "text": "If you see value in hearing how Tier-1 contractors like Bouygues are applying this as-built truth layer to improve financial performance on complex projects, just let me know." },
+    { "type": "signature", "lines": ["Best regards,", "Brittany"] }
+  ],
+  "postscript": "Yes, I printed an email at A2 and had it delivered to your desk."
+}
