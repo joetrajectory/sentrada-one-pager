@@ -303,12 +303,12 @@ def engine_data_only(data):
     return {k: data[k] for k in ENGINE_FIELDS if k in data and data[k] not in (None, "")}
 
 
-def run_engine(engine_path, template_path, data_path, output_path=None, check=False):
+def run_engine(engine_path, template_path, data_path, output_path=None, check=False, dpi=360):
     cmd = [sys.executable, engine_path, "--template", template_path, "--data", data_path]
     if check:
         cmd.append("--check")
     if output_path:
-        cmd += ["--output", output_path, "--print-dpi", "300"]
+        cmd += ["--output", output_path, "--print-dpi", str(dpi)]
     result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
     return result.returncode, result.stdout + result.stderr
 
@@ -391,15 +391,16 @@ def crossword_engine_data(data, company, config):
     }
 
 
-def run_crossword_engine(engine_path, template_path, data_path, output_path=None, check=False):
+def run_crossword_engine(engine_path, template_path, data_path, output_path=None,
+                         check=False, dpi=360):
     """Render or validate the crossword. crossword.py mirrors newspaper.py:
     --check validates (and exits nonzero on FAIL) without writing output;
-    --output renders at 300 DPI. Same exit-code contract as the newspaper engine."""
+    --output renders the master at the given DPI. Same exit-code contract."""
     cmd = [sys.executable, engine_path, "--template", template_path, "--data", data_path]
     if check:
         cmd.append("--check")
     if output_path:
-        cmd += ["--output", output_path, "--print-dpi", "300"]
+        cmd += ["--output", output_path, "--print-dpi", str(dpi)]
     result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
     return result.returncode, result.stdout + result.stderr
 
@@ -787,7 +788,8 @@ def _generate_newspaper(args, config, folder, base_values, brief, meta):
 
     output_path = os.path.join(folder, f"{slugify(args.name)}-{slugify(args.company)}.png")
     print("\n[engine] rendering the print-ready newspaper...")
-    rc, out = run_engine(engine_path, template_path, data_path, output_path=output_path)
+    rc, out = run_engine(engine_path, template_path, data_path, output_path=output_path,
+                         dpi=config.get("print_dpi", 360))
     print(out.strip())
     if rc != 0 or not os.path.exists(output_path):
         die("the render failed (see engine output above). A *.FAILED file may have "
@@ -965,7 +967,8 @@ def _generate_crossword(args, config, folder, base_values, brief, meta):
     print("\n[engine] rendering the print-ready crossword "
           f"(placing {engine_data['min_words']}-{engine_data['max_words']} of "
           f"{len(engine_data['candidates'])} candidates)...")
-    rc, out = run_crossword_engine(engine_path, template_path, data_path, output_path=output_path)
+    rc, out = run_crossword_engine(engine_path, template_path, data_path, output_path=output_path,
+                                   dpi=config.get("print_dpi", 360))
     print(out.strip())
     if rc != 0 or not os.path.exists(output_path):
         die("the crossword render failed (see engine output above).")
