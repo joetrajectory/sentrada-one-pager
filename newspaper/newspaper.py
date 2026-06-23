@@ -506,10 +506,20 @@ def render_masthead(cr, ctx, data):
     def folio_total(s):  # both lines plus a minimum separating gap
         return measure(folio_layout(edition, s))[0] + 0.04 * ctx["W"] + measure(folio_layout(date, s))[0]
 
+    # The edition line is left-aligned and must clear the baked vertical rail rule
+    # (the date sits to its right, past the rule, where there is no rule to hit).
+    # Constrain the shared folio size so the edition text ends before the rule;
+    # without this, a long dateline overruns and "BERLIN" lands on the rule.
+    rail_rule_x = cfg["rail_boundary_x"] * ctx["W"]
+    edition_max_w = rail_rule_x - margin - cfg["col_pad_frac"] * ctx["W"]
+
+    def folio_fits(s):
+        return (measure(folio_layout(edition, s))[0] <= edition_max_w
+                and folio_total(s) <= content_w)
+
     folio_size = sub_size
-    if folio_total(sub_size) > content_w:
-        folio_size, _ = largest_fitting(
-            lambda s: folio_total(s) <= content_w, 0.0060 * H, sub_size)
+    if not folio_fits(sub_size):
+        folio_size, _ = largest_fitting(folio_fits, 0.0060 * H, sub_size)
 
     el = folio_layout(edition, folio_size)
     dl = folio_layout(date, folio_size)
@@ -522,6 +532,10 @@ def render_masthead(cr, ctx, data):
     baseline_y = line_y + max(el_asc, dl_asc)
     draw_layout(cr, el, margin, baseline_y - el_asc, ink)
     draw_layout(cr, dl, right_edge - dw, baseline_y - dl_asc, ink)
+    # Record the edition's right edge so run_checks can guard against any future
+    # overrun across the rail rule.
+    ctx["edition_right_x"] = margin + measure(el)[0]
+    ctx["rail_rule_x"] = rail_rule_x
 
     # The headline chains off the bottom of this row.
     ctx["edition_bottom"] = max(baseline_y - el_asc + measure(el)[1],
@@ -1457,6 +1471,9 @@ def run_checks(ctx, data, cfg):
     fr, st = ctx.get("folio_rule"), ctx.get("statbox_top")
     if fr and st is not None and st <= fr[2]:
         add("fail", "stat box", "stat box top sits at or above the folio rule")
+    er, rr = ctx.get("edition_right_x"), ctx.get("rail_rule_x")
+    if er is not None and rr is not None and er > rr - 1:
+        add("fail", "edition_line", "edition/dateline overruns the vertical rail rule")
     tops, feet, rules = ctx.get("sidebar_tops", []), ctx.get("sidebar_feet", []), ctx.get("sidebar_rules", [])
     for i, (_, _, ry) in enumerate(rules):       # rule i divides story i and i+1
         if i < len(feet) and feet[i] > ry + 1:
