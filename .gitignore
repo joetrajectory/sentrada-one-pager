@@ -9,9 +9,10 @@ node_modules/
 # addresses — keep out of git so it is never pushed to a remote).
 research/
 
-# Chain runner: generated per-piece output and the filled-in config (secrets/profile)
+# Chain runner: generated per-piece output is not tracked. runner/config.json IS
+# tracked so a fresh session always has the sender profile. Keep it secret-free:
+# no API keys or tokens (the runner authenticates via the logged-in Claude CLI).
 runner/pieces/
-runner/config.json
 __pycache__/
 *.pyc
 

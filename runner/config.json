@@ -1,0 +1,36 @@
+{
+  "sender": {
+    "sender_name": "Joe Chapman",
+    "company": "Sentrada",
+    "what_they_sell": "Executive response generation. Deep-researched, one-of-one physical pieces (A2 newspaper front pages and claymation scenes) printed on rigid foam board, packaged in premium boxes, and delivered to senior B2B buyers' desks. The piece earns attention, the follow-up converts it.",
+    "proof_points": "Responses from CEOs of Starbucks, L'Oreal, and Danone. Meeting with CEO of VINCI Construction. 10 years of enterprise outbound experience. First client doubled their order from 10 to 20 pieces before anything shipped.",
+    "booking_link": "https://sentrada.io",
+    "problems": [
+      "Enterprise pipeline is unpredictable because outbound to senior buyers has stopped working: email response rates are collapsing, cold calls don't reach C-suite, and the accounts that matter most are the hardest to engage",
+      "Sales teams are sending more volume with less result: AI has made personalised email easy to send and impossible to notice, so the highest-value accounts get buried in noise alongside everyone else",
+      "No-decision drag on enterprise deals: even when meetings happen, the lack of a memorable first impression means deals stall because the buyer has no emotional anchor to the relationship"
+    ],
+    "sender_email": "joe@sentrada.io"
+  },
+  "models": {
+    "p2": "opus",
+    "p4": "opus",
+    "p4b": "opus",
+    "p7": "sonnet",
+    "p6": "opus",
+    "p6b": "opus"
+  },
+  "vision_backend": "cli",
+  "engine": "newspaper/newspaper.py",
+  "newspaper_template": "newspaper/Newspaper Template - Upscaled - 25mb.jpg",
+  "crossword_engine": "crossword/crossword.py",
+  "crossword_template": "crossword/Blank crossword template 25mb - upscaled.jpg",
+  "crossword_min_words": 15,
+  "crossword_max_words": 20,
+  "crossword_seed": 42,
+  "email_engine": "email/email.py",
+  "email_avatar_color": "#C05933",
+  "email_timestamp": "09:14",
+  "email_unread_count": 1284,
+  "email_postscript": "Yes, I printed an email at A2 and had it delivered to your desk."
+}
