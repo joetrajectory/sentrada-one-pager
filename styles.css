@@ -867,7 +867,7 @@ section {
   .cta { width: 100%; padding: 16px 22px; }
   .invitation-cta .cta.inline-cta { width: 100%; }
   /* Hide the hero CTA on mobile - sticky bottom CTA covers it */
-  .hero-text .cta-row { display: none; }
+  .hero-text .cta-row { display: none !important; }
   .footer { flex-direction: column; align-items: flex-start; }
 
   .pullquote p { font-size: clamp(28px, 7vw, 40px); max-width: 18ch; }
