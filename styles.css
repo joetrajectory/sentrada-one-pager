@@ -401,6 +401,8 @@ section {
   margin: 0;
   max-width: 42ch;
 }
+.piece-body + .piece-body { margin-top: 14px; }
+.piece-best { font-style: italic; color: var(--stone); }
 .companion {
   max-width: 80ch;
   margin: clamp(40px, 5vw, 64px) auto 0;
