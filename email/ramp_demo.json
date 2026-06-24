@@ -1,0 +1,24 @@
+{
+  "copy_source": "authored",
+  "account": { "unread_count": 1843 },
+  "sender": {
+    "name": "Sentrada",
+    "email": "hello@sentrada.io",
+    "avatar_initial": "S",
+    "avatar_color": "#C05933"
+  },
+  "recipient": { "name": "Colin" },
+  "subject": "The CFOs your enterprise number now depends on",
+  "timestamp": "07:52",
+  "label": "Inbox",
+  "body": [
+    { "type": "p", "text": "Colin," },
+    { "type": "p", "text": "Ramp went from a $13bn valuation in March 2025 to $44bn this month, and the part of that story that has to keep working is the enterprise one: 2,200-plus customers now spending over $100k a year with you, a cohort that grew 133% in twelve months. The next 2,200 are harder. They sit one rung up, with the kind of enterprise CFO who has an assistant, a procurement process, and a very full inbox." },
+    { "type": "p", "text": "That CFO is the one buyer your outbound engine cannot reach. Not because the engine is weak. It is the best in the category. It is because a cold email to someone at that level is now read by software, sorted, and never seen by them." },
+    { "type": "p", "text": "So I did the opposite of sending one. I researched this, printed it at A2, and had it couriered to your desk. You are reading it because it is the only piece of outreach on your desk this week, rather than the four hundredth in a folder." },
+    { "type": "p", "text": "That is what Sentrada does: one researched, physical artefact, built for one person at a time, that earns the meeting your sequence could not. For the handful of enterprise logos that decide your next valuation, one desk at a time is the right unit." },
+    { "type": "p", "text": "If you would like to see the piece we would build for Ramp's ten most wanted accounts, just say the word." },
+    { "type": "signature", "lines": ["Best regards,", "Joe"] }
+  ],
+  "postscript": "Yes, I printed an email at A2 and had it delivered to your desk."
+}
