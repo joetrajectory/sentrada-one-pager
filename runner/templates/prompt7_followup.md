@@ -124,17 +124,18 @@ Touch 3 must use the Reserve research detail and must not reuse the key metric o
 
 ### Companion card (goes in the box, finalised before print)
 
-A6, sits inside the packaging alongside the piece. It bridges the reveal to a conversation. It reads like a note from a person, not a pitch from a company. First person ("I", not "we"), conversational British English. 4-6 sentences.
+A6, sits inside the packaging alongside the piece. It bridges the reveal to a conversation. It reads like a note from a person, not a pitch from a company. First person ("I", not "we"), conversational British English. Opens with the recipient's first name, then 4-6 sentences.
 
 If the sender has indicated they will write their own card, skip this section and note: "Sender will provide custom companion card copy." (This is the default for founder-led sends.)
 
 Otherwise, structure:
 
-1. Reference the piece and the question it raises ("The [format] in this box was built around one question: [core problem as a question]").
-2. One sentence making the bespoke nature explicit, so the recipient understands it was researched and built only for them and could not have been sent to anyone else (Customisation Communication Test).
-3. The frame, set per the 6B reframe. Position the sender as 6B's highest-leverage change dictates. For enterprise targets, connect the opening question to a stated strategic priority or active initiative the recipient already cares about and has budget for, not just the generic problem. One credibility signal or single most-relevant proof point only, never a list.
-4. A soft close that hands off to the follow-up rather than carrying the hardest ask, reframed per the CTA rule where the recipient is an influencer not a buyer. Signal that a follow-up will come ("I'll follow up by email later this week in case this is easier to action from your inbox").
-5. Sign off with the sender's full name. The recipient must know exactly who sent this.
+1. Open with the recipient's first name followed by a comma, on its own line (e.g. "Chris,"), then a blank line. The card is a personal note and must address them by name. Never start with "The [format] in this box" before the salutation.
+2. Reference the piece and the question it raises ("The [format] in this box was built around one question: [core problem as a question]").
+3. One sentence making the bespoke nature explicit, so the recipient understands it was researched and built only for them and could not have been sent to anyone else (Customisation Communication Test).
+4. The frame, set per the 6B reframe. Position the sender as 6B's highest-leverage change dictates. For enterprise targets, connect the opening question to a stated strategic priority or active initiative the recipient already cares about and has budget for, not just the generic problem. One credibility signal or single most-relevant proof point only, never a list.
+5. A soft close that hands off to the follow-up rather than carrying the hardest ask, reframed per the CTA rule where the recipient is an influencer not a buyer. Signal that a follow-up will come ("I'll follow up by email later this week in case this is easier to action from your inbox").
+6. Sign off with the sender's full name. The recipient must know exactly who sent this.
 
 The card does not lead on the same hook the follow-up will use. It sets the frame and reveals the sender. The follow-up deploys the specific 6B craft hook.
 
