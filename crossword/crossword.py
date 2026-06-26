@@ -109,6 +109,8 @@ CONFIG = {
     "title_tracking": 0.012,     # letterspacing as a fraction of title size
     "title_subtitle_gap": 0.018, # title baseline -> subtitle
     "size_subtitle": 0.0150,     # subtitle size, fraction of height
+    "size_subtitle_min": 0.0105, # shrink floor: below this the subtitle check FAILs
+    "subtitle_max_lines": 2,     # a long subtitle may wrap to at most this many lines
     # Grid --------------------------------------------------------------------
     "grid_top": 0.168,           # reserved grid rectangle, top (clear of the subtitle)...
     "grid_bottom": 0.648,        # ...and bottom (centre the square grid within). The
@@ -198,6 +200,16 @@ def measure(layout):
     return layout.get_pixel_size()
 
 
+def max_line_width(layout):
+    """Widest single line in a (possibly wrapped) layout, in px. Used to verify a
+    centred, width-constrained layout actually fits its box on every line."""
+    widest = 0
+    for i in range(layout.get_line_count()):
+        _ink, logical = layout.get_line_readonly(i).get_pixel_extents()
+        widest = max(widest, logical.width)
+    return widest
+
+
 def largest_fitting(feasible, lo, hi, iters=34):
     """Largest value in [lo, hi] for which feasible(value) is True, assuming
     feasible is monotone. Used to size text to fill a zone without overflowing."""
@@ -270,16 +282,51 @@ def render_title(cr, ctx, data):
     draw_layout(cr, layout, x, y, ink)
     title_bottom = title_top + r.height
 
-    # Subtitle, centred beneath the title (measured natural width, centred by
-    # hand, exactly like the title, so it never picks up a stray alignment skew).
+    # Subtitle, centred beneath the title, FIT to the content width the same way
+    # the title fits to width: try the configured size, wrap to at most
+    # subtitle_max_lines, and shrink the font until it fits. A constrained,
+    # centre-aligned layout (with char-level wrap as a last resort) means a long
+    # subtitle can never shear off the page margins the way an unconstrained
+    # single line did. The pre-render check (run_checks) FAILs if it still cannot
+    # fit at the minimum size, rather than shipping a clipped piece.
     subtitle = smarten(data.get("subtitle") or "How well do you know your own company?")
+    content_w = (1.0 - 2.0 * cfg["margin_x"]) * W
+    max_lines = cfg["subtitle_max_lines"]
     sl = make_layout(cr)
-    set_font(sl, cfg["font_subtitle"], cfg["size_subtitle"] * H)
-    sl.set_text(subtitle, -1)
+    sl.set_width(int(round(content_w * SCALE)))
+    sl.set_alignment(Pango.Alignment.CENTER)
+    sl.set_wrap(Pango.WrapMode.WORD_CHAR)   # break a word only as a last resort; never clip
+
+    def lay_subtitle(size):
+        set_font(sl, cfg["font_subtitle"], size)
+        sl.set_text(subtitle, -1)
+        return sl.get_line_count(), max_line_width(sl)
+
+    def fits_at(size):
+        lines, widest = lay_subtitle(size)
+        return lines <= max_lines and widest <= content_w + 1.0
+
+    size, _ = largest_fitting(fits_at, cfg["size_subtitle_min"] * H, cfg["size_subtitle"] * H)
+    n_lines, widest = lay_subtitle(size)        # re-lay at the chosen size
     sw, sh = measure(sl)
     sy = title_bottom + cfg["title_subtitle_gap"] * H
-    draw_layout(cr, sl, (W - sw) / 2.0, sy, ink)
-    ctx["header_bottom"] = sy + sh
+    # The box is content_w wide with centre alignment, so draw at the content-box
+    # left edge and let Pango centre each line within it.
+    draw_layout(cr, sl, (W - content_w) / 2.0, sy, ink)
+    header_bottom = sy + sh
+    ctx["header_bottom"] = header_bottom
+
+    # Hand the fit result to run_checks: too long to fit in max_lines at the
+    # minimum size, or a wrapped subtitle that intrudes into the grid reserve.
+    grid_top = cfg["grid_top"] * H
+    ctx["subtitle_fit"] = {
+        "fits": n_lines <= max_lines and widest <= content_w + 1.0
+                and header_bottom <= grid_top + 1.0,
+        "lines": n_lines,
+        "max_lines": max_lines,
+        "overflow_px": max(0.0, widest - content_w),
+        "collides_grid": header_bottom > grid_top + 1.0,
+    }
 
 
 def compute_grid_geometry(ctx, gridres):
@@ -707,6 +754,17 @@ def run_checks(ctx, gridres, cfg):
     # Designated heroes that could not be anchored into the grid.
     for a in (gridres.get("anchors_missing") or []):
         add("fail", "anchor", f"designated anchor '{a}' could not be placed in the grid")
+    sf = ctx.get("subtitle_fit")
+    if sf and not sf["fits"]:
+        if sf["collides_grid"]:
+            add("fail", "subtitle",
+                f"subtitle wraps to {sf['lines']} lines and intrudes into the grid reserve; "
+                "shorten the subtitle")
+        else:
+            add("fail", "subtitle",
+                f"subtitle does not fit the content width within {sf['max_lines']} lines even at "
+                f"the minimum size ({sf['lines']} lines, {sf['overflow_px']:.0f}px over); "
+                "shorten the subtitle")
     if ctx.get("clues_fit") is False:
         add("fail", "clues", "clues do not fit the two columns at the minimum size")
     sep = ctx.get("separator")
