@@ -7,13 +7,13 @@ lines, tightened copy. First-name salutation throughout.
 
 Chris,
 
-Your outbound engine converts at 11.3% across 449,933 calls, and the 'Fluent in Data' pivot now rests on reaching CROs, CDOs and VPs whose phones are gatekept and whose inboxes bury even good email. The cold email in this box is built around the gap that leaves: what channel still reaches them?
+Your outbound engine converts at 11.3% across 449,933 calls, and the 'Fluent in Data' pivot now rests on reaching CROs, CDOs and VPs whose phones are gatekept and whose inboxes bury even good email. The cold email in this box asks the obvious question: what channel still reaches them?
 
-Every figure in it is from Cognism's own published research. There is no version of this piece that works without your rebrand, your enterprise bet and the meeting-channel ceiling your own reports name, which is the point. It could only have been made for you.
+Every figure in it is from Cognism's own published research. There is no version of it that works without your rebrand, your enterprise bet and the meeting-channel ceiling your own reports name. It could only have been made for you.
 
-I run Sentrada. We build one-of-one physical pieces for revenue teams chasing the senior buyers that calls and email no longer reach. The last conversation I had that opened like this one was with the CEO of VINCI Construction.
+I run Sentrada. We build one-of-one physical pieces for revenue teams chasing the senior buyers that calls and email no longer reach. My last conversation that opened like this one was with the CEO of VINCI Construction.
 
-I'll follow up by email in the next couple of days, with something specific enough to be worth your time.
+I'll follow up by email in the next couple of days.
 
 Joe Chapman
 Sentrada
@@ -79,9 +79,9 @@ Your ExecLeaders and Summit programmes put you in front of the most senior UK an
 
 Every element of it was researched for you alone, from the Gold at the B2B Marketing Awards to the gap in the headline and the line you gave in 2021. None of it would make sense addressed to anyone else.
 
-Sentrada builds one-of-one physical pieces for teams that need an attributable channel to named executives, for the stretches when email cannot tell your best work apart from automated noise. The CEOs of Starbucks, L'Oréal and Danone have replied to pieces built this way.
+Sentrada builds one-of-one physical pieces for teams that need an attributable channel to named executives, for the weeks when email cannot tell your best work from automated noise. The CEOs of Starbucks, L'Oréal and Danone have replied to pieces built this way.
 
-I'll follow up by email over the next day or two, in case it is easier to action from your inbox.
+I'll follow up by email over the next day or two.
 
 Joe Chapman
 Sentrada
