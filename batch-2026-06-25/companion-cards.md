@@ -28,7 +28,7 @@ The seed-bomb worked because it was brave. The German customs fine was the price
 
 Every detail in it came from your own posts: the grenade campaign, the customs run-in, Nick's "bold and brave" line, your own read on where email is heading. It could not have been assembled for anyone else.
 
-What Sentrada does is turn that instinct into a channel: researched and built one piece at a time, for one named buyer, without the customs exposure.
+What Sentrada does is turn that instinct into a channel: researched and built one piece at a time, for one named buyer, without the customs exposure. Pieces built this way have drawn replies from the CEOs of Starbucks, L'Oréal and Danone.
 
 I'll follow up by email in the next day or two, in case it's easier from your inbox.
 
@@ -62,7 +62,7 @@ Your programme already shows more than $70M influenced. The crossword in this bo
 
 Every answer in the grid came from your own words: your November session at the Global ABM Conference, your post on the best ABM team you ever worked with, the buyer personas in Workhuman's own job specs. It could not have gone to anyone else.
 
-Sentrada makes pieces like this one, for exactly the meeting a LinkedIn InMail never earns.
+Sentrada makes pieces like this one, for exactly the meeting a LinkedIn InMail never earns. The CEOs of Starbucks, L'Oréal and Danone have all replied to pieces built this way.
 
 I'll follow up by email in the next couple of days, in case it is easier from your inbox.
 
@@ -79,7 +79,7 @@ Your ExecLeaders and Summit programmes put you in front of the most senior UK an
 
 Every element of it was researched for you alone, from the Gold at the B2B Marketing Awards to the gap in the headline and the line you gave in 2021. None of it would make sense addressed to anyone else.
 
-Sentrada builds one-of-one physical pieces for teams that need an attributable channel to named executives, for the stretches when email cannot tell your best work apart from automated noise.
+Sentrada builds one-of-one physical pieces for teams that need an attributable channel to named executives, for the stretches when email cannot tell your best work apart from automated noise. The CEOs of Starbucks, L'Oréal and Danone have replied to pieces built this way.
 
 I'll follow up by email over the next day or two, in case it is easier to action from your inbox.
 
@@ -130,7 +130,7 @@ Atlassian is betting heavily on reaching the CIO-level buyer, and that buyer has
 
 Every element of it was built for Atlassian, from the headline metric to the problem it names. It could not have landed on anyone else's desk.
 
-I started Sentrada to solve precisely this: senior-buyer conversations lost not for want of a good pitch, but for want of a way onto the desk in the first place.
+I started Sentrada to solve precisely this: senior-buyer conversations lost not for want of a good pitch, but for want of a way onto the desk in the first place. The CEOs of Starbucks, L'Oréal and Danone have replied to pieces built this way.
 
 I'll drop a note in your inbox in the next couple of days.
 
