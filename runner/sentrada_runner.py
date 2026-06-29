@@ -29,6 +29,7 @@ Usage:
 
   python sentrada_runner.py qc --folder pieces/jane-doe-acme --image final.png
   python sentrada_runner.py followup --folder pieces/jane-doe-acme --delivery-date "16 June 2026"
+  python sentrada_runner.py ship-check --all   # gate before staging PNGs for print
 """
 
 import argparse
@@ -1321,6 +1322,112 @@ def cmd_qc(args):
     _print_usage("qc")
 
 
+# --- ship-check: print-readiness gate --------------------------------------
+# The vision QC (P6 + P6B) runs immediately after the engine render in the
+# normal flow, so a clean build is always QC'd against its delivered file. The
+# gap is MANUAL re-renders done outside the runner — a subtitle fix, a DPI
+# re-render — which leave the delivered PNG newer than its qc_*.md, i.e. never
+# seen by the vision model in the form that ships. ship-check holds those (and
+# missing QC, P6 FAIL, 6B WOULD BIN) so a re-rendered piece cannot reach the
+# print supplier unverified.
+
+def _ship_status(folder):
+    """Assess one piece for print-readiness. Core guard: the delivered render
+    must not be newer than either vision QC file. Returns a dict with the verdict
+    (shippable True/False, or None for prompt-only formats) and reasons."""
+    slug = os.path.basename(os.path.normpath(folder))
+    render = os.path.join(folder, slug + ".png")
+    review = os.path.join(folder, "qc_review.md")
+    recipient = os.path.join(folder, "qc_recipient.md")
+
+    fmt = None
+    meta_path = os.path.join(folder, "meta.json")
+    if os.path.exists(meta_path):
+        try:
+            fmt = json.loads(read_file(meta_path)).get("format")
+        except (ValueError, OSError):
+            fmt = None
+
+    # Claymation is text-only (no render, no vision QC); nothing to print-check.
+    if fmt == "claymation":
+        return {"slug": slug, "format": fmt, "shippable": None, "p6": None, "p6b": None,
+                "holds": [], "warns": ["claymation is prompt-only; nothing to print-check"]}
+
+    holds, warns, p6, p6b = [], [], None, None
+    if not os.path.exists(folder):
+        return {"slug": slug, "format": fmt, "shippable": False, "p6": None, "p6b": None,
+                "holds": ["piece folder not found (build it first)"], "warns": []}
+    if not os.path.exists(render):
+        return {"slug": slug, "format": fmt, "shippable": False, "p6": None, "p6b": None,
+                "holds": [f"no render found ({slug}.png)"], "warns": []}
+
+    png_m = os.path.getmtime(render)
+    if not os.path.exists(review):
+        holds.append("no qc_review.md — P6 craft QC never ran")
+    else:
+        p6 = extract_p6_verdict(read_file(review))
+        if os.path.getmtime(review) < png_m:
+            holds.append("render is NEWER than qc_review.md — re-QC required "
+                         "(P6 has not seen the delivered file)")
+        if p6 == "FAIL":
+            holds.append("P6 verdict is FAIL")
+        elif p6 == "BORDERLINE":
+            warns.append("P6 verdict is BORDERLINE — review craft notes before print")
+
+    if not os.path.exists(recipient):
+        holds.append("no qc_recipient.md — P6B recipient sim never ran")
+    else:
+        p6b = extract_6b_verdict(read_file(recipient))
+        if os.path.getmtime(recipient) < png_m:
+            holds.append("render is NEWER than qc_recipient.md — re-QC required "
+                         "(P6B has not seen the delivered file)")
+        if p6b == "WOULD BIN":
+            holds.append("P6B verdict is WOULD BIN — do not print")
+
+    return {"slug": slug, "format": fmt, "shippable": not holds,
+            "holds": holds, "warns": warns, "p6": p6, "p6b": p6b}
+
+
+def cmd_ship_check(args):
+    if args.all:
+        folders = (sorted(os.path.join(PIECES_DIR, d) for d in os.listdir(PIECES_DIR)
+                          if os.path.isdir(os.path.join(PIECES_DIR, d)) and not d.startswith("_"))
+                   if os.path.isdir(PIECES_DIR) else [])
+    elif args.manifest:
+        entries, _ = _load_manifest(args.manifest)
+        folders = [os.path.join(PIECES_DIR, _piece_slug(e)) for e in entries]
+    else:
+        folders = [args.folder]
+    if not folders:
+        die("ship-check found no piece folders to check.")
+
+    statuses = [_ship_status(f) for f in folders]
+    print("\n" + "=" * 70)
+    print("SHIP CHECK — print-readiness gate")
+    print("=" * 70)
+    held = 0
+    for s in statuses:
+        mark = "n/a " if s["shippable"] is None else ("SHIP" if s["shippable"] else "HOLD")
+        if s["shippable"] is False:
+            held += 1
+        verds = [v for v in (f"P6 {s['p6']}" if s["p6"] else "",
+                             f"6B {s['p6b']}" if s["p6b"] else "") if v]
+        tail = ("  [" + ", ".join(verds) + "]") if verds else ""
+        print(f"  {mark}  {s['slug']}{tail}")
+        for h in s["holds"]:
+            print(f"        HOLD: {h}")
+        for w in s["warns"]:
+            print(f"        warn: {w}")
+    print("-" * 70)
+    print(f"{sum(1 for s in statuses if s['shippable'] is True)} ship, {held} held, "
+          f"{sum(1 for s in statuses if s['shippable'] is None)} n/a, {len(statuses)} checked.")
+    if held:
+        print("\nHeld pieces are NOT print-ready. Re-run `qc` against the delivered PNG "
+              "(and fix any FAIL/BIN) before staging them for the print supplier.")
+        sys.exit(1)
+    print("\nAll checked pieces are print-ready.")
+
+
 def cmd_followup(args):
     _usage_reset()
     config = load_config(args.config)
@@ -1559,7 +1666,10 @@ def _write_batch_summary(manifest_path, results):
             line += f" | ${r['credit']:.2f}"
         out.append(line)
     out += ["", "Each piece's files are in runner/pieces/<slug>/ (render, qc_review.md, "
-            "qc_recipient.md, followup.md). Held pieces: read the reason before re-running."]
+            "qc_recipient.md, followup.md). Held pieces: read the reason before re-running.",
+            "", "Before staging PNGs for the print supplier, run "
+            "`ship-check --manifest <this manifest>` to confirm none were re-rendered "
+            "after QC."]
     write_file(_batch_path(manifest_path, "summary.md"), "\n".join(out))
     print("\n" + "=" * 70)
     print("BATCH BUILD DONE")
@@ -1599,6 +1709,16 @@ def main():
     q.add_argument("--image", required=True, help="the final image file (PNG or JPG)")
     q.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     q.set_defaults(func=cmd_qc)
+
+    sc = sub.add_parser("ship-check",
+                        help="print-readiness gate: hold any piece whose render is newer "
+                             "than its QC, missing QC, P6 FAIL, or 6B WOULD BIN. Run before "
+                             "staging PNGs for the print supplier. Exits non-zero if any held.")
+    scg = sc.add_mutually_exclusive_group(required=True)
+    scg.add_argument("--folder", help="check a single piece folder")
+    scg.add_argument("--manifest", help="check every piece in a batch manifest")
+    scg.add_argument("--all", action="store_true", help="check every piece in runner/pieces/")
+    sc.set_defaults(func=cmd_ship_check)
 
     f = sub.add_parser("followup", help="run Prompt 7 to write the follow-up sequence")
     f.add_argument("--folder", required=True, help="the piece folder")

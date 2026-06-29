@@ -182,6 +182,11 @@ live on a dedicated orphan branch named `deliverables`, never on code branches.
 Code branches stay free of the large binaries; Birch gets one stable link.
 
 Standing process for each run:
+0. Run `python runner/sentrada_runner.py ship-check --manifest <batch.json>` (or
+   `--all`) first. It holds any piece whose render is newer than its vision QC
+   (re-rendered after QC, e.g. a manual subtitle fix or DPI re-render), is
+   missing QC, is P6 FAIL, or is 6B WOULD BIN, and exits non-zero. Clear every
+   hold (re-run `qc` against the delivered PNG) before staging anything.
 1. Stage that run's final PNGs (from runner/pieces/<slug>/<slug>.png) and a
    companion-cards.md into a local deliverables/batch-YYYY-MM-DD/ folder.
 2. Push them to the `deliverables` branch under batch-YYYY-MM-DD/ as a chain of
