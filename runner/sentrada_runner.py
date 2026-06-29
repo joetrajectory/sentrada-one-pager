@@ -1477,7 +1477,9 @@ def _delivery_from_research(slug):
     text = read_file(path)
 
     def grab(key):
-        m = re.search(rf"^[ \t>*-]*{key}\s*:\s*(.*)$", text, re.MULTILINE)
+        # [ \t] (not \s) after the colon so an empty value does not let the match
+        # run onto the next DELIVERY_ line.
+        m = re.search(rf"^[ \t>*-]*{key}[ \t]*:[ \t]*(.*)$", text, re.MULTILINE)
         return m.group(1).strip() if m else ""
 
     address = grab("DELIVERY_ADDRESS")
