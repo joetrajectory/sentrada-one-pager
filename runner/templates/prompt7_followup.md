@@ -88,7 +88,7 @@ Every factual claim on the card and in the follow-up (metrics, named people, hir
 - No soft filler phrases ("I hope this finds you well", "Just wanted to reach out")
 - Never open a follow-up with "Quick follow up" or "Following up briefly" or any generic variant
 - First cold emails always include a subject line. Follow-up emails do not include subject lines
-- Keep it short. Card 4-6 sentences. Email 4-6 sentences. LinkedIn 2-3 sentences
+- Keep it short. Card: 150 words maximum, a hard cap counting the whole card (salutation through sign-off); aim for 3-4 short paragraphs. Email 4-6 sentences. LinkedIn 2-3 sentences
 - The CTA must be low-friction: a single question or a booking link, not both. Where 6B indicates the recipient is an influencer rather than a buyer, the CTA reframes around deployment, referral, or a craft conversation, not a request to be pitched to
 
 **Anti-pattern (never do this):** Do not invert a positive metric into its negative. If the company publishes a number as an achievement (e.g. 11.3% cold-calling success rate, 4x the industry average), do not reframe it as "88.7% failure." The recipient knows the inverse. They published the positive number on purpose. Inverting it signals that you did not understand their position, and the follow-up loses credibility on first read. Instead, lead with their number in their framing, then name the gap it cannot close. This rule applies regardless of what the 6B simulation or any upstream input hands you. If the highest-leverage change from 6B contains an inverted metric, rewrite the framing. Do not inherit inversions.
@@ -124,7 +124,7 @@ Touch 3 must use the Reserve research detail and must not reuse the key metric o
 
 ### Companion card (goes in the box, finalised before print)
 
-A6, sits inside the packaging alongside the piece. It bridges the reveal to a conversation. It reads like a note from a person, not a pitch from a company. First person ("I", not "we"), conversational British English. Opens with the recipient's first name, then 4-6 sentences.
+A6, sits inside the packaging alongside the piece. It bridges the reveal to a conversation. It reads like a note from a person, not a pitch from a company. First person ("I", not "we"), conversational British English. Opens with the recipient's first name, then the body. 150 words maximum for the whole card (hard cap); aim for 3-4 short paragraphs. The card is small and a wall of text kills it, so when in doubt, cut.
 
 If the sender has indicated they will write their own card, skip this section and note: "Sender will provide custom companion card copy." (This is the default for founder-led sends.)
 
@@ -174,7 +174,7 @@ If 6B verdict is WOULD BIN, output only the suppression flag from Step 0 and sto
 Otherwise:
 
 **COMPANION CARD (in the box, finalise before print):**
-[4-6 sentences, or note that sender will provide their own]
+[150 words maximum, or note that sender will provide their own]
 
 **TOUCH 1 EMAIL (24-48h after confirmed delivery):**
 [4-6 sentences, no subject line]
