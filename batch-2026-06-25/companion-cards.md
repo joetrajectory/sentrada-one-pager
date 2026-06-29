@@ -46,7 +46,7 @@ Every fact on the front page came from MongoDB's own SEC filings, Q4 earnings ca
 
 I'm Joe Chapman, and I run Sentrada, which builds deep-researched, one-of-one physical pieces for B2B teams whose highest-value accounts have stopped responding to digital outreach.
 
-Pieces built the same way have generated responses from the CEOs of Starbucks, L'Oreal and Danone. I'll follow up by email in the next day or two.
+Pieces built the same way have generated responses from the CEOs of Starbucks, L'Oréal and Danone. I'll follow up by email in the next day or two.
 
 Joe Chapman
 Sentrada
@@ -83,6 +83,7 @@ I run Sentrada, which builds one-of-one physical pieces for teams that need an a
 I'll follow up by email over the next day or two, in case this is easier to action from your inbox.
 
 Joe Chapman
+Sentrada
 
 ---
 
@@ -96,7 +97,7 @@ Every clue was drawn from your actual work (the "ABM Repair Shop" panel, the Arc
 
 The grid adds up to this: Sentrada builds one-of-one physical pieces, researched to this depth, for the silent tier-one accounts that have stopped responding to everything else.
 
-The CEOs of Starbucks, L'Oreal, and Danone responded; a meeting followed with the CEO of VINCI Construction.
+The CEOs of Starbucks, L'Oréal, and Danone responded; a meeting followed with the CEO of VINCI Construction.
 
 I'll follow up by email shortly; sentrada.io is there if you want to move ahead.
 
@@ -130,7 +131,7 @@ The newspaper in this box was built around one question: how do you reliably rea
 
 Every element of this front page was built specifically for Atlassian, from the headline metric down to the problem it names, and could not have landed on anyone else's desk.
 
-My name is Joe Chapman. I started Sentrada to solve exactly that problem: senior-buyer conversations being lost not for want of a good pitch, but for want of a way to get onto the desk in the first place. We have had responses from the CEOs of Starbucks, L'Oreal and Danone.
+My name is Joe Chapman. I started Sentrada to solve exactly that problem: senior-buyer conversations being lost not for want of a good pitch, but for want of a way to get onto the desk in the first place. We have had responses from the CEOs of Starbucks, L'Oréal and Danone.
 
 I will drop a note in your inbox in the next couple of days.
 
@@ -143,7 +144,13 @@ Sentrada
 
 Lesley,
 
-The crossword in this box was built around Gong's own numbers: 91% of buyers find sales content isn't personalised, and your reps spend up to 12 hours a week on email trying to close that gap. Every clue was sourced from your own public record, from the Dublin scaling number to the signal-not-instinct doctrine to Laura Vitaro's piñata play, and the piece couldn't have been built for anyone else. I run Sentrada, and we make one-of-one physical pieces for senior B2B buyers. The CEOs of Starbucks, L'Oreal and Danone responded to pieces like this; the CEO of VINCI Construction took the meeting. I'll follow up by email in the next couple of days.
+The crossword in this box was built around Gong's own numbers: 91% of buyers find sales content isn't personalised, and your reps spend up to 12 hours a week on email trying to close that gap.
+
+Every clue was sourced from your own public record, from the Dublin scaling number to the signal-not-instinct doctrine to Laura Vitaro's piñata play, and the piece couldn't have been built for anyone else.
+
+I run Sentrada, and we make one-of-one physical pieces for senior B2B buyers. The CEOs of Starbucks, L'Oréal and Danone responded to pieces like this; the CEO of VINCI Construction took the meeting.
+
+I'll follow up by email in the next couple of days.
 
 Joe Chapman
 Sentrada
@@ -158,7 +165,7 @@ The front page in this box was built around one question: what closes the gap be
 
 Every headline, pull quote and sidebar was researched and written from your own words and PwC's published strategy alone. It could not have gone to anyone else.
 
-I make these at Sentrada, and they are designed for exactly this gap: one deeply researched physical piece, delivered to a senior buyer's desk when email can no longer reach priority one. The CEOs of Starbucks, L'Oreal and Danone have all replied.
+I make these at Sentrada, and they are designed for exactly this gap: one deeply researched physical piece, delivered to a senior buyer's desk when email can no longer reach priority one. The CEOs of Starbucks, L'Oréal and Danone have all replied.
 
 I'll follow up by email later this week. There is a second edition of The Account Record I would like you to see, built around one of your target accounts rather than PwC itself.
 
