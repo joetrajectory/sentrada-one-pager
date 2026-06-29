@@ -194,6 +194,14 @@ Standing process for each run:
    ~100MB with HTTP 413, so push file by file; ~90MB packs go through fine.
 3. Link Birch to github.com/joetrajectory/sentrada-one-pager/tree/deliverables/batch-YYYY-MM-DD
 4. JPEGs are only ever for in-chat mobile previews, never for print.
+5. Generate the shipping CSV: `python runner/sentrada_runner.py birch-csv
+   --manifest <batch.json>` (columns code,recipient,company,delivery_address,
+   notes,file_stem). Delivery addresses come from a structured "delivery":
+   {"address": "...", "notes": ""} block on each manifest entry (never parsed
+   from research prose). The CSV is written beside the manifest and is gitignored.
+   Send it to Birch DIRECTLY. NEVER commit it or push it to the deliverables
+   branch: it holds delivery addresses (same reason research/ is gitignored).
+   Use --stage-pngs to also copy each PNG to <file_stem>.png for Birch.
 
 A dedicated separate repo is not possible from the remote container: the GitHub
 App is scoped to this one repo (cannot create or push to another) and the git

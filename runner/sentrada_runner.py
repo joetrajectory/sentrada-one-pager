@@ -30,13 +30,16 @@ Usage:
   python sentrada_runner.py qc --folder pieces/jane-doe-acme --image final.png
   python sentrada_runner.py followup --folder pieces/jane-doe-acme --delivery-date "16 June 2026"
   python sentrada_runner.py ship-check --all   # gate before staging PNGs for print
+  python sentrada_runner.py birch-csv --manifest batch.json  # shipping CSV (addresses; never commit)
 """
 
 import argparse
 import base64
+import csv
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -1428,6 +1431,97 @@ def cmd_ship_check(args):
     print("\nAll checked pieces are print-ready.")
 
 
+# --- birch-csv: shipping manifest for the print supplier ---------------------
+# Emits the CSV Birch ships from: one row per piece with a sequential code,
+# recipient, company, the confirmed delivery address, optional notes, and a
+# file_stem naming the print file. Columns match the format Birch already uses:
+#   code,recipient,company,delivery_address,notes,file_stem
+#
+# PRIVACY: this file contains delivery addresses. It is written next to the
+# manifest (research/ is gitignored) and must NEVER be committed or pushed to the
+# deliverables branch. PNGs go to GitHub; addresses go straight to Birch.
+#
+# Addresses are NOT parsed from research prose (too risky for where a box ships).
+# Each manifest entry carries a structured "delivery" block, confirmed by a human:
+#   {"name": "...", "title": "...", "company": "...", "format": "newspaper",
+#    "research": "...",
+#    "delivery": {"address": "Full address on one line", "notes": ""}}
+
+_HONOURS = {"CBE", "OBE", "MBE", "KBE", "DBE", "PHD", "QC", "KC", "FRSA",
+            "JR", "SR", "II", "III"}
+
+
+def _surname(full_name):
+    """Last name token for the file stem, dropping trailing honours/suffixes."""
+    toks = [t for t in re.split(r"\s+", full_name.strip()) if t]
+    while len(toks) > 1 and toks[-1].strip(".,").upper() in _HONOURS:
+        toks.pop()
+    last = toks[-1] if toks else full_name
+    return re.sub(r"[^A-Za-z0-9]", "", last)
+
+
+def _company_condensed(company):
+    """Company with spaces and punctuation removed, original casing kept."""
+    return re.sub(r"[^A-Za-z0-9]", "", company)
+
+
+def cmd_birch_csv(args):
+    entries, mdir = _load_manifest(args.manifest)
+    rows, missing = [], []
+    for i, entry in enumerate(entries):
+        slug = _piece_slug(entry)
+        meta_path = os.path.join(PIECES_DIR, slug, "meta.json")
+        if os.path.exists(meta_path):
+            meta = json.loads(read_file(meta_path))
+            recipient = meta.get("recipient_name", entry["name"])
+            company = meta.get("recipient_company", entry["company"])
+        else:
+            recipient, company = entry["name"], entry["company"]
+        code = f"{args.prefix}-{i + args.start:02d}"
+        delivery = entry.get("delivery") or {}
+        address = (delivery.get("address") or "").strip()
+        notes = (delivery.get("notes") or "").strip()
+        if not address:
+            missing.append(slug)
+        file_stem = f"{code}_{_surname(recipient)}_{_company_condensed(company)}"
+        rows.append({"code": code, "recipient": recipient, "company": company,
+                     "delivery_address": address, "notes": notes,
+                     "file_stem": file_stem, "slug": slug})
+
+    out = args.output or os.path.join(
+        mdir, os.path.splitext(os.path.basename(args.manifest))[0] + "-birch.csv")
+    with open(out, "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["code", "recipient", "company", "delivery_address", "notes", "file_stem"])
+        for r in rows:
+            w.writerow([r["code"], r["recipient"], r["company"],
+                        r["delivery_address"], r["notes"], r["file_stem"]])
+
+    staged = 0
+    if args.stage_pngs:
+        outdir = os.path.join(os.path.dirname(out) or ".",
+                              "birch-" + os.path.splitext(os.path.basename(out))[0])
+        os.makedirs(outdir, exist_ok=True)
+        for r in rows:
+            src = os.path.join(PIECES_DIR, r["slug"], r["slug"] + ".png")
+            if os.path.exists(src):
+                shutil.copy2(src, os.path.join(outdir, r["file_stem"] + ".png"))
+                staged += 1
+
+    print("\n" + "=" * 70)
+    print("BIRCH SHIPPING CSV")
+    print("=" * 70)
+    print(f"  {os.path.relpath(out, REPO_ROOT)}  ({len(rows)} rows)")
+    if args.stage_pngs:
+        print(f"  staged {staged}/{len(rows)} PNGs renamed to <file_stem>.png beside it")
+    if missing:
+        print(f"\n  {len(missing)} piece(s) MISSING a delivery address (left blank): "
+              + ", ".join(missing))
+        print('  Add a "delivery": {"address": "..."} block to those manifest entries.')
+    print("\n  PRIVACY: this CSV holds delivery addresses. Do NOT commit it or push it "
+          "to the deliverables branch. Send it to Birch directly.")
+
+
 def cmd_followup(args):
     _usage_reset()
     config = load_config(args.config)
@@ -1719,6 +1813,18 @@ def main():
     scg.add_argument("--manifest", help="check every piece in a batch manifest")
     scg.add_argument("--all", action="store_true", help="check every piece in runner/pieces/")
     sc.set_defaults(func=cmd_ship_check)
+
+    bc = sub.add_parser("birch-csv",
+                        help="emit the print supplier's shipping CSV (code, recipient, "
+                             "company, address, notes, file_stem) from a manifest. Writes "
+                             "beside the manifest; holds addresses, so never commit it.")
+    bc.add_argument("--manifest", required=True, help="path to the JSON manifest")
+    bc.add_argument("--prefix", default="CP", help="code prefix (default CP)")
+    bc.add_argument("--start", type=int, default=1, help="first code number (default 1)")
+    bc.add_argument("--output", help="CSV path (default: <manifest>-birch.csv beside the manifest)")
+    bc.add_argument("--stage-pngs", action="store_true",
+                    help="also copy each delivered PNG to <file_stem>.png in a local folder beside the CSV")
+    bc.set_defaults(func=cmd_birch_csv)
 
     f = sub.add_parser("followup", help="run Prompt 7 to write the follow-up sequence")
     f.add_argument("--folder", required=True, help="the piece folder")
