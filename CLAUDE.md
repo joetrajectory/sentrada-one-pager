@@ -173,6 +173,26 @@ Gitignored (generated/secrets):
   /pipeline/ (generated output per campaign)
   .env (API keys and secrets)
   node_modules/
+  deliverables/ (local staging area for print files; never committed to code branches)
+
+## Print-ready deliverables (the `deliverables` branch)
+
+Birch (the print supplier) needs the lossless PNGs, not JPGs, every run. They
+live on a dedicated orphan branch named `deliverables`, never on code branches.
+Code branches stay free of the large binaries; Birch gets one stable link.
+
+Standing process for each run:
+1. Stage that run's final PNGs (from runner/pieces/<slug>/<slug>.png) and a
+   companion-cards.md into a local deliverables/batch-YYYY-MM-DD/ folder.
+2. Push them to the `deliverables` branch under batch-YYYY-MM-DD/ as a chain of
+   small commits (one file per commit). The git proxy rejects a single pack over
+   ~100MB with HTTP 413, so push file by file; ~90MB packs go through fine.
+3. Link Birch to github.com/joetrajectory/sentrada-one-pager/tree/deliverables/batch-YYYY-MM-DD
+4. JPEGs are only ever for in-chat mobile previews, never for print.
+
+A dedicated separate repo is not possible from the remote container: the GitHub
+App is scoped to this one repo (cannot create or push to another) and the git
+proxy only routes this repo's path. The orphan branch is the substitute.
 
 ## External connections
 
