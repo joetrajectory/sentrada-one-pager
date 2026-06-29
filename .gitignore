@@ -16,6 +16,12 @@ runner/pieces/
 __pycache__/
 *.pyc
 
+# Print-ready deliverables are NOT committed to code branches. Lossless PNGs and
+# companion cards live on the orphan `deliverables` branch only (one stable home
+# for the print supplier, code branches stay free of large binaries). Use
+# deliverables/ purely as a local staging area before pushing to that branch.
+deliverables/
+
 # Newspaper engine render output (generated artefacts, kept out of git).
 # The blank template (newspaper_template_a2.png) IS tracked; rendered pages
 # and scratch previews are not.
