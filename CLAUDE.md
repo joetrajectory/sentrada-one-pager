@@ -196,9 +196,12 @@ Standing process for each run:
 4. JPEGs are only ever for in-chat mobile previews, never for print.
 5. Generate the shipping CSV: `python runner/sentrada_runner.py birch-csv
    --manifest <batch.json>` (columns code,recipient,company,delivery_address,
-   notes,file_stem). Delivery addresses come from a structured "delivery":
-   {"address": "...", "notes": ""} block on each manifest entry (never parsed
-   from research prose). The CSV is written beside the manifest and is gitignored.
+   notes,file_stem). Delivery addresses come from the structured DELIVERY block
+   (DELIVERY_STATUS / DELIVERY_ADDRESS / DELIVERY_NOTES) the research agent emits
+   at the end of each research.md, never scraped from prose. BLOCKED pieces are
+   left blank, CONFIRM_FIRST pieces are flagged in notes. A manifest "delivery":
+   {"address": "...", "notes": ""} block overrides the research (human
+   correction). The CSV is written beside the manifest and is gitignored.
    Send it to Birch DIRECTLY. NEVER commit it or push it to the deliverables
    branch: it holds delivery addresses (same reason research/ is gitignored).
    Use --stage-pngs to also copy each PNG to <file_stem>.png for Birch.

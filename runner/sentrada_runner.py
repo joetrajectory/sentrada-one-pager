@@ -1441,10 +1441,13 @@ def cmd_ship_check(args):
 # manifest (research/ is gitignored) and must NEVER be committed or pushed to the
 # deliverables branch. PNGs go to GitHub; addresses go straight to Birch.
 #
-# Addresses are NOT parsed from research prose (too risky for where a box ships).
-# Each manifest entry carries a structured "delivery" block, confirmed by a human:
-#   {"name": "...", "title": "...", "company": "...", "format": "newspaper",
-#    "research": "...",
+# Addresses come from the structured DELIVERY block the research agent (Prompt 1)
+# emits at the end of each research.md — DELIVERY_STATUS / DELIVERY_ADDRESS /
+# DELIVERY_NOTES — never scraped from prose. Status drives behaviour: CONFIRMED
+# uses the address; CONFIRM_FIRST keeps it but flags "confirm before shipping";
+# BLOCKED leaves it blank. A manifest entry may carry a "delivery" block to
+# OVERRIDE the research (a human correction):
+#   {"name": "...", "company": "...", "format": "...",
 #    "delivery": {"address": "Full address on one line", "notes": ""}}
 
 _HONOURS = {"CBE", "OBE", "MBE", "KBE", "DBE", "PHD", "QC", "KC", "FRSA",
@@ -1465,9 +1468,28 @@ def _company_condensed(company):
     return re.sub(r"[^A-Za-z0-9]", "", company)
 
 
+def _delivery_from_research(slug):
+    """Read the structured DELIVERY block from a piece's research.md. Returns
+    {status, address, notes} (empty strings when absent)."""
+    path = os.path.join(PIECES_DIR, slug, "research.md")
+    if not os.path.exists(path):
+        return {"status": "", "address": "", "notes": ""}
+    text = read_file(path)
+
+    def grab(key):
+        m = re.search(rf"^[ \t>*-]*{key}\s*:\s*(.*)$", text, re.MULTILINE)
+        return m.group(1).strip() if m else ""
+
+    address = grab("DELIVERY_ADDRESS")
+    if address.startswith("<"):          # unfilled template placeholder
+        address = ""
+    return {"status": grab("DELIVERY_STATUS").upper(),
+            "address": address, "notes": grab("DELIVERY_NOTES")}
+
+
 def cmd_birch_csv(args):
     entries, mdir = _load_manifest(args.manifest)
-    rows, missing = [], []
+    rows, missing, flags = [], [], []
     for i, entry in enumerate(entries):
         slug = _piece_slug(entry)
         meta_path = os.path.join(PIECES_DIR, slug, "meta.json")
@@ -1478,10 +1500,25 @@ def cmd_birch_csv(args):
         else:
             recipient, company = entry["name"], entry["company"]
         code = f"{args.prefix}-{i + args.start:02d}"
-        delivery = entry.get("delivery") or {}
-        address = (delivery.get("address") or "").strip()
-        notes = (delivery.get("notes") or "").strip()
-        if not address:
+
+        # Source of truth: the DELIVERY block in research.md. A manifest "delivery"
+        # block overrides it (a human correction).
+        res = _delivery_from_research(slug)
+        override = entry.get("delivery") or {}
+        status = (res.get("status") or "").upper()
+        address = (override.get("address") or res.get("address") or "").strip()
+        notes = (override.get("notes") or res.get("notes") or "").strip()
+        flagged = False
+        if status == "BLOCKED":
+            address = ""
+            notes = "BLOCKED" + (f" — {notes}" if notes else " — no shippable address")
+            flags.append(f"{slug}: BLOCKED")
+            flagged = True
+        elif status == "CONFIRM_FIRST":
+            notes = ("CONFIRM ADDRESS BEFORE SHIPPING" + (f" — {notes}" if notes else "")).strip()
+            flags.append(f"{slug}: CONFIRM_FIRST")
+            flagged = True
+        if not address and not flagged:
             missing.append(slug)
         file_stem = f"{code}_{_surname(recipient)}_{_company_condensed(company)}"
         rows.append({"code": code, "recipient": recipient, "company": company,
@@ -1514,10 +1551,13 @@ def cmd_birch_csv(args):
     print(f"  {os.path.relpath(out, REPO_ROOT)}  ({len(rows)} rows)")
     if args.stage_pngs:
         print(f"  staged {staged}/{len(rows)} PNGs renamed to <file_stem>.png beside it")
+    if flags:
+        print("\n  STATUS FLAGS from research (do not ship blind): " + "; ".join(flags))
     if missing:
-        print(f"\n  {len(missing)} piece(s) MISSING a delivery address (left blank): "
+        print(f"\n  {len(missing)} piece(s) with NO delivery address (left blank): "
               + ", ".join(missing))
-        print('  Add a "delivery": {"address": "..."} block to those manifest entries.')
+        print("  Their research.md has no usable DELIVERY block. Add DELIVERY_STATUS/"
+              "DELIVERY_ADDRESS/DELIVERY_NOTES to the research, or a manifest \"delivery\" override.")
     print("\n  PRIVACY: this CSV holds delivery addresses. Do NOT commit it or push it "
           "to the deliverables branch. Send it to Birch directly.")
 
