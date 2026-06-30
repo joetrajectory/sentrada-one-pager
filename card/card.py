@@ -94,6 +94,11 @@ SECONDARY = (0x1B / 255, 0x1B / 255, 0x1B / 255, 0.68)   # contact detail lines
 WORDMARK = os.path.join(SCRIPT_DIR, "assets", "wordmark-charcoal.png")
 WORDMARK_XHEIGHT = 0.744          # x-height as a fraction of the cropped wordmark
 LOCKUP_OPACITY = 0.50
+# The wordmark is a bold logotype, so at equal size/opacity it reads heavier
+# than the "one of one /" label beside it. Shave its size a touch and paint it
+# a little dimmer than the label so the two read as one quiet unit.
+WORDMARK_SIZE_TRIM = 0.95
+WORDMARK_DIM = 0.80               # wordmark alpha as a fraction of the label's
 
 # Slice motif: clay parallelogram, skewX(-32deg).
 SLICE_W_MM = 10.58                # 40 px
@@ -425,7 +430,7 @@ def _draw_lockup(cr, W, right, footer_bottom, pt, mm):
     surf = wordmark_surface()
     gap = mm(6 / 3.7795)                          # 6 px at 96 dpi
     if surf:
-        wm_h = x_height / WORDMARK_XHEIGHT        # so wordmark x-height == text's
+        wm_h = x_height / WORDMARK_XHEIGHT * WORDMARK_SIZE_TRIM
         scale = wm_h / surf.get_height()
         wm_w = surf.get_width() * scale
     else:
@@ -434,19 +439,21 @@ def _draw_lockup(cr, W, right, footer_bottom, pt, mm):
     total = lw + gap + wm_w
     x0 = W - right - total
     bl = footer_bottom - (lh - baseline)          # shared baseline (descent below)
+    # label at the lockup opacity
     cr.save()
     cr.push_group()
     show(cr, label, x0, bl - baseline, CHARCOAL)  # text baseline on bl
+    cr.pop_group_to_source()
+    cr.paint_with_alpha(LOCKUP_OPACITY)
+    cr.restore()
+    # wordmark a little dimmer, so the bold logotype reads as the label's weight
     if surf:
         cr.save()
         cr.translate(x0 + lw + gap, bl - wm_h)    # wordmark sits on bl
         cr.scale(scale, scale)
         cr.set_source_surface(surf, 0, 0)
-        cr.paint()
+        cr.paint_with_alpha(LOCKUP_OPACITY * WORDMARK_DIM)
         cr.restore()
-    cr.pop_group_to_source()
-    cr.paint_with_alpha(LOCKUP_OPACITY)
-    cr.restore()
 
 
 # ---------------------------------------------------------------------------
