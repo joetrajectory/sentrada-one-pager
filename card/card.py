@@ -92,7 +92,7 @@ SECONDARY = (0x1B / 255, 0x1B / 255, 0x1B / 255, 0.68)   # contact detail lines
 
 # Wordmark (charcoal on transparent, scaled to a fixed width).
 WORDMARK = os.path.join(SCRIPT_DIR, "assets", "wordmark-charcoal.png")
-WORDMARK_W_MM = 12.17             # 46 px at 96 dpi
+WORDMARK_XHEIGHT = 0.744          # x-height as a fraction of the cropped wordmark
 LOCKUP_OPACITY = 0.50
 
 # Slice motif: clay parallelogram, skewX(-32deg).
@@ -402,24 +402,35 @@ def flow(cr, model, W, H, tier, draw):
     return body_bottom, footer_top
 
 
-def _draw_lockup(cr, W, right, baseline_y, pt, mm):
-    """Right-aligned 'one of one /' + wordmark, bottoms on baseline_y, 50% opacity."""
+def _draw_lockup(cr, W, right, footer_bottom, pt, mm):
+    """Right-aligned 'one of one /' + wordmark as one lockup at 50% opacity.
+    The two read as the same size on a shared baseline: the wordmark is scaled
+    so its cap height equals the text's, and both baselines are aligned."""
     label = layout(cr, "one of one /", BODY, pt(PT_LOCKUP), em=EM_LOCKUP)
     lw, lh = label.get_pixel_size()
+    baseline = label.get_baseline() / S          # text baseline from layout top
+    # the text's x-height (lowercase letter height), measured off an
+    # ascender/descender-free string, is the size the wordmark must match.
+    xh, _ = layout(cr, "one one", BODY, pt(PT_LOCKUP)).get_pixel_extents()
+    x_height = xh.height
     surf = wordmark_surface()
-    gap = mm(6 / 3.7795)  # 6 px at 96 dpi
-    wm_w = mm(WORDMARK_W_MM)
-    scale = wm_w / surf.get_width() if surf else 1.0
-    wm_h = surf.get_height() * scale if surf else 0
-    total = lw + gap + (wm_w if surf else 0)
+    gap = mm(6 / 3.7795)                          # 6 px at 96 dpi
+    if surf:
+        wm_h = x_height / WORDMARK_XHEIGHT        # so wordmark x-height == text's
+        scale = wm_h / surf.get_height()
+        wm_w = surf.get_width() * scale
+    else:
+        scale = 1.0
+        wm_w = wm_h = 0
+    total = lw + gap + wm_w
     x0 = W - right - total
+    bl = footer_bottom - (lh - baseline)          # shared baseline (descent below)
     cr.save()
     cr.push_group()
-    # label, bottom-aligned to baseline
-    show(cr, label, x0, baseline_y - lh, CHARCOAL)
+    show(cr, label, x0, bl - baseline, CHARCOAL)  # text baseline on bl
     if surf:
         cr.save()
-        cr.translate(x0 + lw + gap, baseline_y - wm_h)
+        cr.translate(x0 + lw + gap, bl - wm_h)    # wordmark sits on bl
         cr.scale(scale, scale)
         cr.set_source_surface(surf, 0, 0)
         cr.paint()
