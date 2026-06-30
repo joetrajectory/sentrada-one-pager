@@ -1636,7 +1636,7 @@ def cmd_birch_csv(args):
             w.writerow([r["code"], r["recipient"], r["company"],
                         r["delivery_address"], r["notes"], r["file_stem"]])
 
-    staged = 0
+    staged = cards_staged = 0
     if args.stage_pngs:
         outdir = os.path.join(os.path.dirname(out) or ".",
                               "birch-" + os.path.splitext(os.path.basename(out))[0])
@@ -1646,13 +1646,18 @@ def cmd_birch_csv(args):
             if os.path.exists(src):
                 shutil.copy2(src, os.path.join(outdir, r["file_stem"] + ".png"))
                 staged += 1
+            csrc = os.path.join(PIECES_DIR, r["slug"], r["slug"] + "-card.png")
+            if os.path.exists(csrc):
+                shutil.copy2(csrc, os.path.join(outdir, r["file_stem"] + "-card.png"))
+                cards_staged += 1
 
     print("\n" + "=" * 70)
     print("BIRCH SHIPPING CSV")
     print("=" * 70)
     print(f"  {os.path.relpath(out, REPO_ROOT)}  ({len(rows)} rows)")
     if args.stage_pngs:
-        print(f"  staged {staged}/{len(rows)} PNGs renamed to <file_stem>.png beside it")
+        print(f"  staged {staged} artefact + {cards_staged} card PNG(s) renamed to "
+              "<file_stem>.png / <file_stem>-card.png beside it")
     if flags:
         print("\n  STATUS FLAGS from research (do not ship blind): " + "; ".join(flags))
     if missing:

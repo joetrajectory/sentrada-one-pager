@@ -205,7 +205,8 @@ Standing process for each run:
    correction). The CSV is written beside the manifest and is gitignored.
    Send it to Birch DIRECTLY. NEVER commit it or push it to the deliverables
    branch: it holds delivery addresses (same reason research/ is gitignored).
-   Use --stage-pngs to also copy each PNG to <file_stem>.png for Birch.
+   Use --stage-pngs to also copy each artefact and companion card to
+   <file_stem>.png / <file_stem>-card.png (code-named to match the CSV) for Birch.
 
 A dedicated separate repo is not possible from the remote container: the GitHub
 App is scoped to this one repo (cannot create or push to another) and the git
