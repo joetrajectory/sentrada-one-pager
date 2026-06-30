@@ -814,6 +814,105 @@ def _generate_newspaper(args, config, folder, base_values, brief, meta):
     run_chain_after_render(config, folder, output_path, delivery_date)
 
 
+# --- Step 8b: companion card (card/card.py) ---------------------------------
+# After Prompt 7 writes the card copy, render the A6 companion card that ships in
+# the box beside the artefact. Same house contract as the email engine. The card
+# text is parsed out of the P7 output; the contact block is always the sender
+# (from config), never the recipient. Output lands at <slug>-card.png next to the
+# artefact PNG so deliverables staging picks it up.
+
+def _card_copy_from_p7(reply, first_name, sender):
+    """Pull the companion-card body paragraphs from the Prompt 7 output. Returns a
+    list of paragraph strings, or None when the card is suppressed (WOULD BIN) or
+    the sender provides their own copy. The salutation comes from the recipient
+    name and the sign-off lines are dropped (the rendered contact block is the
+    sender)."""
+    if "sender will provide custom companion card" in reply.lower():
+        return None
+    m = re.search(r"COMPANION CARD[^\n]*?\*\*(.*?)(?:\n[ \t]*\*\*[A-Z]|\Z)", reply, re.DOTALL)
+    block = (m.group(1) if m else reply).strip()
+    if not block or block.startswith("["):            # unfilled stub
+        return None
+    paras = [p.strip() for p in re.split(r"\n[ \t]*\n", block) if p.strip()]
+    paras = [p for p in paras if p.strip("-*_ ")]      # drop horizontal rules
+    if paras and paras[0].rstrip(",").strip().lower() == (first_name or "").lower():
+        paras = paras[1:]                              # drop the salutation line
+    sign = {s.lower() for s in (sender.get("sender_name", ""), sender.get("company", "")) if s}
+    while paras:                                       # drop trailing sign-off
+        last = [l.strip().lower() for l in paras[-1].split("\n") if l.strip()]
+        if last and all(l in sign for l in last):
+            paras.pop()
+        else:
+            break
+    return paras or None
+
+
+def card_engine_data(body_paras, first_name, sender):
+    """Assemble card.py's --data: salutation from the recipient first name, body
+    from the Prompt 7 paragraphs, contact block always the sender (config)."""
+    return {
+        "salutation": first_name,
+        "body": body_paras,
+        "contact": {
+            "name": sender.get("sender_name", "Joe Chapman"),
+            "company": sender.get("company", "Sentrada"),
+            "email": sender.get("sender_email", ""),
+            "phone": sender.get("card_phone", ""),
+        },
+    }
+
+
+def run_card_engine(config, engine_path, data_path, output_path=None, check=False):
+    """Render or validate the companion card (procedural, no --template). Same
+    exit-code contract as the others: --check validates and exits nonzero on
+    overflow; --output renders at 360 DPI. Runs under the same interpreter as the
+    other Pango engines (sys.executable); override with config 'card_python'.
+    Bleed/crop stay off to match what newspaper/crossword/email send to Birch."""
+    interp = config.get("card_python") or sys.executable
+    cmd = [interp, engine_path, "--data", data_path]
+    if check:
+        cmd.append("--check")
+    if output_path:
+        cmd += ["--output", output_path, "--print-dpi", "360"]
+    result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
+    return result.returncode, result.stdout + result.stderr
+
+
+def _generate_card(config, folder, reply):
+    """Step 8b: render the A6 companion card from the Prompt 7 card copy and stage
+    it as <slug>-card.png beside the artefact. Skipped when the sender provides
+    custom copy or the card was suppressed. Overflow is non-fatal: the engine
+    refuses to squeeze, so the card is withheld and flagged for a 150-word trim
+    while the artefact and follow-up stand."""
+    engine = os.path.join(REPO_ROOT, config.get("card_engine", "card/card.py"))
+    if not os.path.exists(engine):
+        print(f"[card] step 8b skipped: engine not found at "
+              f"{os.path.relpath(engine, REPO_ROOT)}.")
+        return
+    meta = json.loads(read_file(os.path.join(folder, "meta.json")))
+    sender = config.get("sender", {})
+    first = (meta.get("recipient_name", "").split() or [""])[0]
+    body = _card_copy_from_p7(reply, first, sender)
+    if not body:
+        print("[card] step 8b skipped: no auto card (sender-provided or suppressed).")
+        return
+    slug = os.path.basename(os.path.normpath(folder))
+    data_path = os.path.join(folder, f"{slug}-card.json")
+    card_png = os.path.join(folder, f"{slug}-card.png")
+    write_file(data_path, json.dumps(card_engine_data(body, first, sender), indent=2))
+    print(f"\n[card] step 8b: rendering the A6 companion card ({len(body)} paragraphs)...")
+    rc, out = run_card_engine(config, engine, data_path, check=True)
+    if rc != 0:
+        print("[card] WITHHELD: copy overflows A6 even at the compact tier. Trim the "
+              "card under 150 words and re-run. Engine output:\n" + out.strip())
+        return
+    rc, out = run_card_engine(config, engine, data_path, card_png)
+    if rc != 0:
+        print("[card] render failed:\n" + out.strip())
+        return
+    print(f"[card] rendered: {os.path.relpath(card_png, REPO_ROOT)}")
+
+
 def run_chain_after_render(config, folder, image_path, delivery_date):
     """After a newspaper renders: P6 craft review -> (stop on FAIL) -> P6B
     recipient sim -> (stop on WOULD BIN) -> P7 follow-up -> consolidated package
@@ -848,6 +947,7 @@ def run_chain_after_render(config, folder, image_path, delivery_date):
         return
 
     reply = _p7(config, folder, delivery_date)
+    _generate_card(config, folder, reply)        # step 8b: companion card
     _print_package(image_path, review, v6, sixb, v6b, reply)
 
 

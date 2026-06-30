@@ -1,0 +1,10 @@
+# Python dependencies for the companion-card layout engine.
+# Same stack as the newspaper, crossword and email engines (see
+# ../newspaper/setup.sh for the system libraries: Pango, Cairo, fontconfig,
+# gobject-introspection). Install with: pip install -r requirements.txt
+pycairo>=1.26
+PyGObject>=3.50
+Pillow>=10.0
+# No OpenCV and no template image: the card is drawn procedurally on warm stone.
+# Fonts are bundled (Inter in ../fonts, Fraunces in ./fonts); the wordmark is in
+# ./assets, so no system font install is needed.

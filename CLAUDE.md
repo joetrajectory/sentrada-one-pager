@@ -61,7 +61,7 @@ If any of these are missing, the research is too thin. Flag for manual enrichmen
 6. PROMPT: prompt-agent assembles master image gen prompt from Layer A + B + C
 7. IMAGE: Image generation API produces the visual artefact
 8. REVIEW: review-agent assesses quality (pass/fail with retry logic, max 3 attempts)
-8b. CARD: copy-agent generates companion card copy (skipped if sender provided custom copy)
+8b. CARD: copy-agent generates companion card copy, then card/card.py (the A6 companion-card engine) renders it to a print-ready PNG at runner/pieces/{slug}/{slug}-card.png. Skipped if sender provided custom copy. Overflow past the 150-word cap is refused, not squeezed.
 9. SENDER REVIEW: Sender sees artefact + companion card, approves or requests changes
 10. PRINT: Approved artefact + companion card sent to print supplier
 11. SHIP: Printed artefact + card packaged in premium box and shipped with tracking
@@ -187,8 +187,9 @@ Standing process for each run:
    (re-rendered after QC, e.g. a manual subtitle fix or DPI re-render), is
    missing QC, is P6 FAIL, or is 6B WOULD BIN, and exits non-zero. Clear every
    hold (re-run `qc` against the delivered PNG) before staging anything.
-1. Stage that run's final PNGs (from runner/pieces/<slug>/<slug>.png) and a
-   companion-cards.md into a local deliverables/batch-YYYY-MM-DD/ folder.
+1. Stage that run's final PNGs into a local deliverables/batch-YYYY-MM-DD/ folder:
+   the artefact (runner/pieces/<slug>/<slug>.png) and the companion card
+   (runner/pieces/<slug>/<slug>-card.png, from step 8b), plus a companion-cards.md.
 2. Push them to the `deliverables` branch under batch-YYYY-MM-DD/ as a chain of
    small commits (one file per commit). The git proxy rejects a single pack over
    ~100MB with HTTP 413, so push file by file; ~90MB packs go through fine.

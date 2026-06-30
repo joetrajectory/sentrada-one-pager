@@ -6,6 +6,7 @@
     "booking_link": "https://sentrada.io",
     "sender_name": "Joe Bloggs",
     "sender_email": "joe@sentrada.io",
+    "card_phone": "+44 7000 000000",
     "problems": [
       "First sender problem the recipient's company plausibly has, in plain language.",
       "Second sender problem.",
@@ -35,5 +36,7 @@
   "email_avatar_color": "#C05933",
   "email_timestamp": "09:14",
   "email_unread_count": 1284,
-  "email_postscript": "Yes, I printed an email at A2 and had it delivered to your desk."
+  "email_postscript": "Yes, I printed an email at A2 and had it delivered to your desk.",
+
+  "card_engine": "card/card.py"
 }
