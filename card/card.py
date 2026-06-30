@@ -416,6 +416,17 @@ def flow(cr, model, W, H, tier, draw):
     return natural_bottom, footer_top
 
 
+def lockup_total_w(cr, pt, mm):
+    """Width of the 'one of one / sentrada' lockup, for collision testing."""
+    lw = layout(cr, "one of one /", BODY, pt(PT_LOCKUP), em=EM_LOCKUP).get_pixel_size()[0]
+    xh, _ = layout(cr, "one one", BODY, pt(PT_LOCKUP)).get_pixel_extents()
+    surf = wordmark_surface()
+    gap = mm(6 / 3.7795)
+    wm_w = (xh.height / WORDMARK_XHEIGHT * WORDMARK_SIZE_TRIM
+            / surf.get_height() * surf.get_width()) if surf else 0.0
+    return lw + gap + wm_w
+
+
 def _draw_lockup(cr, W, right, footer_bottom, pt, mm):
     """Right-aligned 'one of one /' + wordmark as one lockup at 50% opacity.
     The two read as the same size on a shared baseline: the wordmark is scaled
@@ -480,12 +491,29 @@ def render(model, W, H):
     cr = cairo.Context(surf)
     assert_fonts_resolved(cr)
     tier, fits, overflow = choose_tier(cr, model, W, H)
+    mm, pt = mk_units(W)
     failures = []
     if not fits:
-        mm, _ = mk_units(W)
         failures.append(("body", "copy overflows the tightest tier by "
                          f"{overflow / mm(1.0):.1f} mm ({int(overflow)}px); the card never "
                          "squeezes type below 9 pt. Trim a sentence (150-word cap)."))
+
+    # Horizontal guard: the last contact line shares the lockup's baseline row,
+    # so if it would run into the brand lockup the card must be flagged, never
+    # printed with overlapping text. (The compact 2-line contact is the case
+    # this catches when the company/email/phone string is long.)
+    _, _, contact = model
+    left = mm(tier["pad"][3])
+    right = mm(tier["pad"][1])
+    bottom_line = contact_lines(cr, contact, tier, pt)[-1][0]
+    contact_right = left + bottom_line.get_pixel_size()[0]
+    lockup_left = W - right - lockup_total_w(cr, pt, mm)
+    overlap = contact_right + mm(4.0) - lockup_left
+    if overlap > 0:
+        failures.append(("contact", "the contact line runs into the brand lockup by "
+                         f"{overlap / mm(1.0):.1f} mm; shorten the company name, email or "
+                         "phone (or it will overprint the wordmark)."))
+
     flow(cr, model, W, H, tier, draw=True)
     return surf, tier, failures
 
