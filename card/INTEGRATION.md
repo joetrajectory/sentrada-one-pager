@@ -22,6 +22,13 @@ the model), the card's contact block is the **sender**: Joe Chapman / Sentrada /
 email / phone. Only the salutation and body are per-recipient. So add the
 sender's `card_phone` (and reuse `sender_email`) to the runner config.
 
+Current sender values for the config:
+
+    "sender_name":  "Joe Chapman"
+    "company":      "Sentrada"
+    "sender_email": "joe@sentrada.io"
+    "card_phone":   "+44 7815 814855"
+
 ## Suggested glue (mirrors the email step)
 
     def card_engine_data(data, args, sender, config):
