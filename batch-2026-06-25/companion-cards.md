@@ -1,22 +1,21 @@
 # Companion cards: batch 2026-06-25
 
-One card per piece, to go in the box. Sharpened pass: varied openers and proof
-lines, tightened copy. First-name salutation throughout.
+Final copy, rendered to A6 by card/card.py. Contact block (name, company, email, phone) is the foot of every card.
 
 ## Chris Evans · Cognism  (The Email)
 
 Chris,
 
-Your outbound engine converts at 11.3% across 449,933 calls, and the 'Fluent in Data' pivot now rests on reaching CROs, CDOs and VPs whose phones are gatekept and whose inboxes bury even good email. The cold email in this box asks the obvious question: what channel still reaches them?
+The piece in this box is a cold email, printed at A2 and delivered to your desk. Every figure in it is from Cognism's own published research. It could not have been made for anyone else.
 
-Every figure in it is from Cognism's own published research. There is no version of it that works without your rebrand, your enterprise bet and the meeting-channel ceiling your own reports name. It could only have been made for you.
+This is what we build for revenue teams whose enterprise buyers have stopped answering calls and email. Your team sends these to the CROs and CDOs the 'Fluent in Data' pivot needs to reach. Each one is researched, designed and delivered to one person's desk.
 
-I run Sentrada. We build one-of-one physical pieces for revenue teams chasing the senior buyers that calls and email no longer reach. My last conversation that opened like this one was with the CEO of VINCI Construction.
-
-I'll follow up by email in the next couple of days.
+I will follow up by email in the next couple of days.
 
 Joe Chapman
 Sentrada
+joe@sentrada.io
++44 7815 814855
 
 ---
 
@@ -24,16 +23,18 @@ Sentrada
 
 Rory,
 
-The seed-bomb worked because it was brave. The German customs fine was the price of it being a one-off. The email in this box is the same instinct made repeatable.
+trumpet has always been bold and brave with its marketing.
 
-Every detail in it came from your own posts: the grenade campaign, the customs run-in, Nick's "bold and brave" line, your own read on where email is heading. It could not have been assembled for anyone else.
+The revenue leaders trumpet needs to reach are not opening sequences. These go to their desks.
 
-What Sentrada does is turn that instinct into a channel: researched and built one piece at a time, for one named buyer, without the customs exposure. Pieces built this way have drawn replies from the CEOs of Starbucks, L'Oréal and Danone.
+This is something new your team can send to stand out from the crowd.
 
-I'll follow up by email in the next day or two, in case it's easier from your inbox.
+I will follow up by email in the next couple of days.
 
 Joe Chapman
 Sentrada
+joe@sentrada.io
++44 7815 814855
 
 ---
 
@@ -41,16 +42,16 @@ Sentrada
 
 Connie,
 
-2,895 accounts on MongoDB's books carry six-figure spend. The front page in this box is about the hardest thing your ABM team has to do with them: be noticed, through the same channel every competitor has automated into noise.
+The front page in this box is built from MongoDB's Q4 earnings call, SEC filings, and your team's own job specs. Every number on it is traceable. It could not have been written about any other company.
 
-Every fact on it traces back to MongoDB's own SEC filings, Q4 earnings calls and your team's job specs, so it could only have been built for MongoDB.
+You already run direct mail into named accounts, so you can judge this on the merits. Sentrada builds each piece at this depth, for one account at a time. The recipients are the CIOs, CFOs and transformation leads inside your 2,895 six-figure accounts that your new CRO needs pipeline from.
 
-I'm Joe Chapman, and I run Sentrada: deeply researched, one-of-one physical pieces for teams whose best accounts have gone quiet on digital. Pieces built this way have drawn replies from the CEOs of Starbucks, L'Oréal and Danone.
-
-I'll follow up by email in the next day or two.
+I will follow up by email in the next couple of days.
 
 Joe Chapman
 Sentrada
+joe@sentrada.io
++44 7815 814855
 
 ---
 
@@ -58,16 +59,16 @@ Sentrada
 
 Lisa,
 
-Your programme already shows more than $70M influenced. The crossword in this box is about the gap that scoreboard cannot close on its own: why the CHRO or CFO meeting still does not reliably follow.
+Inside is a crossword built around you, your company, and the ABM programmes you run. Your 70-plus 1:1 programmes, the channels you champion, the platforms you skip, the buyer personas you chase. Twenty clues, specific to you. Nobody else could solve it.
 
-Every answer in the grid came from your own words: your November session at the Global ABM Conference, your post on the best ABM team you ever worked with, the buyer personas in Workhuman's own job specs. It could not have gone to anyone else.
+We can send these to your target accounts. Your team needs meetings with CHROs and CPOs who are not responding to normal outreach. These go to their desks, built from research.
 
-Sentrada makes pieces like this one, for exactly the meeting a LinkedIn InMail never earns. The CEOs of Starbucks, L'Oréal and Danone have all replied to pieces built this way.
-
-I'll follow up by email in the next couple of days, in case it is easier from your inbox.
+I will follow up by email in the next couple of days.
 
 Joe Chapman
 Sentrada
+joe@sentrada.io
++44 7815 814855
 
 ---
 
@@ -75,16 +76,16 @@ Sentrada
 
 Samara,
 
-Your ExecLeaders and Summit programmes put you in front of the most senior UK and EMEA enterprise buyers a few times a year. The front page in this box is about the other 51 weeks: what reaches them when the next event is months away?
+You will recognise what is in this box. The front page is built from your public record: the ExecLeaders Gold and Silver, the Instantly cold email data, your own words from the ABM podcast. Every claim is sourced. It could not have been made for anyone else.
 
-Every element of it was researched for you alone, from the Gold at the B2B Marketing Awards to the gap in the headline and the line you gave in 2021. None of it would make sense addressed to anyone else.
+You fill ExecLeaders rooms with the senior enterprise buyers AWS needs close. The question you already know is what reaches them between events, now that the inbox has collapsed under the weight of everyone else's automation. This is something new your team can send. Your named strategic accounts receive one of these on their desk.
 
-Sentrada builds one-of-one physical pieces for teams that need an attributable channel to named executives, for the weeks when email cannot tell your best work from automated noise. The CEOs of Starbucks, L'Oréal and Danone have replied to pieces built this way.
-
-I'll follow up by email over the next day or two.
+I will follow up by email in the next couple of days.
 
 Joe Chapman
 Sentrada
+joe@sentrada.io
++44 7815 814855
 
 ---
 
@@ -92,16 +93,16 @@ Sentrada
 
 Grace,
 
-The crossword in this box starts from one observation: the accounts that matter most to a programme as good as yours are the ones email cannot reach.
+You speak publicly about what good ABM looks like, so we sent something you haven't seen before. The clues draw on your conference talks, your Archer win, your tech stack, Verizon's EMEA position, and a detail from your speaker bio. It could not have been built for anyone else.
 
-Every clue came from your actual work: the "ABM Repair Shop" panel, the Archer "Best Content Program" win, Project Thor, the Marketo and TechTarget stack. It could not have been built for anyone else.
+You already run 1:1 ABM at a level that wins awards. This is a new approach: a single physical piece, built from your prospect's own data, sent to their desk.
 
-The grid resolves to what Sentrada does: one-of-one physical pieces, researched to this depth, for the silent tier-one accounts that have stopped responding to everything else. The last programme I built one for ended in a meeting with the CEO of VINCI Construction.
-
-I'll follow up shortly. sentrada.io is there if you would rather move first.
+I will follow up by email in the next couple of days.
 
 Joe Chapman
 Sentrada
+joe@sentrada.io
++44 7815 814855
 
 ---
 
@@ -109,16 +110,16 @@ Sentrada
 
 David,
 
-Three years ago you wrote that AI cannot replicate the creativity it takes to break through the noise. Your own SDRs proved it when a voice-note script returned seven times their usual reply rate on LinkedIn. The print in this box is built entirely on that thesis.
+You have said for three years that AI made outbound too noisy and creativity is the only way through. Sometimes the only way to get someone to read your email is to take it out of their inbox.
 
-It uses your words and the exact channel you named. It could not have gone into anyone else's box.
+Your team can send these. The VP RevOps and GTM Operations leaders you need to reach at Navan-tier accounts would each receive one written entirely about them. Almost impossible to ignore.
 
-That gap you described is the whole of what I do at Sentrada: deeply researched, one-of-one physical pieces that reach a senior buyer before email gets the chance to fail. Ten years of enterprise outbound sit behind it.
-
-I'll follow up by email in the next couple of days, with a specific question about the buyers your team is chasing.
+I will follow up by email in the next couple of days.
 
 Joe Chapman
 Sentrada
+joe@sentrada.io
++44 7815 814855
 
 ---
 
@@ -126,16 +127,16 @@ Sentrada
 
 Andy,
 
-Atlassian is betting heavily on reaching the CIO-level buyer, and that buyer has already stopped reading cold email. The front page in this box is about that exact contradiction: how you get onto the desk when the inbox is closed.
+The front page in this box is built from Atlassian's own numbers. The 600 customers past the million-dollar mark, the 1,600 roles cut to fund enterprise sales, the question of how a company built on self-serve reaches the senior buyers who never came through the funnel. It could not have been sent to anyone else.
 
-Every element of it was built for Atlassian, from the headline metric to the problem it names. It could not have landed on anyone else's desk.
+Atlassian can send these. Your team already uses physical outreach at the gifting level. This is the intelligence level: a single piece built from a prospect's own data, sent to one desk. Built for the CTOs and engineering leaders they need to reach.
 
-I started Sentrada to solve precisely this: senior-buyer conversations lost not for want of a good pitch, but for want of a way onto the desk in the first place. The CEOs of Starbucks, L'Oréal and Danone have replied to pieces built this way.
-
-I'll drop a note in your inbox in the next couple of days.
+I will follow up by email in the next couple of days.
 
 Joe Chapman
 Sentrada
+joe@sentrada.io
++44 7815 814855
 
 ---
 
@@ -143,16 +144,16 @@ Sentrada
 
 Lesley,
 
-Gong's own numbers make the case: 91% of buyers say sales content isn't personalised, and your reps spend up to 12 hours a week on email trying to close that gap. The crossword in this box is built from them.
+Underneath is a crossword built entirely from Gong's own published data, your EMEA expansion doctrine, and the market you sell into every day.
 
-Every clue is from your public record: the Dublin scaling, the signal-not-instinct doctrine, Laura Vitaro's piñata play. It could not have been built for anyone else.
+Your team can send these. Your enterprise AEs are trying to book meetings with CROs and VPs of Sales who have gone quiet on email and cold calls. These one-to-one personalised pieces go to their desks instead.
 
-Sentrada makes one-of-one physical pieces for senior B2B buyers, for the conversations email no longer earns. The last one I built ended with the CEO of VINCI Construction taking the meeting.
-
-I'll follow up by email in the next couple of days.
+I will follow up by email in the next couple of days.
 
 Joe Chapman
 Sentrada
+joe@sentrada.io
++44 7815 814855
 
 ---
 
@@ -160,15 +161,15 @@ Sentrada
 
 Rhiannon,
 
-A programme delivering double-digit growth, and the CFO still will not take the meeting. The front page in this box is built around closing exactly that gap.
+The front page underneath this card uses your Momentum ITSMA award, the programme you built from scratch across 24 territories, and your published argument that you cannot build trust with a persona. Every claim is sourced.
 
-Every headline, pull quote and sidebar came from your own words and PwC's published strategy alone. It could not have gone to anyone else.
+Your ABM programme can send these. When the single scenario is ready but the meeting with the most senior buyer in the account is not, this is what arrives on their desk. One object, built for one person, that earns the conversation the entire plan depends on.
 
-Sentrada makes one deeply researched physical piece, delivered to a senior buyer's desk for the moment email can no longer reach priority one. The CEOs of Starbucks, L'Oréal and Danone have all replied to pieces built this way.
-
-I'll follow up by email later this week. There is a second edition of The Account Record I would like you to see, built around one of your target accounts rather than PwC itself.
+I will follow up by email in the next couple of days.
 
 Joe Chapman
 Sentrada
+joe@sentrada.io
++44 7815 814855
 
 ---
