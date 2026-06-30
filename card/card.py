@@ -215,20 +215,11 @@ def load_text(path):
 
 
 def typographic(s):
-    """House punctuation: curly quotes and ellipsis, but NEVER an em dash
-    (the copy rule forbids them, so the engine must not manufacture one)."""
-    if not s:
-        return s
-    s = s.replace("...", "…")
-    s = s.replace("'", "’")
-    out, open_q = [], True
-    for ch in s:
-        if ch == '"':
-            out.append("“" if open_q else "”")
-            open_q = not open_q
-        else:
-            out.append(ch)
-    return "".join(out)
+    """Render the copy verbatim. The design reference sets straight apostrophes
+    and quotes (e.g. Gong's, isn't), so the card does NOT smart-quote; the copy
+    is authored to the house rules upstream (no em dashes) and printed as given.
+    Kept as a single chokepoint in case a normalisation is ever wanted."""
+    return s or ""
 
 
 # ---------------------------------------------------------------------------
