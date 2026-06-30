@@ -118,6 +118,13 @@ BODY_MEASURE_CAP_MM = 128.0       # do not let body lines run the full width
 SALUTATION_LH = 1.12
 CONTACT_LH = 1.42
 
+# Once a tier is chosen, the leftover vertical slack (the contact is pinned to
+# the bottom margin) is distributed across the salutation and paragraph gaps so
+# the body fills down to the contact instead of leaving a dead band above it.
+# Capped per gap so a genuinely short note keeps natural breathing room rather
+# than stretching its paragraphs absurdly far apart.
+MAX_EXTRA_GAP_MM = 4.0
+
 # The auto-fit ladder. The renderer applies the first tier whose laid-out card
 # fits the trim with the bottom safe margin intact. Padding is (top, right,
 # bottom, left) in mm; gaps in mm; body line-height is a multiple of 9 pt.
@@ -329,68 +336,79 @@ def contact_lines(cr, contact, tier, pt):
 
 def flow(cr, model, W, H, tier, draw):
     """Lay the card out at `tier`. With draw=False nothing is painted; returns
-    (body_bottom_px, footer_top_px) so the caller can test the fit."""
+    (natural_body_bottom_px, footer_top_px) so the caller can test the fit at
+    the tier's natural (minimum) spacing. When draw=True the leftover slack is
+    distributed across the salutation and paragraph gaps so the body fills down
+    to the contact; this never overflows because it only consumes slack."""
     mm, pt = mk_units(W)
     sal_text, paras, contact = model
     top, right, bottom, left = (mm(v) for v in tier["pad"])
     content_w = W - left - right
     body_w = min(content_w, mm(BODY_MEASURE_CAP_MM))
 
-    if draw:
-        cr.save()
-        set_src(cr, STONE)
-        cr.paint()
-        cr.restore()
-
-    # --- slice motif ------------------------------------------------------
+    # --- measure every block once -----------------------------------------
     sw, sh = mm(SLICE_W_MM), mm(SLICE_H_MM)
-    sx, sy = left, top
-    if draw:
-        dx = SLICE_SKEW * sh
-        cr.save()
-        set_src(cr, CLAY)
-        cr.move_to(sx, sy)
-        cr.line_to(sx + sw, sy)
-        cr.line_to(sx + sw + dx, sy + sh)
-        cr.line_to(sx + dx, sy + sh)
-        cr.close_path()
-        cr.fill()
-        cr.restore()
-    y = sy + sh + mm(tier["slice_gap"])
-
-    # --- salutation -------------------------------------------------------
+    slice_gap = mm(tier["slice_gap"])
     sal = layout(cr, typographic(sal_text), DISPLAY, pt(PT_SALUTATION),
                  weight=Pango.Weight.LIGHT, italic=True, lh=SALUTATION_LH,
                  em=EM_SALUTATION)
-    if draw:
-        show(cr, sal, left, y, CHARCOAL)
-    y += height(sal) + mm(tier["sal_gap"])
-
-    # --- body -------------------------------------------------------------
-    for i, para in enumerate(paras):
-        lay = layout(cr, typographic(para), BODY, pt(PT_BODY), width=body_w,
-                     lh=tier["body_lh"], em=EM_BODY)
-        if draw:
-            show(cr, lay, left, y, BODY_INK)
-        y += height(lay)
-        if i < len(paras) - 1:
-            y += mm(tier["para_gap"])
-    body_bottom = y
-
-    # --- footer (pinned to the bottom safe margin) ------------------------
+    sal_h = height(sal)
+    para_lays = [layout(cr, typographic(p), BODY, pt(PT_BODY), width=body_w,
+                        lh=tier["body_lh"], em=EM_BODY) for p in paras]
+    para_hs = [height(l) for l in para_lays]
     lines = contact_lines(cr, contact, tier, pt)
     block_h = sum(height(l) for l, _ in lines)
     footer_bottom = H - bottom
     footer_top = footer_bottom - block_h
 
-    if draw:
-        cy = footer_top
-        for lay, color in lines:
-            show(cr, lay, left, cy, color)
-            cy += height(lay)
-        _draw_lockup(cr, W, right, footer_bottom, pt, mm)
+    base_sal_gap = mm(tier["sal_gap"])
+    base_para_gap = mm(tier["para_gap"])
+    natural_bottom = (top + sh + slice_gap + sal_h + base_sal_gap
+                      + sum(para_hs) + base_para_gap * max(0, len(paras) - 1))
 
-    return body_bottom, footer_top
+    if not draw:
+        return natural_bottom, footer_top
+
+    # distribute slack across the (1 salutation + n-1 paragraph) gaps
+    n_gaps = 1 + max(0, len(paras) - 1)
+    slack = (footer_top - mm(tier["footer_pad"])) - natural_bottom
+    extra = min(slack / n_gaps, mm(MAX_EXTRA_GAP_MM)) if slack > 0 and n_gaps else 0.0
+    sal_gap = base_sal_gap + extra
+    para_gap = base_para_gap + extra
+
+    cr.save()
+    set_src(cr, STONE)
+    cr.paint()
+    cr.restore()
+
+    # slice motif (the one accent), skewX(-32deg)
+    dx = SLICE_SKEW * sh
+    cr.save()
+    set_src(cr, CLAY)
+    cr.move_to(left, top)
+    cr.line_to(left + sw, top)
+    cr.line_to(left + sw + dx, top + sh)
+    cr.line_to(left + dx, top + sh)
+    cr.close_path()
+    cr.fill()
+    cr.restore()
+
+    y = top + sh + slice_gap
+    show(cr, sal, left, y, CHARCOAL)
+    y += sal_h + sal_gap
+    for i, lay in enumerate(para_lays):
+        show(cr, lay, left, y, BODY_INK)
+        y += para_hs[i]
+        if i < len(paras) - 1:
+            y += para_gap
+
+    cy = footer_top
+    for lay, color in lines:
+        show(cr, lay, left, cy, color)
+        cy += height(lay)
+    _draw_lockup(cr, W, right, footer_bottom, pt, mm)
+
+    return natural_bottom, footer_top
 
 
 def _draw_lockup(cr, W, right, footer_bottom, pt, mm):
