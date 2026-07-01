@@ -1,24 +1,14 @@
 # Sentrada deliverables
 
-Print-ready artefacts for Sentrada outreach pieces. Each batch folder holds the
-lossless PNGs (360 DPI, A2, 5953 x 8419 px) that go to the print supplier
-(Birch), plus the companion card copy for each piece.
+Print-ready artefacts, code-named to match the shipping CSV sent to Birch.
 
-This is an orphan branch: it shares no history with the code branches, so the
-engines and runner stay free of large binaries. For Birch, link them to the
-batch folder for the run in question.
+## batch-2026-06-25/
 
-## Batches
+Per recipient (code CP-NN in the shipping CSV):
+- `<CODE>_<Surname>_<Company>.png`      — the A2 artefact (360 DPI, sRGB)
+- `<CODE>_<Surname>_<Company>-card.png` — the A6 companion card (360 DPI, sRGB)
 
-- `batch-2026-06-25/` — 10 pieces. PNGs + `companion-cards.md`.
+Plus `companion-cards.md` (card copy reference).
 
-## Files per batch
-
-- `<recipient-slug>.png` — print-ready, lossless, 360 DPI. Hand straight to Birch.
-- `companion-cards.md` — companion card copy for every piece, each opening with
-  the recipient's first name.
-
-## Standing process
-
-Every run drops its lossless PNGs here under a new `batch-YYYY-MM-DD/` folder.
-JPEGs are only ever used for in-chat previews, never for print.
+The shipping CSV (code, recipient, company, delivery_address, notes, file_stem)
+is sent to Birch directly and is never committed here: it holds delivery addresses.
