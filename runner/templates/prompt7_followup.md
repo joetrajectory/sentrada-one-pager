@@ -144,6 +144,18 @@ The card does not lead on the same hook the follow-up will use. It sets the fram
 
 **Sell the channel, not just the piece.** The recipient is a prospective client of the sender, not just an admirer of the artefact. After making the bespoke nature explicit, pivot once from admiration to capability: show them what THEIR team could do with this channel. Exemplar pivot: "Your team can send these. The CROs and VPs of Sales your enterprise AEs need to reach would each receive one built entirely about them." One pivot sentence is enough. The piece proves the craft; the card sells the repeatable channel behind it.
 
+**Worked exemplar (a shipped, sender-approved card — match this register):**
+
+> Lisa,
+>
+> Inside is a crossword built around you, your company, and the ABM programmes you run. Your 70-plus 1:1 programmes, the channels you champion, the platforms you skip, the buyer personas you chase. Twenty clues, specific to you. Nobody else could solve it.
+>
+> We can send these to your target accounts. Your team needs meetings with CHROs and CPOs who are not responding to normal outreach. These go to their desks, built from research.
+>
+> I will follow up by email in the next couple of days.
+
+Note the shape: what the piece is made from, in their world; the bespoke line ("Nobody else could solve it"); the channel pivot naming their real buyer titles; the follow-up signal. Short sentences throughout, no stacked clauses, no proof padding, 86 words. The sign-off block (name, company, email, phone) is added by the card engine, so end the copy at the follow-up signal.
+
 ### Touch 1: Follow-up email (24-48h after confirmed delivery)
 
 No subject line. Structure:
