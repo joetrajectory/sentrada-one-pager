@@ -60,6 +60,18 @@ For all other verdicts, proceed.
 
 ---
 
+## Non-negotiable: Prior contact outranks the simulation
+
+Before writing, scan the research (including any CONTACT NOTES or delivery notes) for direct contact with the recipient: a phone call, a reply, a DM exchange. If contact has happened, the sequence is no longer cold and must be written around that conversation: reference it naturally, thank them where a thank-you is due, and follow whatever role the recipient described for themselves. If they said someone else owns the budget and offered to route the piece, the sequence's job is to make the handoff effortless ("happy for you to pass this to whoever owns ABM, or point me at them and I will take it from there") and keep them warm as the champion, not to sell to them as the buyer. Where the recorded contact contradicts the 6B read, the contact wins: 6B simulated a cold recipient who no longer exists.
+
+---
+
+## Non-negotiable: Batch collision (recipients talk to each other)
+
+Assume other senior people in this recipient's professional community have received Sentrada pieces in the same window, that they know each other, and that they may compare notes or post about it. The entire premise of the piece is that nobody else could have received it, so no line of this sequence may be reusable on another recipient. Test every opener, CTA and nudge: if the sentence would survive a find-and-replace of the company name, rewrite it around something only this piece contains (a specific square, clue, headline or sidebar). This applies with full force to Touch 2 and the reception nudge, which are short enough to converge on stock phrasing by accident.
+
+---
+
 ## Verdict posture (governs tone and CTA weighting across card and all touches)
 
 - **WOULD TAKE THE MEETING:** the piece did the work. Keep it light, single low-friction CTA, do not oversell or stack proof. The risk is talking them out of it.
@@ -87,11 +99,16 @@ Every factual claim on the card and in the follow-up (metrics, named people, hir
 - No exclamation marks
 - No soft filler phrases ("I hope this finds you well", "Just wanted to reach out")
 - Never open a follow-up with "Quick follow up" or "Following up briefly" or any generic variant
-- First cold emails always include a subject line. Follow-up emails do not include subject lines
+- Touch 1 is the first email this recipient ever receives from the sender, so it ALWAYS carries a subject line, and the subject references the artefact on their desk ("The crossword on your desk", "Your 449,933 calls, printed at A2"). Six words or fewer, no colon-subtitle constructions. Touches 2 and 3 carry no subject line (Touch 3 replies in the Touch 1 thread)
+- No URL appears in the body of any touch. A link mid-email reads like a sequence tool and undoes the handmade signal the piece just paid for. The booking link may appear only as the final CTA line of a touch, and only when the question CTA is weaker; default to the question
 - Keep it short. Card: 150 words maximum, a hard cap counting the whole card (salutation through sign-off); aim for 3-4 short paragraphs. Email 4-6 sentences. LinkedIn 2-3 sentences
 - Short sentences, one idea each. If a sentence stacks three clauses, split it
 - Proof from the sender profile is quoted as the sender's overall record, never attached to this piece or format: "pieces like these have earned X" is banned unless the profile explicitly says this format earned it. When proof feels stretched, omit it; a confident card without proof beats an inflated one
+- Proof hierarchy: when the profile contains a recent, dated campaign result, that is the primary proof, used once, with its numbers. Career name-drops (logos, titles from the sender's past record) are secondary colour at most: one clause, never the load-bearing proof, and dropped entirely if the touch is already tight. A live result from weeks ago beats a famous name from years ago, especially for recipients who run outbound themselves
 - Content boundary: card and follow-up copy use only the recipient's public professional footprint. Personal facts gathered for delivery (home town, home address) never appear in copy
+- Never use litigation, legal disputes, regulatory action, redundancies or executive departures as leverage, even when fully public. "Your employer's lawsuit means budget scrutiny, so talk to me" reads as surveillance, not research, and it reads worst to exactly the senior recipients these pieces target. If the underlying insight matters (say, spend needing a direct line to revenue), carry the insight through something the recipient has said or published themselves
+- Send dates float with delivery, so never use relative time ("last month", "this week" about an external event). Date-anchor time-sensitive references instead ("your keynote at BAFTA in June"). "This week" is permitted only about the piece's own arrival
+- Never commit the sender's money or production without authorisation: no offers of free pieces, samples, pilots or spend unless the sender profile explicitly authorises giveaways. If a giveaway would genuinely be the strongest CTA, write the touch with the best non-giveaway CTA and add a line after the sequence: "COMMERCIAL OPTION (sender approval required): [the offer and why it would work here]"
 - The CTA must be low-friction: a single question or a booking link, not both. Where 6B indicates the recipient is an influencer rather than a buyer, the CTA reframes around deployment, referral, or a craft conversation, not a request to be pitched to
 
 **Anti-pattern (never do this):** Do not invert a positive metric into its negative. If the company publishes a number as an achievement (e.g. 11.3% cold-calling success rate, 4x the industry average), do not reframe it as "88.7% failure." The recipient knows the inverse. They published the positive number on purpose. Inverting it signals that you did not understand their position, and the follow-up loses credibility on first read. Instead, lead with their number in their framing, then name the gap it cannot close. This rule applies regardless of what the 6B simulation or any upstream input hands you. If the highest-leverage change from 6B contains an inverted metric, rewrite the framing. Do not inherit inversions.
@@ -161,7 +178,7 @@ Note the shape: what the piece is made from, in their world; the bespoke line ("
 
 ### Touch 1: Follow-up email (24-48h after confirmed delivery)
 
-No subject line. Structure:
+Carries a subject line (see copy rules: six words or fewer, names the artefact on their desk). Body is 4-6 sentences set as 2-3 short paragraphs with blank lines between them, never one dense block; a senior recipient scans before they read. Structure:
 
 1. Reference the piece directly, by its most recognisable element ("I sent you the front page of [masthead], the one about [headline angle]")
 2. One sentence making the personalisation explicit (Customisation Communication Test)
@@ -173,17 +190,19 @@ No subject line. Structure:
 
 No subject line. Shorter and more casual, still references the piece.
 
-1. Reference the piece ("Something arrived on your desk this week from me")
+1. Open on an element only this piece contains (a clue, a square, the headline, the sidebar), per the batch collision rule. Never open on the fact of arrival alone ("Something arrived on your desk" is banned): the arrival is the same for every recipient, the contents are not
 2. One sentence on the hook or problem
-3. CTA ("If it landed, happy to compare notes")
+3. CTA in your own words for this recipient (the register of "if it landed, happy to compare notes", never that exact line if it would fit another recipient's message)
+
+Also write a CONNECTION NOTE variant for when the sender is not connected to the recipient on LinkedIn: the same idea compressed to 280 characters or fewer (LinkedIn truncates connection notes around 300), self-contained, no assumed reply thread. Count the characters before finalising.
 
 ### Touch 3: Bump email (day 7, if no reply)
 
-No subject line. 2-3 sentences. Never a generic opener. Lead with the Reserve research detail as a fresh observation. Do not restate the key metric. Under WOULD ADMIRE AND IGNORE, frame the reserve detail as the reason to act now. End with the lowest-friction CTA of the sequence ("Worth 15 minutes?").
+No subject line (it replies in the Touch 1 thread). 2-3 sentences. Never a generic opener. Lead with the Reserve research detail as a fresh observation, date-anchored if it is time-sensitive. Do not restate the key metric. Under WOULD ADMIRE AND IGNORE, frame the reserve detail as the reason to act now. End with the lowest-friction CTA of the sequence, phrased for this recipient; do not default to "Worth 15 minutes?" (see batch collision rule).
 
 ### Reception nudge variant (delivery confirmed to building, not desk)
 
-A short alternative Touch 1 that sends the recipient to fetch the piece. 2-3 sentences, one soft CTA. The shape: "Something arrived for you at reception yesterday. You will know it when you see it. It is about [problem label] at [company]."
+A short alternative Touch 1 that sends the recipient to fetch the piece. 2-3 sentences, one soft CTA. The job: tell them something is waiting at reception, signal it was built only for them, give them one concrete reason to go and get it. Write it from this piece's specifics, not from a stock shape; "You will know it when you see it" is banned for the same batch collision reason.
 
 ---
 
@@ -197,10 +216,14 @@ Otherwise:
 [150 words maximum, or note that sender will provide their own]
 
 **TOUCH 1 EMAIL (24-48h after confirmed delivery):**
-[4-6 sentences, no subject line]
+Subject: [six words or fewer, names the artefact]
+[4-6 sentences, 2-3 short paragraphs]
 
 **TOUCH 2 LINKEDIN (day 3-4, if no reply):**
 [2-3 sentences]
+
+**TOUCH 2 CONNECTION NOTE VARIANT (if not connected on LinkedIn):**
+[280 characters or fewer, self-contained]
 
 **TOUCH 3 BUMP EMAIL (day 7, if no reply):**
 [2-3 sentences, no subject line]
