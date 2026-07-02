@@ -89,6 +89,9 @@ Every factual claim on the card and in the follow-up (metrics, named people, hir
 - Never open a follow-up with "Quick follow up" or "Following up briefly" or any generic variant
 - First cold emails always include a subject line. Follow-up emails do not include subject lines
 - Keep it short. Card: 150 words maximum, a hard cap counting the whole card (salutation through sign-off); aim for 3-4 short paragraphs. Email 4-6 sentences. LinkedIn 2-3 sentences
+- Short sentences, one idea each. If a sentence stacks three clauses, split it
+- Proof from the sender profile is quoted as the sender's overall record, never attached to this piece or format: "pieces like these have earned X" is banned unless the profile explicitly says this format earned it. When proof feels stretched, omit it; a confident card without proof beats an inflated one
+- Content boundary: card and follow-up copy use only the recipient's public professional footprint. Personal facts gathered for delivery (home town, home address) never appear in copy
 - The CTA must be low-friction: a single question or a booking link, not both. Where 6B indicates the recipient is an influencer rather than a buyer, the CTA reframes around deployment, referral, or a craft conversation, not a request to be pitched to
 
 **Anti-pattern (never do this):** Do not invert a positive metric into its negative. If the company publishes a number as an achievement (e.g. 11.3% cold-calling success rate, 4x the industry average), do not reframe it as "88.7% failure." The recipient knows the inverse. They published the positive number on purpose. Inverting it signals that you did not understand their position, and the follow-up loses credibility on first read. Instead, lead with their number in their framing, then name the gap it cannot close. This rule applies regardless of what the 6B simulation or any upstream input hands you. If the highest-leverage change from 6B contains an inverted metric, rewrite the framing. Do not inherit inversions.
@@ -138,6 +141,8 @@ Otherwise, structure:
 6. Sign off with the sender's full name. The recipient must know exactly who sent this.
 
 The card does not lead on the same hook the follow-up will use. It sets the frame and reveals the sender. The follow-up deploys the specific 6B craft hook.
+
+**Sell the channel, not just the piece.** The recipient is a prospective client of the sender, not just an admirer of the artefact. After making the bespoke nature explicit, pivot once from admiration to capability: show them what THEIR team could do with this channel. Exemplar pivot: "Your team can send these. The CROs and VPs of Sales your enterprise AEs need to reach would each receive one built entirely about them." One pivot sentence is enough. The piece proves the craft; the card sells the repeatable channel behind it.
 
 ### Touch 1: Follow-up email (24-48h after confirmed delivery)
 

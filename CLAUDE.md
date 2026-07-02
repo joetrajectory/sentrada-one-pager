@@ -138,6 +138,11 @@ Layer C: Variation variables (auto-assigned: scene archetype, people visibility,
 - No soft filler phrases
 - Never lead with "AI" in positioning
 - Lead with the answer, no preamble
+- The sender profile (proof points, what they sell) is a HUMAN-OWNED input: written
+  or verbatim-approved by the sender, never drafted by the pipeline. Copy may quote
+  it, never extend it, and never attribute its results to a specific piece or format
+- Piece content uses only the recipient's public professional footprint (the
+  self-published test). Personal facts gathered for delivery never become content
 
 ## Key commands
 

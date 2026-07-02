@@ -89,8 +89,31 @@ of your candidates and builds the grid, so over-provide good ones.
   leaving it to chance. Pick a letter-friendly anchor (common letters E S T A R N I O
   intersect best); a very long or awkward answer may not place. Leave `anchor` off
   every other candidate.
+- Content boundary (self-published test): every answer and clue must come from the
+  recipient's public professional footprint: their company, their work, published
+  statements, talks, stated methods, or details they have published about
+  themselves in a professional context (a hobby in their own speaker bio is fine).
+  Never use personal facts that had to be dug up: home town, home address, family,
+  schooling. Facts gathered for delivery/shipping must never become content. Test:
+  would this read as observed (from what they show the world) or investigated
+  (from looking into them)? Exemplar: SAILING clued "Grace's pastime per her 2025
+  bio" passes (her own published speaker bio). Anti-exemplar: READING clued
+  "English town Lisa works from" fails (home town, sourced from delivery research).
+- One-way parse rule: every clue must parse only one way. A modifier (nearly,
+  only, just) must attach unambiguously to the word it modifies. Anti-exemplar:
+  "Millions in pipeline Pinata nearly influenced" reads as almost-but-didn't;
+  exemplar: "Nearly ___ million in pipeline from Project Pinata" attaches
+  "nearly" to the number.
+- Never reference grid numbering ("91-Across") in the title, subtitle, or any
+  clue. Numbers are assigned by the grid engine and change whenever the grid is
+  regenerated, so any reference will dangle.
 - Title: "THE [COMPANY] CROSSWORD", using the recipient's company name.
-- Subtitle: one dry line, specific to this recipient's situation, not generic.
+- Subtitle: ONE idea, seven words or fewer, dry, specific to this recipient. No
+  "across and down" wordplay filler; the crossword form speaks for itself.
+  Exemplars: "Filled entirely with your own vocabulary." and "1:1 ABM, taken
+  literally." Anti-exemplar: "Award-winning EMEA ABM, solved across and down,
+  while the best accounts sit silent." (three ideas, thirteen words, form
+  wordplay).
 
 {{feedback_block}}
 

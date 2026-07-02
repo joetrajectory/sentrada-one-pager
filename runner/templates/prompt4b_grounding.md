@@ -27,6 +27,25 @@ Do NOT flag:
 - Fictional newspaper furniture: the masthead name, the edition line, and the
   fictional bylines are invented by design and are not factual claims.
 
+Beyond factual grounding, ALSO flag these three content violations, using the same
+output format (the offending phrase in "claim", the category and reason in "issue"):
+
+1. PERSONAL DETAIL: any detail about the recipient that is personal rather than
+   professional and was not self-published by them in a professional context. Their
+   own speaker-bio facts, talks and posts are fine; home town, home address, family
+   or schooling are not, even when accurate. Facts that exist in the research for
+   delivery/shipping purposes must never appear in copy. The test: would the
+   recipient read it as observed (from what they show the world) or investigated
+   (from looking into them)?
+2. OVER-ATTRIBUTED PROOF: any sender proof attached to this specific piece or
+   format ("pieces like these have earned...", "this format won a meeting with...")
+   rather than stated as the sender's overall record. The sender's record may be
+   quoted, never extended.
+3. TWO-WAY PARSE: any sentence or clue whose modifier or relative clause can attach
+   to the wrong word and change the meaning ("pipeline Pinata nearly influenced"
+   reads as almost-but-didn't; "AWS Summit London, which she runs and attends" when
+   she runs a different programme).
+
 Source research (facts about the RECIPIENT and their company):
 {{research}}
 

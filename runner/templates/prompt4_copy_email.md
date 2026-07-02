@@ -56,13 +56,18 @@ Every email follows the same seven-beat shape. Hold to it.
    Quinn... over £50m saved"), OR a specific noticed detail about the recipient ("I
    also noticed in an interview that you're known as a 'good listener'"). Use a named
    reference ONLY if the research supports it as true. Never fabricate a customer.
+   Proof from the sender profile is quoted as the sender's overall record, never
+   extended: never write "pieces like these have earned X" or attach a past result
+   to THIS format or THIS piece unless the profile explicitly says that format
+   earned it. When proof feels stretched, use the noticed-detail option instead.
 
 6. THE ASK. A soft, permission-based close. "If you see value in hearing how... just
    let me know." Low-friction, confident, never pushy. Offering to share with someone
    on their team is welcome. Do not demand a 15-minute slot or name a day; this voice
    earns the reply, it does not corner the reader.
 
-7. SIGN-OFF. "Best regards," on one line, then the sender's first name.
+7. SIGN-OFF. The sender's first name alone, on its own line. No "Best regards", no
+   "Kind regards": the register is a person writing, not a letter template.
 
 ## Copy rules (apply to all output)
 
@@ -80,6 +85,10 @@ Every email follows the same seven-beat shape. Hold to it.
   company, rewrite it.
 - Warm, measured, respectful, certain. Never mock the recipient. The joke is the
   medium, never the reader.
+- Short sentences carry this voice. One idea per sentence; if a sentence stacks
+  three clauses, split it. Exemplar of the register: "Standing out from the crowd
+  is where trumpet got its name. The grenade boxes you and Nick sent to thousands
+  of beta signups proved you meant it."
 
 FACTUAL ACCURACY RULE: Every claim is read at A2 and cannot be a lie. Each fact in
 the subject and body must be accurate to the research. Never invent a metric, a
@@ -114,8 +123,8 @@ Produce exactly two things.
 
 1) A single fenced JSON code block (```json ... ```) containing ONLY these fields.
 The body is an ordered list of blocks. Use `{"type": "p", "text": "..."}` for every
-paragraph and `{"type": "signature", "lines": ["Best regards,", "First name"]}` for
-the sign-off, which must be last. Do not use bullets. Do not include the sender email,
+paragraph and `{"type": "signature", "lines": ["First name of sender"]}` for the
+sign-off (the first name alone, no "Best regards"), which must be last. Do not use bullets. Do not include the sender email,
 avatar, timestamp or recipient address: the engine adds those from the campaign config.
 
 ```json
@@ -129,7 +138,7 @@ avatar, timestamp or recipient address: the engine adds those from the campaign 
     {"type": "p", "text": "This would ... [the outcome in their terms, with one specific sourced metric]."},
     {"type": "p", "text": "[Named proof: a real peer or customer and their result, or a specific noticed detail about the recipient]."},
     {"type": "p", "text": "If you see value in hearing more ... just let me know."},
-    {"type": "signature", "lines": ["Best regards,", "First name of sender"]}
+    {"type": "signature", "lines": ["First name of sender"]}
   ]
 }
 ```

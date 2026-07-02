@@ -61,6 +61,33 @@ look, not advertise itself on first. The recipient's company name inside a headl
 that makes sense as a story, not as a banner overlay. Operational details woven
 into the content, not listed.
 
+SURFACE RULE (headline, pull quote, hero stat): the surface is what a passing
+colleague sees on the recipient's desk, so it must be something the recipient is
+comfortable displaying. Never headline a critique of the recipient's own function.
+The sharp structural question lives in the body's closing arc, never on the
+surface. The pull quote must be the recipient or their leadership saying something
+they would stand behind (a win, a stated strategy), never the bad-news
+announcement. Where a positive or neutral proof point exists alongside a dramatic
+negative event, prefer the positive (a full-price flagship partnership beats a
+layoffs story, even when the layoffs are the bigger headline). Exemplar: "Atlassian
+crosses 600 customers above $1m as $225m restructuring funds the enterprise push"
+(achievement plus the bet). Anti-exemplar: "...but its senior-buyer outreach is
+unproven" (a verdict on the recipient's own function, on the surface).
+
+PRECISION RULE (roles and relative clauses): attach every verb to the right noun.
+"Runs" is not "attends"; "owns" is not "contributes to". Re-read every relative
+clause and confirm it attaches to the thing the research supports. Failure
+exemplar: "ExecLeaders ... ran events alongside AWS Summit London, which she runs
+and attends" implied she runs the Summit; she runs ExecLeaders and attends the
+Summit. Modifiers (nearly, only, just, almost) must attach unambiguously to the
+word they modify.
+
+CONTENT BOUNDARY (self-published test): use only the recipient's public
+professional footprint. Details they published about themselves in a professional
+context (their own speaker bio, their own posts) are usable; personal facts that
+had to be dug up (home town, home address, family) exist in the research for
+delivery only and must never appear in the copy.
+
 ## Newspaper content rules
 
 SUBJECT RULE (read first): The front page is journalism about the recipient and

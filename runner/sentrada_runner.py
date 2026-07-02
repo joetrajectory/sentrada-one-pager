@@ -36,6 +36,7 @@ Usage:
 import argparse
 import base64
 import csv
+import hashlib
 import json
 import os
 import re
@@ -314,6 +315,8 @@ def run_engine(engine_path, template_path, data_path, output_path=None, check=Fa
     if output_path:
         cmd += ["--output", output_path, "--print-dpi", "360"]
     result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
+    if output_path and result.returncode == 0:
+        _stamp_engine(output_path, engine_path)
     return result.returncode, result.stdout + result.stderr
 
 
@@ -406,6 +409,8 @@ def run_crossword_engine(engine_path, template_path, data_path, output_path=None
     if output_path:
         cmd += ["--output", output_path, "--print-dpi", "360"]
     result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
+    if output_path and result.returncode == 0:
+        _stamp_engine(output_path, engine_path)
     return result.returncode, result.stdout + result.stderr
 
 
@@ -460,6 +465,26 @@ def email_violations(data):
     return v
 
 
+def _engine_file_sha1(engine_path):
+    with open(engine_path, "rb") as fh:
+        return hashlib.sha1(fh.read()).hexdigest()
+
+
+def _stamp_engine(output_path, engine_path):
+    """Record which engine build produced a render (engine_stamp.json beside it).
+    ship-check compares this against the current engine file and warns when a
+    render predates an engine change — the lesson of the MongoDB dateline, where a
+    fixed engine bug shipped inside a stale render."""
+    try:
+        folder = os.path.dirname(os.path.abspath(output_path))
+        write_file(os.path.join(folder, "engine_stamp.json"), json.dumps({
+            "engine": os.path.relpath(engine_path, REPO_ROOT),
+            "sha1": _engine_file_sha1(engine_path),
+        }, indent=2))
+    except OSError:
+        pass  # stamping is best-effort; never fail a render over it
+
+
 def email_engine_data(data, args, sender, config):
     """Assemble the engine's --data from the email copy plus the sender identity
     (config) and recipient (args). The sender signs the piece, so name/email/
@@ -469,7 +494,13 @@ def email_engine_data(data, args, sender, config):
     for b in (data.get("body") or []):
         t = b.get("type", "p")
         if t == "signature":
-            lines = b.get("lines") or [x for x in (b.get("name"), b.get("detail")) if x]
+            if data.get("copy_source", "authored") == "client":
+                # Client-supplied copy is rendered verbatim, sign-off included.
+                lines = b.get("lines") or [x for x in (b.get("name"), b.get("detail")) if x]
+            else:
+                # House sign-off: the sender's first name alone, no "Best regards"
+                # (normalised here so the rule holds whatever the model wrote).
+                lines = [sender_name.split()[0] if sender_name.strip() else "Joe"]
             body.append({"type": "signature", "lines": lines})
         elif t in ("bullet", "li"):
             body.append({"type": "bullet", "text": str(b.get("text", ""))})
@@ -528,6 +559,8 @@ def run_email_engine(engine_path, data_path, output_path=None, check=False):
     if output_path:
         cmd += ["--output", output_path, "--print-dpi", "360"]
     result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
+    if output_path and result.returncode == 0:
+        _stamp_engine(output_path, engine_path)
     return result.returncode, result.stdout + result.stderr
 
 
@@ -875,6 +908,8 @@ def run_card_engine(config, engine_path, data_path, output_path=None, check=Fals
     if output_path:
         cmd += ["--output", output_path, "--print-dpi", "360"]
     result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
+    if output_path and result.returncode == 0:
+        _stamp_engine(output_path, engine_path)
     return result.returncode, result.stdout + result.stderr
 
 
@@ -1486,6 +1521,20 @@ def _ship_status(folder):
                          "(P6B has not seen the delivered file)")
         if p6b == "WOULD BIN":
             holds.append("P6B verdict is WOULD BIN — do not print")
+
+    # Engine staleness: warn when the engine file has changed since this render
+    # (a fixed engine bug may be shipping inside a stale render). Pieces rendered
+    # before stamping existed have no stamp and are not warned about.
+    stamp_path = os.path.join(folder, "engine_stamp.json")
+    if os.path.exists(stamp_path):
+        try:
+            stamp = json.loads(read_file(stamp_path))
+            ep = os.path.join(REPO_ROOT, stamp.get("engine", ""))
+            if os.path.exists(ep) and _engine_file_sha1(ep) != stamp.get("sha1"):
+                warns.append("engine has changed since this render — re-render "
+                             "recommended (delivered file may predate an engine fix)")
+        except (ValueError, OSError):
+            pass
 
     return {"slug": slug, "format": fmt, "shippable": not holds,
             "holds": holds, "warns": warns, "p6": p6, "p6b": p6b}
