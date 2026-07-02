@@ -95,9 +95,12 @@ python runner/sentrada_runner.py batch-build --manifest research/<batch>.json
    shipping CSV (never committed)
 11. PRINT & SHIP: Birch prints and ships; tracking CSV comes back from Birch
 12. FOLLOW-UP SEND: Touch 1 lands 24-48h after confirmed delivery, Touch 2 day
-   3-4, Touch 3 day 7 (manual for now; no send tooling yet)
-13. OUTCOME: record what happened with `outcome`; compare 6B predictions against
-   reality with `calibration`
+   3-4, Touch 3 day 7. Sent manually; every touch is tracked in the shared
+   client doc (working process, in place)
+13. OUTCOME: record what happened with `outcome` (writes the COMMITTED ledger
+   runner/outcomes.json, which captures the 6B verdict at record time and
+   survives across sessions — commit it after recording); compare predictions
+   against reality with `calibration`
 
 Data flows via files in runner/pieces/<slug>/: research.md, gate.json, brief.json,
 data.json, the render PNG, qc_review.md, qc_recipient.md, followup.md,
@@ -244,7 +247,8 @@ CLAUDE.md          # This file
 ## Git tracking
 
 Committed (core IP):
-  runner/ (sentrada_runner.py, templates/, config.json — keep it secret-free)
+  runner/ (sentrada_runner.py, templates/, config.json — keep it secret-free —
+  and outcomes.json, the cross-session outcome ledger)
   newspaper/, crossword/, email/, card/ (the layout engines + their templates/assets)
   .claude/ (agents, commands, skills, hooks, settings)
   .mcp.json

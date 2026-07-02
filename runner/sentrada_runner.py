@@ -1784,43 +1784,59 @@ def cmd_followup(args):
 # `outcome` records what actually happened to a sent piece; `calibration`
 # tabulates 6B's predictions against reality. Once ~30 outcomes exist, the misses
 # become calibration examples for the 6B prompt.
+#
+# Outcomes live in a COMMITTED ledger (runner/outcomes.json), not in the
+# gitignored pieces folders: remote containers are ephemeral, and outcomes
+# accumulate over weeks. The 6B verdict and piece context are captured into the
+# ledger at record time, so calibration works in a fresh container with no
+# pieces folders at all. Commit the ledger after recording.
 
 OUTCOME_CHOICES = ("replied", "meeting", "opportunity", "no_response", "bounced")
+OUTCOMES_PATH = os.path.join(RUNNER_DIR, "outcomes.json")
 
 
 def cmd_outcome(args):
+    ledger = json.loads(read_file(OUTCOMES_PATH)) if os.path.exists(OUTCOMES_PATH) else {}
+    rec = ledger.get(args.slug, {})
+    # Capture piece context while the folder still exists.
     folder = os.path.join(PIECES_DIR, args.slug)
-    if not os.path.isdir(folder):
-        die(f"no piece folder: {folder}")
-    path = os.path.join(folder, "outcome.json")
-    rec = json.loads(read_file(path)) if os.path.exists(path) else {}
-    rec.update({"result": args.result, "date": args.date or rec.get("date", "")})
+    meta_path = os.path.join(folder, "meta.json")
+    if os.path.exists(meta_path):
+        meta = json.loads(read_file(meta_path))
+        rec.setdefault("recipient", meta.get("recipient_name", ""))
+        rec.setdefault("company", meta.get("recipient_company", ""))
+        rec.setdefault("format", meta.get("format", ""))
+    sixb_path = os.path.join(folder, "qc_recipient.md")
+    if os.path.exists(sixb_path):
+        v = extract_6b_verdict(read_file(sixb_path))
+        if v:
+            rec["verdict_6b"] = v
+    rec["result"] = args.result
+    if args.date:
+        rec["date"] = args.date
     if args.notes:
         rec["notes"] = args.notes
-    write_file(path, json.dumps(rec, indent=2))
-    sixb_path = os.path.join(folder, "qc_recipient.md")
-    verdict = extract_6b_verdict(read_file(sixb_path)) if os.path.exists(sixb_path) else None
+    ledger[args.slug] = rec
+    write_file(OUTCOMES_PATH, json.dumps(ledger, indent=2))
     print(f"[outcome] {args.slug}: {args.result}"
-          + (f"  (6B predicted: {verdict})" if verdict else ""))
+          + (f"  (6B predicted: {rec.get('verdict_6b')})" if rec.get("verdict_6b") else ""))
+    print(f"[outcome] ledger updated: {os.path.relpath(OUTCOMES_PATH, REPO_ROOT)} "
+          "— commit and push it so the record survives this container")
 
 
 def cmd_calibration(args):
     positive = {"replied", "meeting", "opportunity"}
-    rows, pending = [], []
+    ledger = json.loads(read_file(OUTCOMES_PATH)) if os.path.exists(OUTCOMES_PATH) else {}
+    rows = [(slug, rec.get("verdict_6b", "?"), rec.get("result", "?"))
+            for slug, rec in sorted(ledger.items()) if rec.get("result")]
+    pending = []
     if os.path.isdir(PIECES_DIR):
         for d in sorted(os.listdir(PIECES_DIR)):
-            folder = os.path.join(PIECES_DIR, d)
-            if not os.path.isdir(folder) or d.startswith("_"):
+            if d.startswith("_") or d in ledger:
                 continue
-            sixb_path = os.path.join(folder, "qc_recipient.md")
-            if not os.path.exists(sixb_path):
-                continue
-            verdict = extract_6b_verdict(read_file(sixb_path)) or "?"
-            op = os.path.join(folder, "outcome.json")
-            if os.path.exists(op):
-                rows.append((d, verdict, json.loads(read_file(op)).get("result", "?")))
-            else:
-                pending.append((d, verdict))
+            sixb_path = os.path.join(PIECES_DIR, d, "qc_recipient.md")
+            if os.path.exists(sixb_path):
+                pending.append((d, extract_6b_verdict(read_file(sixb_path)) or "?"))
 
     print("\n" + "=" * 70)
     print("6B CALIBRATION — prediction vs outcome")
