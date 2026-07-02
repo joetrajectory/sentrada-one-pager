@@ -1791,7 +1791,8 @@ def cmd_followup(args):
 # ledger at record time, so calibration works in a fresh container with no
 # pieces folders at all. Commit the ledger after recording.
 
-OUTCOME_CHOICES = ("replied", "meeting", "opportunity", "no_response", "bounced")
+OUTCOME_CHOICES = ("replied", "meeting", "opportunity", "declined", "no_response",
+                   "bounced")  # declined = a reply, but a "no thank you"
 OUTCOMES_PATH = os.path.join(RUNNER_DIR, "outcomes.json")
 
 

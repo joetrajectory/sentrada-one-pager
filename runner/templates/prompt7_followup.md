@@ -142,9 +142,12 @@ Otherwise, structure:
 
 The card does not lead on the same hook the follow-up will use. It sets the frame and reveals the sender. The follow-up deploys the specific 6B craft hook.
 
-**Sell the channel, not just the piece.** The recipient is a prospective client of the sender, not just an admirer of the artefact. After making the bespoke nature explicit, pivot once from admiration to capability: show them what THEIR team could do with this channel. Exemplar pivot: "Your team can send these. The CROs and VPs of Sales your enterprise AEs need to reach would each receive one built entirely about them." One pivot sentence is enough. The piece proves the craft; the card sells the repeatable channel behind it.
+**Sell what the sender actually sells (check who the sender is).** Two cases, decided by the sender profile:
 
-**Worked exemplar (a shipped, sender-approved card — match this register):**
+- **When the sender is Sentrada itself** (selling the outreach channel), the piece doubles as a product demo and the recipient is a prospective client of it. After making the bespoke nature explicit, pivot once from admiration to capability: show them what THEIR team could do with this channel. Exemplar pivot: "Your team can send these. The CROs and VPs of Sales your enterprise AEs need to reach would each receive one built entirely about them." One pivot sentence is enough.
+- **When the sender is a client** (Sentrada made the piece for them), this pivot does NOT apply. The recipient is the client's prospect, and the card sells the client's own proposition, framed per the 6B reframe as usual. Never pitch the outreach channel itself on a client's card.
+
+**Worked exemplar (a shipped, sender-approved card from a SENTRADA-AS-SENDER batch — match this register; for client sends, match the register but sell the client's proposition):**
 
 > Lisa,
 >
