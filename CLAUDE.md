@@ -10,27 +10,34 @@ Sentrada generates AI-crafted, hyper-personalised physical artefacts for B2B sal
 
 npm install
 cp .env.example .env
+cp runner/config.example.json runner/config.json   # then fill in the sender block (see Prompt 0)
+
+The chain runner (the production pipeline) authenticates through the logged-in
+Claude CLI on a subscription; it needs no API key.
 
 ## Environment variables
 
-Required:
-ANTHROPIC_API_KEY=        # Claude API key (Opus + Sonnet access)
-IMAGE_GEN_API_KEY=        # Midjourney/Flux API key
+Required for the chain runner: none.
+
+Optional:
+ANTHROPIC_API_KEY=        # only if runner/config.json sets "vision_backend": "sdk"
+IMAGE_GEN_API_KEY=        # image-gen formats only (Claymation, parked)
 
 Required for MCP connections:
 NOTION_MCP_TOKEN=         # Notion integration token (campaign log, research outputs)
 APOLLO_API_KEY=           # Apollo.io API key (contact data, company signals)
 
-Future (not required for Sprint 1):
+Future (not required yet):
 PRINT_SUPPLIER_API_KEY=   # Print-on-demand supplier API
 SHIPPING_API_KEY=         # Shipping/tracking API
 HUBSPOT_API_KEY=          # For triggering follow-up sequences in client's outbound tool
 
 ## Verify setup
 
-/research-company test-company
-# Expected: Research output with all 7 Visual Brief fields populated
-# If any field is missing or generic, the research prompt needs iteration
+python runner/sentrada_runner.py ship-check --all
+# Runs the print-readiness gate over existing pieces; confirms the runner,
+# config and piece folders are healthy. For a full smoke test, run a
+# generate --brief-only against a test research file.
 
 ## Validate output quality
 
@@ -43,60 +50,107 @@ A good Visual Brief has:
 
 If any of these are missing, the research is too thin. Flag for manual enrichment rather than proceeding.
 
-## Run the pipeline
+## Run the pipeline (the chain runner)
 
-/generate-artefact [company-name] [recipient-name] [recipient-title] [company-url]
-# Chains all subagents automatically: research > bridge > format > copy > prompt > image > review
+Single piece:
+python runner/sentrada_runner.py generate --name "Jane Doe" --title "VP Sales" \
+    --company "Acme" --format newspaper|email|crossword \
+    --research research/jane-doe-acme.md --brief-only
+# approve the brief, then:
+python runner/sentrada_runner.py generate --name "Jane Doe" --title "VP Sales" \
+    --company "Acme" --format <same> --resume
 
-/generate-batch [input-file.json]
-# Processes multiple companies sequentially, running the full Account Deep Research prompt on each
+Batches (the normal way to run):
+python runner/sentrada_runner.py batch-brief --manifest research/<batch>.json
+# read <batch>.review.md, edit <batch>.approvals.txt (APPROVE/SKIP per piece), then:
+python runner/sentrada_runner.py batch-build --manifest research/<batch>.json
 
 ## Pipeline steps
 
-1. INTAKE: Sender provides recipient details and problem description
-2. RESEARCH: research-agent runs Prompt 1 (company research, evidence assessment, operational details). In manual testing: use Claude Research mode (toggle on) in the Sentrada Project for maximum depth. In automated pipeline: Claude API with web search tool.
-3. BRIDGE: brief-agent runs Prompt 2 (problem-evidence matching, scoring, Visual Brief with 7 fields)
-4. FORMAT: format-agent runs Prompt 3 (format recommendation from library of 4)
-5. COPY: copy-agent writes text content (if text-heavy format)
-6. PROMPT: prompt-agent assembles master image gen prompt from Layer A + B + C
-7. IMAGE: Image generation API produces the visual artefact
-8. REVIEW: review-agent assesses quality (pass/fail with retry logic, max 3 attempts)
-8b. CARD: copy-agent generates companion card copy, then card/card.py (the A6 companion-card engine) renders it to a print-ready PNG at runner/pieces/{slug}/{slug}-card.png. Skipped if sender provided custom copy. Overflow past the 150-word cap is refused, not squeezed.
-9. SENDER REVIEW: Sender sees artefact + companion card, approves or requests changes
-10. PRINT: Approved artefact + companion card sent to print supplier
-11. SHIP: Printed artefact + card packaged in premium box and shipped with tracking
-12. FOLLOWUP: followup-agent generates personalised follow-up copy on delivery confirmation
+1. INTAKE: recipient details + chosen format per recipient in the batch manifest
+2. RESEARCH (Prompt 1): manual, in the Sentrada Claude Project with Research mode
+   on for maximum depth; paste the output in. Ends with the Piece setup header and
+   the structured DELIVERY block.
+2b. RESEARCH GATE (Prompt 1b): the runner gates pasted research for completeness
+   at ingestion (gate.json). Gaps surface in the batch review sheet; NOT_READY
+   defaults the piece to SKIP in approvals.
+3. BRIEF (Prompt 2): problem-evidence matching, Visual Brief. Human approval
+   checkpoint (interactive, or approvals.txt in batches).
+4. COPY (Prompt 4, per format): newspaper / email / crossword copy as engine JSON
+4b. GATES (Prompt 4b + engine --check): factual grounding + content gate (personal
+   detail, over-attributed proof, ambiguity) and layout fit; failures loop back
+   into Prompt 4, max 3 attempts
+5. RENDER: deterministic layout engine at 360 DPI (text guaranteed legible);
+   each render is stamped with the engine build (engine_stamp.json)
+6. REVIEW (Prompt 6, vision): craft QC; FAIL halts the chain
+6b. RECIPIENT SIM (Prompt 6B, vision): predicted response; WOULD BIN halts
+7. FOLLOW-UP (Prompt 7): companion card copy + 3-touch sequence, generated now,
+   held until delivery confirmation
+8b. CARD: card/card.py renders the card copy to a print-ready A6 PNG at
+   runner/pieces/{slug}/{slug}-card.png. Skipped if sender provided custom copy.
+   Overflow past the 150-word cap is refused, not squeezed.
+9. SHIP-CHECK: print-readiness gate (QC freshness, engine staleness, P6 FAIL,
+   6B WOULD BIN) before anything is staged
+10. DELIVERABLES: PNGs pushed to the deliverables branch; birch-csv generates the
+   shipping CSV (never committed)
+11. PRINT & SHIP: Birch prints and ships; tracking CSV comes back from Birch
+12. FOLLOW-UP SEND: Touch 1 lands 24-48h after confirmed delivery, Touch 2 day
+   3-4, Touch 3 day 7 (manual for now; no send tooling yet)
+13. OUTCOME: record what happened with `outcome`; compare 6B predictions against
+   reality with `calibration`
 
-Data flows via JSON files in /pipeline/{campaign-id}/. Each step reads the previous step's output file.
+Data flows via files in runner/pieces/<slug>/: research.md, gate.json, brief.json,
+data.json, the render PNG, qc_review.md, qc_recipient.md, followup.md,
+<slug>-card.png, outcome.json.
+
+Legacy: the original image-generation pipeline (/generate-artefact subagents,
+Layer A/B/C prompt assembly, /pipeline/ campaign folders) now applies only to the
+parked image-gen formats (Claymation).
 
 ## Model selection
 
-Use Opus for: research-agent, review-agent, format-agent (complex reasoning)
-Use Sonnet for: brief-agent, copy-agent, prompt-agent, followup-agent (structured tasks)
+Chain runner (runner/config.json "models"): p1b sonnet (research gate), p2 opus
+(brief), p4 opus (copy), p4b opus (grounding), p6 opus (vision review), p6b opus
+(recipient sim), p7 sonnet (follow-up).
+Image-gen pipeline (parked formats): Opus for research/review/format; Sonnet for
+brief/copy/prompt/followup.
 
-## Format library (4 launch formats, v8.0 - all A2 on foam core)
+## Format library (3 production formats, v9.0 — deterministic engines, A2 at 360 DPI)
 
-Authority tier: Newspaper Front Page (validated)
-Humour/Recognition tier: Board Game (their industry as a custom board game, photorealistic, most keepable)
-Humour/Warmth tier: Claymation Scene (stop-motion Aardman style, most versatile, signature Sentrada aesthetic)
-Impact tier: Postcard from the Future (validated for image gen, positive frame)
+Newspaper Front Page — newspaper/newspaper.py (Pango/Cairo on the upscaled
+  template; 620-word lead, three sidebars, pull quote, hero stat)
+The Email — email/email.py (procedural Gmail chrome; a sincere cold email printed
+  at A2; the wink lives only in the P.S.)
+Crossword — crossword/crossword.py + grid_generator.py (open grid built from
+  25-30 researched answer/clue candidates; solvability guaranteed by construction)
 
-All formats printed at A2 (594 x 420mm) on foam core (5-6mm, rigid, self-standing).
-Retired: Cartoon (too close to Heinecke's signature format, replaced by Claymation and Board Game)
-Parked: Horoscope (visually stunning, conversion mechanism uncertain)
+Companion card — card/card.py (A6, Warm Stone/Lisbon Clay, ships in the box with
+every piece; not a format, part of every send).
+
+All production formats printed at A2 (594 x 420mm) on foam core, 360 DPI, sRGB.
+Parked: Claymation Scene (image-gen path, signature aesthetic; revisit when image
+  generation is needed), Horoscope, Postcard from the Future
+Retired/archived: Cartoon, Board Game (archived/sentrada-boardgame-engine branch)
 Future candidates: Magazine Cover, Vintage Ad Parody, Book Cover, Vintage Travel Poster
 
-Each format has a Layer A module in .claude/skills/{format-name}/SKILL.md
+Image-gen formats keep their Layer A modules in .claude/skills/{format-name}/SKILL.md
 
-## Adding a new format
+## Adding a new format (engine-based, the production path)
 
-1. Create .claude/skills/{format-name}/SKILL.md with the Layer A module (visual rules, title treatment, layout, aspect ratio)
-2. Add the format to format-agent.md's scoring list with "when to recommend" guidance
-3. Update the format library section above (increment count)
-4. Add the format to the variable applicability matrix (which Layer C variables apply)
-5. Bump format library version number
+1. Build a deterministic layout engine in its own directory, to the house
+   contract: --data, --check (exit non-zero on fail, no render), --output,
+   --print-dpi 360, *.FAILED quarantine, sRGB. Develop it in a dedicated CC
+   session, as newspaper/crossword/email/card were.
+2. Add runner/templates/prompt4_copy_<format>.md, a <format>_engine_data() /
+   run_<format>_engine() pair, and a dispatch branch in _continue_after_brief.
+3. Add the format to the accepted list in cmd_generate and _load_manifest, and to
+   Prompt 2's format weighting.
+4. Update this format library section and bump the version.
 
-## Three-layer prompt architecture (v3.0)
+## Three-layer prompt architecture (v3.0 — image-gen formats only)
+
+Applies to the parked image-gen formats (Claymation). The three production
+formats are engine-rendered from prompt4 copy templates instead.
 
 Layer A: Format module (swappable per format, defines visual rules)
 Layer B: Campaign inputs (recipient, problem, metric, environment, moment, function, industry, operational details)
@@ -123,6 +177,10 @@ Layer C: Variation variables (auto-assigned: scene archetype, people visibility,
 
 ## Gotchas (add to this list as failure patterns emerge)
 
+Production-format lessons now live as rules inside the prompt templates
+(runner/templates/) and their Notion sources; the gotchas below mostly concern
+the image-gen pipeline (parked formats).
+
 - AI image generators often produce UNREADABLE TEXT in the key metric area. Always verify metric legibility before approving. If text is garbled, regenerate with explicit instruction: "The text [exact metric] must be clearly legible."
 - The research prompt sometimes produces ABSTRACT PROBLEMS like "pipeline challenges" instead of concrete moments. If {CORE_PROBLEM} reads like a category label rather than a lived experience, push back: "Rewrite as the specific moment this problem becomes visible to [recipient title]."
 - Recipe Card format requires DRY WIT, not broad humour. The copy-agent tends to make ingredients too jokey. Calibrate: "A Recipe for Pipeline Collapse" is good. "A Yummy Recipe for Sales Disaster LOL" is bad.
@@ -144,30 +202,50 @@ Layer C: Variation variables (auto-assigned: scene archetype, people visibility,
 - Piece content uses only the recipient's public professional footprint (the
   self-published test). Personal facts gathered for delivery never become content
 
-## Key commands
+## Key commands (chain runner)
 
-/generate-artefact [company] - Full automated pipeline
-/generate-batch [file] - Batch process multiple companies
-/research-company [company] - Research only (for testing/debugging)
-/review-output [image] - Quality review only
-/write-followup [artefact] - Generate follow-up copy
-/log-campaign [details] - Log to Notion
+python runner/sentrada_runner.py ...
+  generate      one piece: gate -> brief checkpoint -> copy -> gates -> render -> QC -> P7 -> card
+  batch-brief   phase 1 over a manifest: research gate + brief per recipient, review sheet + approvals file
+  batch-build   phase 2: build every APPROVEd piece (isolated subprocess per piece)
+  qc            re-run Prompts 6 + 6B against a final image
+  followup      re-run Prompt 7 for a piece
+  ship-check    print-readiness gate; run before staging anything for print
+  birch-csv     shipping CSV for the print supplier (holds addresses; never commit)
+  outcome       record what happened to a sent piece (replied/meeting/no_response/...)
+  calibration   compare 6B predictions against recorded outcomes
+
+Human-run prompts (not runner-invoked): Prompt 0 (sender onboarding, produces the
+config.json sender block), Prompt 1 (research, in the Sentrada Claude Project).
+
+Legacy slash commands (/generate-artefact, /research-company, /review-output,
+/write-followup, /log-campaign) belong to the image-gen pipeline (parked formats).
 
 ## Project structure
 
+runner/            # THE PRODUCTION PIPELINE: sentrada_runner.py, templates/
+                   # (prompt templates mirrored from Notion), config.json (sender
+                   # profile + engine paths; committed), pieces/ [GITIGNORED]
+newspaper/         # Newspaper layout engine (Pango/Cairo + upscaled template)
+crossword/         # Crossword engine + grid generator + upscaled template
+email/             # The Email engine (procedural Gmail chrome)
+card/              # Companion-card engine (A6) + bundled fonts and wordmark
+research/          # Per-recipient research + batch manifests + Birch CSVs [GITIGNORED]
 .claude/
-  agents/          # Subagents (research, brief, format, copy, prompt, review, followup)
-  commands/        # Slash commands (generate-artefact, generate-batch, etc.)
+  agents/          # Subagents (image-gen pipeline; parked formats)
+  commands/        # Slash commands (image-gen pipeline; parked formats)
   skills/          # Format modules and pipeline skills
   hooks/           # PostToolUse and Stop hooks
   settings.json    # Permissions, model config
 .mcp.json          # MCP server connections (Notion, Apollo)
-/pipeline/         # Per-campaign data (JSON files per step, images, logs) [GITIGNORED]
+/pipeline/         # Image-gen pipeline campaign data [GITIGNORED]
 CLAUDE.md          # This file
 
 ## Git tracking
 
 Committed (core IP):
+  runner/ (sentrada_runner.py, templates/, config.json — keep it secret-free)
+  newspaper/, crossword/, email/, card/ (the layout engines + their templates/assets)
   .claude/ (agents, commands, skills, hooks, settings)
   .mcp.json
   CLAUDE.md
@@ -175,6 +253,8 @@ Committed (core IP):
   /src/ (platform code when built)
 
 Gitignored (generated/secrets):
+  runner/pieces/ (per-piece output), research/ (personal data + addresses)
+  *-birch.csv, birch-*/ (shipping CSVs and staged print folders hold addresses)
   /pipeline/ (generated output per campaign)
   .env (API keys and secrets)
   node_modules/
@@ -221,7 +301,7 @@ proxy only routes this repo's path. The orphan branch is the substitute.
 
 Notion: Sentrada workspace (campaign log, research outputs, client records)
 Apollo: Contact data and company signals
-Image gen: OpenAI ChatGPT image generation (primary), Nana Banana 2 (backup)
+Image gen (parked formats only): OpenAI ChatGPT image generation (primary), Nana Banana 2 (backup)
 Print: TBD supplier API
 Shipping: TBD tracking API
 

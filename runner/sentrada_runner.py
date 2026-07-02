@@ -60,6 +60,7 @@ DEFAULT_CONFIG = os.path.join(RUNNER_DIR, "config.json")
 # these are the defaults if a key is missing. "opus"/"sonnet"/"haiku" are
 # aliases the CLI resolves to the current model; full IDs also work.
 DEFAULT_MODELS = {
+    "p1b": "sonnet",   # research gate: completeness check on pasted research
     "p2": "opus",      # brief: picks the problem angle (quality-critical)
     "p4": "opus",      # copy: writes what appears on the piece (quality-critical)
     "p4b": "opus",     # factual-grounding gate on the copy (accuracy-critical)
@@ -699,6 +700,37 @@ def fmt_of(args):
     return args.format.lower()
 
 
+def research_gate(config, research, name, title, company, fmt):
+    """Prompt 1b: gate pasted research for completeness before anything builds on
+    it. Structural checks run in code (free); the model judges completeness and
+    format sufficiency. Returns (verdict, gaps, fact_count_estimate). The gate
+    never blocks by itself: callers persist the result and surface it at the human
+    approval checkpoint, where thin research is a conscious decision, not a
+    surprise three steps later."""
+    structural = []
+    if "DELIVERY_STATUS" not in research:
+        structural.append("no structured DELIVERY block (DELIVERY_STATUS/ADDRESS/"
+                          "NOTES) — birch-csv cannot ship this piece")
+    if not re.search(r"^Recipient\s*:", research, re.MULTILINE):
+        structural.append("no Piece setup header (Recipient/Title/Company/Format)")
+    words = len(research.split())
+    if words < 300:
+        structural.append(f"research is only ~{words} words — too thin to build on")
+
+    values = {"recipient_name": name, "recipient_title": title,
+              "recipient_company": company, "format": fmt, "research": research}
+    print(f"[prompt 1b] gating the research ({model_for(config, 'p1b')})...")
+    reply, data = cli_json(fill(load_template("prompt1b_research_gate.md"), values),
+                           model_for(config, "p1b"))
+    verdict = str(data.get("verdict", "")).upper().replace(" ", "_")
+    gaps = structural + [str(g) for g in (data.get("gaps") or [])]
+    if not verdict:
+        verdict = "NOT_READY" if structural else "READY"
+    elif structural and verdict == "READY":
+        verdict = "READY_WITH_GAPS"
+    return verdict, gaps, data.get("fact_count_estimate")
+
+
 def cmd_generate(args):
     _usage_reset()
     config = load_config(args.config)
@@ -728,6 +760,23 @@ def cmd_generate(args):
     os.makedirs(folder, exist_ok=True)
     write_file(os.path.join(folder, "research.md"), research)
     print(f"[folder] {os.path.relpath(folder, REPO_ROOT)}")
+
+    # Prompt 1b: gate the research at ingestion. Persisted to gate.json and
+    # surfaced at the approval checkpoint; skipped on feedback reruns (the
+    # research was already gated the first time round).
+    if not args.feedback:
+        verdict, gaps, facts = research_gate(config, research, args.name,
+                                             args.title, args.company, fmt)
+        write_file(os.path.join(folder, "gate.json"), json.dumps(
+            {"verdict": verdict, "gaps": gaps, "fact_count_estimate": facts},
+            indent=2))
+        if gaps:
+            print(f"[gate] {verdict}:")
+            for g in gaps:
+                print(f"  - {g}")
+        else:
+            print(f"[gate] {verdict}")
+
     base_values = _build_base_values(args, sender, research, fmt)
 
     # --- brief-only: run the brief once, print the checkpoint, then stop ---
@@ -1730,6 +1779,72 @@ def cmd_followup(args):
     _print_usage("followup")
 
 
+# --- Outcomes and calibration -----------------------------------------------
+# The chain predicts (6B) and then forgets. These two commands close the loop:
+# `outcome` records what actually happened to a sent piece; `calibration`
+# tabulates 6B's predictions against reality. Once ~30 outcomes exist, the misses
+# become calibration examples for the 6B prompt.
+
+OUTCOME_CHOICES = ("replied", "meeting", "opportunity", "no_response", "bounced")
+
+
+def cmd_outcome(args):
+    folder = os.path.join(PIECES_DIR, args.slug)
+    if not os.path.isdir(folder):
+        die(f"no piece folder: {folder}")
+    path = os.path.join(folder, "outcome.json")
+    rec = json.loads(read_file(path)) if os.path.exists(path) else {}
+    rec.update({"result": args.result, "date": args.date or rec.get("date", "")})
+    if args.notes:
+        rec["notes"] = args.notes
+    write_file(path, json.dumps(rec, indent=2))
+    sixb_path = os.path.join(folder, "qc_recipient.md")
+    verdict = extract_6b_verdict(read_file(sixb_path)) if os.path.exists(sixb_path) else None
+    print(f"[outcome] {args.slug}: {args.result}"
+          + (f"  (6B predicted: {verdict})" if verdict else ""))
+
+
+def cmd_calibration(args):
+    positive = {"replied", "meeting", "opportunity"}
+    rows, pending = [], []
+    if os.path.isdir(PIECES_DIR):
+        for d in sorted(os.listdir(PIECES_DIR)):
+            folder = os.path.join(PIECES_DIR, d)
+            if not os.path.isdir(folder) or d.startswith("_"):
+                continue
+            sixb_path = os.path.join(folder, "qc_recipient.md")
+            if not os.path.exists(sixb_path):
+                continue
+            verdict = extract_6b_verdict(read_file(sixb_path)) or "?"
+            op = os.path.join(folder, "outcome.json")
+            if os.path.exists(op):
+                rows.append((d, verdict, json.loads(read_file(op)).get("result", "?")))
+            else:
+                pending.append((d, verdict))
+
+    print("\n" + "=" * 70)
+    print("6B CALIBRATION — prediction vs outcome")
+    print("=" * 70)
+    if not rows:
+        print("No outcomes recorded yet. Record one with:")
+        print("  python runner/sentrada_runner.py outcome --slug <slug> "
+              "--result replied|meeting|opportunity|no_response|bounced")
+    for d, v, res in rows:
+        hit = "✓" if ((res in positive) == ("WOULD" in v and "BIN" not in v and "IGNORE" not in v)) else "✗"
+        print(f"  {hit}  {d:38} 6B: {v:38} actual: {res}")
+    if rows:
+        got = sum(1 for _, _, res in rows if res in positive)
+        print("-" * 70)
+        print(f"  {len(rows)} outcome(s) recorded, {got} positive "
+              f"({100 * got // len(rows)}% response rate)")
+        print("  When ~30 outcomes exist, feed the misses back into prompt6b as "
+              "calibration examples.")
+    if pending:
+        print(f"\n  {len(pending)} piece(s) with a 6B prediction and no outcome yet:")
+        for d, v in pending:
+            print(f"     {d:38} 6B: {v}")
+
+
 # --- Batch processing -------------------------------------------------------
 # Two phases over a JSON manifest of recipients, each shelling out to the
 # single-piece `generate` path as a subprocess so one piece failing never kills
@@ -1814,17 +1929,23 @@ def cmd_batch_brief(args):
         credit = _parse_credit(out)
         bp = os.path.join(PIECES_DIR, slug, "brief.json")
         brief = json.loads(read_file(bp)) if os.path.exists(bp) else None
+        gp = os.path.join(PIECES_DIR, slug, "gate.json")
+        gate = json.loads(read_file(gp)) if os.path.exists(gp) else None
+        if gate and gate.get("verdict") != "READY":
+            print(f"  research gate: {gate.get('verdict')} "
+                  f"({len(gate.get('gaps') or [])} gap(s), see review sheet)")
         if brief and brief.get("fit") == "poor":
             rows.append({"slug": slug, "entry": entry, "status": "poor-fit",
-                         "brief": brief, "credit": credit})
+                         "brief": brief, "gate": gate, "credit": credit})
             print(f"  POOR FIT (${credit:.2f}) -> defaults to SKIP")
         elif rc == 0 and brief:
             rows.append({"slug": slug, "entry": entry, "status": "ok",
-                         "brief": brief, "credit": credit})
+                         "brief": brief, "gate": gate, "credit": credit})
             print(f"  ok: {brief.get('problem_label', '')} (${credit:.2f})")
         else:
             rows.append({"slug": slug, "entry": entry, "status": "error",
-                         "reason": _last_halt_reason(out, err), "credit": credit})
+                         "reason": _last_halt_reason(out, err), "gate": gate,
+                         "credit": credit})
             print("  ERROR generating brief")
 
     _write_batch_review(args.manifest, rows)
@@ -1852,6 +1973,11 @@ def _write_batch_review(manifest_path, rows):
              ("Reserve detail", "reserve_detail")]
     for r in rows:
         out.append(f"## {r['slug']}  ({r['entry']['format']})")
+        g = r.get("gate")
+        if g and (g.get("verdict") != "READY" or g.get("gaps")):
+            out.append(f"- **Research gate: {g.get('verdict', '?')}**")
+            for gap in (g.get("gaps") or []):
+                out.append(f"  - {gap}")
         if r["status"] == "poor-fit":
             out.append(f"- **POOR FIT** — {r['brief'].get('fit_reason', '')}. Default SKIP.")
         elif r["status"] == "error":
@@ -1878,6 +2004,12 @@ def _write_batch_approvals(manifest_path, rows):
             decision, note = "SKIP", "POOR FIT"
         else:
             decision, note = "SKIP", "ERROR generating brief"
+        g = r.get("gate") or {}
+        if g.get("verdict") == "NOT_READY":
+            decision = "SKIP"
+            note += " | research NOT_READY (see review sheet)"
+        elif g.get("verdict") == "READY_WITH_GAPS":
+            note += " | research gaps (see review sheet)"
         out.append(f"{decision:8} {r['slug']:38} | {note}")
     write_file(_batch_path(manifest_path, "approvals.txt"), "\n".join(out) + "\n")
 
@@ -2009,6 +2141,18 @@ def main():
     scg.add_argument("--manifest", help="check every piece in a batch manifest")
     scg.add_argument("--all", action="store_true", help="check every piece in runner/pieces/")
     sc.set_defaults(func=cmd_ship_check)
+
+    oc = sub.add_parser("outcome",
+                        help="record what happened to a sent piece (feeds 6B calibration)")
+    oc.add_argument("--slug", required=True, help="the piece folder name, e.g. chris-evans-cognism")
+    oc.add_argument("--result", required=True, choices=list(OUTCOME_CHOICES))
+    oc.add_argument("--date", default="", help="when it happened, e.g. 2026-07-10")
+    oc.add_argument("--notes", default="", help="optional context, e.g. 'replied to Touch 2'")
+    oc.set_defaults(func=cmd_outcome)
+
+    cal = sub.add_parser("calibration",
+                         help="compare 6B predictions against recorded outcomes")
+    cal.set_defaults(func=cmd_calibration)
 
     bc = sub.add_parser("birch-csv",
                         help="emit the print supplier's shipping CSV (code, recipient, "
