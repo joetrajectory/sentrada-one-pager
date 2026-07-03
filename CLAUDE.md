@@ -85,12 +85,17 @@ python runner/sentrada_runner.py batch-build --manifest research/<batch>.json
 6. REVIEW (Prompt 6, vision): craft QC; FAIL halts the chain
 6b. RECIPIENT SIM (Prompt 6B, vision): predicted response; WOULD BIN halts
 7. FOLLOW-UP (Prompt 7): companion card copy + 3-touch sequence, generated now,
-   held until delivery confirmation
+   held until delivery confirmation. Card copy skipped when the sender writes
+   their own (config sender "custom_card": true). Output passes the same Prompt
+   4b grounding gate as printed copy (max 3 attempts; result in followup_gate.json)
 8b. CARD: card/card.py renders the card copy to a print-ready A6 PNG at
    runner/pieces/{slug}/{slug}-card.png. Skipped if sender provided custom copy.
    Overflow past the 150-word cap is refused, not squeezed.
 9. SHIP-CHECK: print-readiness gate (QC freshness, engine staleness, P6 FAIL,
-   6B WOULD BIN) before anything is staged
+   6B WOULD BIN, follow-up freshness vs data.json and the 6B verdict, plus a
+   deterministic copy lint: em dashes, banned stock lines, missing Touch 1
+   subject, connection-note length, grid-number refs, litigation keywords,
+   duplicate Touch 2 openers across the batch) before anything is staged
 10. DELIVERABLES: PNGs pushed to the deliverables branch; birch-csv generates the
    shipping CSV (never committed)
 11. PRINT & SHIP: Birch prints and ships; tracking CSV comes back from Birch
@@ -104,7 +109,12 @@ python runner/sentrada_runner.py batch-build --manifest research/<batch>.json
 
 Data flows via files in runner/pieces/<slug>/: research.md, gate.json, brief.json,
 data.json, the render PNG, qc_review.md, qc_recipient.md, followup.md,
-<slug>-card.png, outcome.json.
+followup_gate.json, <slug>-card.png, outcome.json. Prompt 7 derives the piece
+reference and sender block at run time (from data.json and live config), never
+from the build-time meta.json snapshot: post-build copy revisions and proof
+updates must reach the follow-up. Cross-cutting copy rules live once in
+runner/templates/house_rules.md and are injected wherever a template contains
+{{house_rules}}; edit rules there, not per template.
 
 Legacy: the original image-generation pipeline (/generate-artefact subagents,
 Layer A/B/C prompt assembly, /pipeline/ campaign folders) now applies only to the

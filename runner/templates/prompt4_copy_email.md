@@ -69,20 +69,20 @@ Every email follows the same seven-beat shape. Hold to it.
 7. SIGN-OFF. The sender's first name alone, on its own line. No "Best regards", no
    "Kind regards": the register is a person writing, not a letter template.
 
-## Copy rules (apply to all output)
+{{house_rules}}
+
+## Format voice rules (The Email; where these nuance a house rule, these win)
 
 - No em dashes. No spaced hyphens used as em dashes. (An en dash inside a number
   range such as "5-11%" is fine.)
 - British English. "whilst" over "while" suits this register.
-- No exclamation marks.
 - No bullets. This voice flows as prose paragraphs, never a list.
+- This email is sincere, not witty. The joke is the medium, never the copy.
 - About 150-200 words in the body. Long enough to land the seven beats, short
   enough to fill the A2 cleanly without overflowing.
 - No soft filler openers ("I hope this finds you well", "I wanted to reach out").
   Lead with understanding them.
 - Quote the recipient's own words in quotation marks where the research supports it.
-- Every line must be specific to THIS company. If a line could be sent to any
-  company, rewrite it.
 - Warm, measured, respectful, certain. Never mock the recipient. The joke is the
   medium, never the reader.
 - Short sentences carry this voice. One idea per sentence; if a sentence stacks
@@ -90,14 +90,10 @@ Every email follows the same seven-beat shape. Hold to it.
   is where trumpet got its name. The grenade boxes you and Nick sent to thousands
   of beta signups proved you meant it."
 
-FACTUAL ACCURACY RULE: Every claim is read at A2 and cannot be a lie. Each fact in
-the subject and body must be accurate to the research. Never invent a metric, a
-customer, a result, a quote or a strategy name. If you are not certain a quoted
-phrase is the recipient's own, do not put it in quotation marks.
-
-METRIC FRAMING RULE: If the company publishes a number as an achievement, lead with
-it in their framing, then name the gap it does not close. Never invert a published
-positive into its negative.
+FACTUAL ACCURACY RULE (A2 extension of the house rule): every claim is read at A2
+and cannot be a lie. Never invent a metric, a customer, a result, a quote or a
+strategy name. If you are not certain a quoted phrase is the recipient's own, do
+not put it in quotation marks.
 
 ## The postscript (do not write it into the body)
 

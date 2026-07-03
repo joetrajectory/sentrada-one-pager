@@ -25,6 +25,7 @@ Sender company: {{sender_company}}
 What they sell: {{sender_what}}
 Proof points: {{sender_proof}}
 Booking link: {{booking_link}}
+Sender writes their own companion card: {{custom_card}}
 
 **Delivery date:** {{delivery_date}}
 
@@ -146,7 +147,7 @@ Touch 3 must use the Reserve research detail and must not reuse the key metric o
 
 A6, sits inside the packaging alongside the piece. It bridges the reveal to a conversation. It reads like a note from a person, not a pitch from a company. First person ("I", not "we"), conversational British English. Opens with the recipient's first name, then the body. 150 words maximum for the whole card (hard cap); aim for 3-4 short paragraphs. The card is small and a wall of text kills it, so when in doubt, cut.
 
-If the sender has indicated they will write their own card, skip this section and note: "Sender will provide custom companion card copy." (This is the default for founder-led sends.)
+If "Sender writes their own companion card" above is yes, skip this section entirely and output only the note: "Sender will provide custom companion card copy." (This is the default for founder-led sends.) The follow-up touches must still respect the division of labour: assume the sender's card revealed who sent the piece and made the bespoke nature explicit.
 
 Otherwise, structure:
 

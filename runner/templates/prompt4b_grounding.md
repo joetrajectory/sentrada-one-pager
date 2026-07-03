@@ -45,6 +45,11 @@ output format (the offending phrase in "claim", the category and reason in "issu
    to the wrong word and change the meaning ("pipeline Pinata nearly influenced"
    reads as almost-but-didn't; "AWS Summit London, which she runs and attends" when
    she runs a different programme).
+4. LITIGATION LEVERAGE: any use of litigation, a legal dispute, regulatory action,
+   redundancies or an executive departure as leverage or as a content angle, even
+   when the research supports it as fact and even when framed as an observation.
+   "Your employer's lawsuit means budget scrutiny" reads as surveillance, not
+   research. Flag the offending phrase regardless of factual accuracy.
 
 Source research (facts about the RECIPIENT and their company):
 {{research}}

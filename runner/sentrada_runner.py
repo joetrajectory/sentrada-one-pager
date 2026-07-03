@@ -115,7 +115,15 @@ def load_config(path):
 
 def load_template(name):
     with open(os.path.join(TEMPLATE_DIR, name), "r", encoding="utf-8") as fh:
-        return fh.read()
+        text = fh.read()
+    # Shared house rules are a template include, expanded before fill() so the
+    # cross-cutting copy rules are edited once (house_rules.md), not per template.
+    if "{{house_rules}}" in text and name != "house_rules.md":
+        with open(os.path.join(TEMPLATE_DIR, "house_rules.md"), "r", encoding="utf-8") as fh:
+            rules = fh.read()
+        rules = re.sub(r"<!--.*?-->\s*", "", rules, count=1, flags=re.DOTALL)
+        text = text.replace("{{house_rules}}", rules.strip())
+    return text
 
 
 def fill(template, values):
@@ -1378,6 +1386,21 @@ def extract_6b_verdict(text):
     return None
 
 
+def extract_6b_structured(text):
+    """Parse the machine-readable JSON tail 6B now emits. Returns the dict or
+    None (older qc_recipient.md files predate the tail; callers fall back to
+    the prose). The verdict inside the JSON also satisfies extract_6b_verdict's
+    phrase scan, so the two stay consistent."""
+    blocks = re.findall(r"```json\s*(.*?)```", text, re.DOTALL)
+    if not blocks:
+        return None
+    try:
+        data = json.loads(blocks[-1])
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) and data.get("verdict") else None
+
+
 def extract_p6_verdict(text):
     """Read the P6 verdict robustly. The model may wrap it in markdown
     (e.g. '**VERDICT: BORDERLINE**'), so find the first 'VERDICT' anywhere and
@@ -1423,9 +1446,25 @@ def _p6(config, folder, image_path, meta, brief, research):
 
 
 def _p6b(config, folder, image_path, meta, research):
+    # The card sits on top of the piece in the box and is read first, so the
+    # simulation should see it when it exists (it shapes the verdict P7 builds on).
+    slug = os.path.basename(os.path.normpath(folder))
+    card_context = ""
+    card_path = os.path.join(folder, slug + "-card.json")
+    if os.path.exists(card_path):
+        try:
+            card = json.loads(read_file(card_path))
+            lines = [card.get("salutation", "").rstrip(",") + ","] + list(card.get("body", []))
+            card_text = "\n".join(x for x in lines if x.strip())
+            if card_text.strip():
+                card_context = ("\nOn top of the piece sat an A6 companion card, which you "
+                                "read first. It says:\n\n" + card_text + "\n")
+        except (ValueError, OSError):
+            pass
     values = {
         "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
         "recipient_company": meta["recipient_company"], "research": research,
+        "card_context": card_context,
     }
     print(f"[prompt 6B] simulating the recipient ({model_for(config, 'p6b')}, vision)...")
     sixb = vision_call(config, fill(load_template("prompt6b_recipient.md"), values),
@@ -1434,19 +1473,53 @@ def _p6b(config, folder, image_path, meta, research):
     return sixb, extract_6b_verdict(sixb)
 
 
+def _piece_reference(folder, meta):
+    """Describe the piece from data.json (the rendered copy) at call time. The
+    reference frozen into meta.json at build time goes stale the moment copy is
+    revised post-build (a live failure: a follow-up referenced a subtitle that
+    had been cut), so derive it from what actually shipped and fall back to the
+    snapshot only when data.json is missing."""
+    fmt = meta.get("format")
+    data_path = os.path.join(folder, "data.json")
+    if os.path.exists(data_path):
+        try:
+            d = json.loads(read_file(data_path))
+            if fmt == "newspaper":
+                return (f'the front page of "{d.get("masthead_name", "")}", '
+                        f'headline "{d.get("headline", "")}"')
+            if fmt == "crossword":
+                return (f'the "{d.get("company_name", "")}" crossword, '
+                        f'subtitle "{d.get("subtitle", "")}"')
+            if fmt == "email":
+                return f'a cold email printed at A2, subject "{d.get("subject", "")}"'
+        except (ValueError, OSError):
+            pass
+    return meta.get("piece_reference", "")
+
+
 def _p7(config, folder, delivery_date):
     meta = json.loads(read_file(os.path.join(folder, "meta.json")))
     brief = json.loads(read_file(os.path.join(folder, "brief.json")))
     research = read_file(os.path.join(folder, "research.md"))
-    sender = meta["sender"]
+    # Live config, not the meta.json snapshot: proof points evolve between build
+    # and follow-up, and the snapshot quoted stale proof in a live batch.
+    sender = config.get("sender") or meta["sender"]
 
     sixb_path = os.path.join(folder, "qc_recipient.md")
     if os.path.exists(sixb_path):
         sixb = read_file(sixb_path)
         verdict = extract_6b_verdict(sixb) or "WOULD ENGAGE IF FOLLOWED UP WELL"
-        leverage = "Full 6B recipient simulation:\n" + sixb
-        failure = "See the full 6B analysis in the highest-leverage field above."
-        stopped = "See the full 6B analysis in the highest-leverage field above."
+        parsed = extract_6b_structured(sixb)
+        if parsed:
+            verdict = parsed.get("verdict", verdict)
+            leverage = (parsed.get("highest_leverage_change", "")
+                        + "\n\nFull 6B recipient simulation for context:\n" + sixb)
+            failure = parsed.get("failure_mode", "See the full 6B analysis above.")
+            stopped = parsed.get("what_stopped_them", "See the full 6B analysis above.")
+        else:
+            leverage = "Full 6B recipient simulation:\n" + sixb
+            failure = "See the full 6B analysis in the highest-leverage field above."
+            stopped = "See the full 6B analysis in the highest-leverage field above."
     else:
         print("[note] no qc_recipient.md found. Run `qc` first for a 6B-grounded "
               "sequence. Proceeding without the simulation.")
@@ -1459,7 +1532,7 @@ def _p7(config, folder, delivery_date):
     values = {
         "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
         "recipient_company": meta["recipient_company"], "format": fmt_label,
-        "piece_reference": meta.get("piece_reference", ""),
+        "piece_reference": _piece_reference(folder, meta),
         "problem_label": brief.get("problem_label", ""), "core_problem": brief.get("core_problem", ""),
         "key_metric": brief.get("key_metric", ""), "operational_details": brief.get("operational_details", ""),
         "companion_card_hook": meta.get("companion_card_hook", "") or brief.get("companion_card_hook", ""),
@@ -1472,10 +1545,44 @@ def _p7(config, folder, delivery_date):
         "sender_name": sender.get("sender_name", ""), "sender_company": sender.get("company", ""),
         "sender_what": sender.get("what_they_sell", ""), "sender_proof": sender.get("proof_points", ""),
         "booking_link": sender.get("booking_link", ""), "delivery_date": delivery_date,
+        "custom_card": "yes" if sender.get("custom_card") else "no",
     }
-    print(f"[prompt 7] writing the companion card and 3-touch follow-up ({model_for(config, 'p7')})...")
-    reply = cli_text(fill(load_template("prompt7_followup.md"), values), model_for(config, "p7"))
+    base_prompt = fill(load_template("prompt7_followup.md"), values)
+    # The follow-up goes out under the sender's name carrying factual and proof
+    # claims, so it passes the same P4b grounding gate as printed copy. A shipped
+    # card once over-attributed the sender's record; this catches that class.
+    sender_facts = "\n".join(
+        f"- {x}" for x in (sender.get("company", ""), sender.get("what_they_sell", ""),
+                           sender.get("proof_points", "")) if str(x).strip())
+    reply, gate = None, {"grounded": None, "attempts": 0, "issues": []}
+    for attempt in range(1, 4):
+        prompt = base_prompt
+        if gate["issues"]:
+            prompt += ("\n\n---\n\n**A fact-checker reviewed your previous attempt and "
+                       "flagged these claims as unsupported by the research or the sender "
+                       "profile. Rewrite the sequence fixing every one (drop or correct "
+                       "the claim; never argue with the checker):**\n"
+                       + "\n".join(f"- \"{i.get('claim', '')}\": {i.get('issue', '')}"
+                                   for i in gate["issues"]))
+        print(f"[prompt 7] writing the companion card and 3-touch follow-up "
+              f"({model_for(config, 'p7')}, attempt {attempt})...")
+        reply = cli_text(prompt, model_for(config, "p7"))
+        print(f"[prompt 4b] grounding the follow-up copy ({model_for(config, 'p4b')})...")
+        grounded, issues = grounding_check(config, research, reply, sender_facts=sender_facts)
+        gate = {"grounded": grounded, "attempts": attempt, "issues": issues}
+        if grounded:
+            break
+        print(f"[prompt 4b] {len(issues)} unsupported claim(s) in the follow-up"
+              + (" — regenerating with feedback." if attempt < 3 else "."))
     write_file(os.path.join(folder, "followup.md"), reply)
+    write_file(os.path.join(folder, "followup_gate.json"),
+               json.dumps(gate, indent=2, ensure_ascii=False))
+    if not gate["grounded"]:
+        print("\n" + "!" * 70)
+        print("FOLLOW-UP GROUNDING FAILED after 3 attempts. followup.md is written but"
+              "\ncarries unsupported claims (see followup_gate.json). Fix by hand or"
+              "\nre-run `followup` before sending any touch.")
+        print("!" * 70)
     return reply
 
 
@@ -1517,6 +1624,114 @@ def cmd_qc(args):
 # seen by the vision model in the form that ships. ship-check holds those (and
 # missing QC, P6 FAIL, 6B WOULD BIN) so a re-rendered piece cannot reach the
 # print supplier unverified.
+
+_BANNED_FOLLOWUP_LINES = (
+    "something arrived on your desk",   # stock opener, banned by batch collision rule
+    "know it when you see it",          # stock reception nudge, same rule
+    "quick follow up", "following up briefly",
+    "best regards", "kind regards",
+)
+_LITIGATION_WORDS = re.compile(
+    r"\b(litigation|lawsuit|high court|tribunal|legal dispute|redundanc\w*)\b", re.I)
+_GRID_REF = re.compile(r"\b\d+[\s-]?(across|down)\b", re.I)
+
+
+def _strings_in(obj):
+    """Yield every string value in a JSON structure."""
+    if isinstance(obj, str):
+        yield obj
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            yield from _strings_in(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _strings_in(v)
+
+
+def _followup_body(text):
+    """The lintable part of followup.md: everything before the FACT CHECK LIST
+    (sources legitimately contain URLs and case names), minus Flag: lines (the
+    model's own refusal notes may name what they refused)."""
+    idx = text.upper().find("FACT CHECK LIST")
+    body = text[:idx] if idx != -1 else text
+    return "\n".join(l for l in body.splitlines() if not l.strip().startswith("Flag:"))
+
+
+def touch2_opener(folder):
+    """First line of Touch 2, normalised, for the batch duplicate check."""
+    path = os.path.join(folder, "followup.md")
+    if not os.path.exists(path):
+        return None
+    text = read_file(path)
+    m = re.search(r"TOUCH 2 LINKEDIN[^\n]*\n+(.+)", text)
+    if not m:
+        return None
+    line = re.sub(r"[^a-z0-9 ]", "", m.group(1).strip().strip("*").lower())
+    return line[:60] or None
+
+
+def _copy_lint(folder, fmt):
+    """Deterministic checks for the text rules the prompts promise but nothing
+    enforced. Cheap, no model calls, run on every ship-check. Returns
+    (holds, warns)."""
+    holds, warns = [], []
+
+    data_path = os.path.join(folder, "data.json")
+    if os.path.exists(data_path):
+        try:
+            data = json.loads(read_file(data_path))
+        except (ValueError, OSError):
+            data = None
+        if data:
+            strings = list(_strings_in(data))
+            if any("—" in s for s in strings):
+                holds.append("lint: em dash in data.json copy (house rule: none)")
+            if any("!" in s for s in strings):
+                holds.append("lint: exclamation mark in data.json copy (house rule: none)")
+            if fmt == "crossword":
+                fields = [data.get("title", ""), data.get("subtitle", "")]
+                fields += [c.get("clue", "") for c in data.get("candidates", [])]
+                bad = [f for f in fields if _GRID_REF.search(f or "")]
+                if bad:
+                    holds.append(f"lint: grid-number reference in crossword copy "
+                                 f"(\"{bad[0].strip()[:50]}\") — numbering changes on "
+                                 "regeneration, reference will dangle")
+
+    fu_path = os.path.join(folder, "followup.md")
+    if os.path.exists(fu_path):
+        text = read_file(fu_path)
+        if "WOULD BIN" in text and "suppressed" in text:
+            return holds, warns          # suppression notice, nothing to lint
+        body = _followup_body(text)
+        low = body.lower()
+        for phrase in _BANNED_FOLLOWUP_LINES:
+            if phrase in low:
+                holds.append(f"lint: banned line \"{phrase}\" in followup.md")
+        if "—" in body:
+            holds.append("lint: em dash in followup.md (house rule: none)")
+        if "http://" in body or "https://" in body:
+            warns.append("lint: URL in follow-up touch body — permitted only as a "
+                         "final CTA line, check it")
+        m = _LITIGATION_WORDS.search(body)
+        if m:
+            warns.append(f"lint: possible litigation/misfortune leverage in follow-up "
+                         f"(\"{m.group(0)}\") — banned as leverage, review the line")
+        if "TOUCH 1 EMAIL" in body and not re.search(r"^Subject:", body, re.M):
+            holds.append("lint: Touch 1 has no subject line — it is the recipient's "
+                         "first-ever email from the sender (re-run followup)")
+        if "CONNECTION NOTE VARIANT" not in body:
+            warns.append("lint: no Touch 2 connection-note variant — follow-up predates "
+                         "the current P7 template (re-run followup)")
+        else:
+            nm = re.search(r"CONNECTION NOTE VARIANT[^\n]*\**\n+(.*?)\n\s*\n", body, re.DOTALL)
+            if nm:
+                note = nm.group(1).strip().strip('"')
+                note = re.sub(r"\s*\(\d+ characters?\)\s*$", "", note)
+                if len(note) > 280:
+                    holds.append(f"lint: connection-note variant is {len(note)} chars "
+                                 "(LinkedIn truncates ~300; cap is 280)")
+    return holds, warns
+
 
 def _ship_status(folder):
     """Assess one piece for print-readiness. Core guard: the delivered render
@@ -1571,6 +1786,27 @@ def _ship_status(folder):
         if p6b == "WOULD BIN":
             holds.append("P6B verdict is WOULD BIN — do not print")
 
+    # Follow-up freshness: the sequence is built from the rendered copy and the
+    # 6B verdict, so it goes stale the moment either changes (a live failure:
+    # touches referenced a clue that had been cut post-P7). Held here because
+    # ship-check runs right before staging, which is also when touches go live.
+    fu = os.path.join(folder, "followup.md")
+    if os.path.exists(fu):
+        fu_m = os.path.getmtime(fu)
+        data_path = os.path.join(folder, "data.json")
+        if os.path.exists(data_path) and os.path.getmtime(data_path) > fu_m:
+            holds.append("followup.md predates current data.json — the touches may "
+                         "reference cut copy; re-run `followup`")
+        if os.path.exists(recipient) and os.path.getmtime(recipient) > fu_m:
+            holds.append("followup.md predates current qc_recipient.md — the sequence "
+                         "was built on a superseded 6B verdict; re-run `followup`")
+    else:
+        warns.append("no followup.md — P7 never ran (run `followup` before the piece lands)")
+
+    lint_holds, lint_warns = _copy_lint(folder, fmt)
+    holds += lint_holds
+    warns += lint_warns
+
     # Engine staleness: warn when the engine file has changed since this render
     # (a fixed engine bug may be shipping inside a stale render). Pieces rendered
     # before stamping existed have no stamp and are not warned about.
@@ -1603,6 +1839,24 @@ def cmd_ship_check(args):
         die("ship-check found no piece folders to check.")
 
     statuses = [_ship_status(f) for f in folders]
+
+    # Batch collision check: recipients in one batch often share a professional
+    # community, so identical Touch 2 openers across pieces quietly kill the
+    # one-of-one claim if they ever compare notes. Only checkable across pieces.
+    if len(folders) > 1:
+        openers = {}
+        for f, s in zip(folders, statuses):
+            op = touch2_opener(f)
+            if op:
+                openers.setdefault(op, []).append(s)
+        for op, group in openers.items():
+            if len(group) > 1:
+                names = ", ".join(g["slug"] for g in group)
+                for g in group:
+                    g["holds"].append(f"lint: Touch 2 opener duplicated across batch "
+                                      f"({names}) — each needs its own opening line")
+                    g["shippable"] = False
+
     print("\n" + "=" * 70)
     print("SHIP CHECK — print-readiness gate")
     print("=" * 70)

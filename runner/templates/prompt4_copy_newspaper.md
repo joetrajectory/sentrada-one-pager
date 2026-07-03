@@ -22,44 +22,11 @@ Proof points: {{sender_proof}}
 Booking link: {{booking_link}}
 Sender name: {{sender_name}}
 
-## Copy rules (apply to all output)
+{{house_rules}}
 
-- No em dashes
-- British English
-- No exclamation marks
-- No soft filler phrases
-- Every line must be specific to THIS company. If a line could appear on a piece
-  for any company, rewrite it.
 - Dry wit is welcome. Slapstick is not.
 - The tone is: someone who understands your business wrote this, not a marketing
   team.
-
-CRITICAL TONE RULE: Frame the problem as a challenge the recipient is actively
-trying to solve, not as a failure they should be embarrassed about. Lead with the
-opportunity being missed, not the resource that's missing. Acknowledge what they're
-doing well BEFORE naming what's not working. Never mock the recipient. The headline
-must pass the "would I show this to my CEO" test.
-
-FACTUAL ACCURACY RULE: Every claim in the headline, pull quote, and body copy must
-be factually accurate to the research. Do not simplify or reframe in a way that
-changes the meaning of the underlying data. If a claim is "close but not quite,"
-rewrite it. The recipient will know whether the claim is true.
-
-METRIC FRAMING RULE (never invert a published positive): Do not invert a company's
-published positive metric into its negative. If the company publishes a number as an
-achievement (e.g. 11.3% cold-calling success, four times the industry average),
-never reframe it as its inverse ("88.7% failure"). The recipient knows the inverse
-and published the positive on purpose; inverting it signals you did not understand
-their position and the piece loses credibility on first read. Lead with their number
-in their framing, then name the gap it cannot close: "11.3% cold-calling success,
-four times the industry average. But the senior enterprise buyers the upmarket pivot
-depends on are not in the callable cohort." Acknowledge the win in their language,
-then extend beyond it.
-
-PERSONALISATION PRINCIPLE: Personalisation should reward close reading on second
-look, not advertise itself on first. The recipient's company name inside a headline
-that makes sense as a story, not as a banner overlay. Operational details woven
-into the content, not listed.
 
 SURFACE RULE (headline, pull quote, hero stat): the surface is what a passing
 colleague sees on the recipient's desk, so it must be something the recipient is
@@ -81,12 +48,6 @@ exemplar: "ExecLeaders ... ran events alongside AWS Summit London, which she run
 and attends" implied she runs the Summit; she runs ExecLeaders and attends the
 Summit. Modifiers (nearly, only, just, almost) must attach unambiguously to the
 word they modify.
-
-CONTENT BOUNDARY (self-published test): use only the recipient's public
-professional footprint. Details they published about themselves in a professional
-context (their own speaker bio, their own posts) are usable; personal facts that
-had to be dug up (home town, home address, family) exist in the research for
-delivery only and must never appear in the copy.
 
 ## Newspaper content rules
 

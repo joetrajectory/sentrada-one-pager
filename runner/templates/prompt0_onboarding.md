@@ -44,6 +44,10 @@ Booking link: [URL]
      a live meeting ("you say here you saved X £4m — tell me about that").
    - Record it in the sender's own words. No rounding up, no "pieces like these
      achieved..." framing, no attributing results to a format or artefact.
+   - Date every proof point (an "as of" month and year, or the campaign/deal
+     date). Recent, dated campaign results are quoted as primary proof by the
+     follow-up prompts; undated career name-drops age silently and keep getting
+     quoted long after better proof exists. Order the list newest first.
    - If a claim cannot be verified or the sender hesitates, downgrade it to a
      credibility signal (what they do, who they work with, how long) or drop it.
    - Mark anything aspirational and EXCLUDE it. "First client doubled their
@@ -86,11 +90,19 @@ approval line:
       "",
       ""
     ],
+    "constraints": "",
+    "custom_card": false,
     "sender_email": "",
     "card_phone": ""
   }
 }
 ```
+
+"constraints" holds the hard constraints from step 4 as one plain-language line
+("UK-only; avoid gambling sector"), or "" if none. "custom_card" is true when the
+sender writes their own companion cards (the founder-led default): the pipeline
+then skips generated card copy entirely. These live in the JSON, not just in the
+approval note, because the pipeline reads them.
 
 APPROVAL: verbatim-approved by [sender name] on [date]. Constraints: [list, or
 "none"]. Custom companion cards: [yes/no].

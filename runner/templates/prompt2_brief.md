@@ -108,7 +108,7 @@ Examples: "outbound flatline", "meeting drought", "reply collapse", "senior buye
 Strong: "Sentrada helps teams like yours cut through the noise with physical outreach that senior buyers actually open and respond to"
 Weak: "We can help with your outbound challenges" (generic)
 
-**{RESERVE_DETAIL}:** One concrete, verifiable, attributable detail from the research that is NOT the key metric and is NOT used in the headline or the artefact. Held back deliberately so the day-7 follow-up bump (Prompt 7, Touch 3) has a fresh fact to open with. Must be specific and citable (a named hire, a recent deal, a regulatory event, a product launch, a dated quote). If the research offers no second verifiable detail beyond the key metric, write "none".
+**{RESERVE_DETAIL}:** One concrete, verifiable, attributable detail from the research that is NOT the key metric and is NOT used in the headline or the artefact. Held back deliberately so the day-7 follow-up bump (Prompt 7, Touch 3) has a fresh fact to open with. Must be specific and citable (a named hire, a recent deal, a product launch, a keynote, a dated quote). NEVER litigation, a legal dispute, regulatory action, redundancies or an executive departure: the follow-up prompt is barred from using misfortune as leverage, so a reserve detail of that kind leaves Touch 3 with nothing (this applies to every brief field, not just this one). If the research offers no second verifiable detail beyond the key metric, write "none".
 
 ### Step 3b: Tone Self-Check (run before outputting the brief)
 

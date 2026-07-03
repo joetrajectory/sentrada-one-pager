@@ -10,6 +10,8 @@
       "Sales teams are sending more volume with less result: AI has made personalised email easy to send and impossible to notice, so the highest-value accounts get buried in noise alongside everyone else",
       "No-decision drag on enterprise deals: even when meetings happen, the lack of a memorable first impression means deals stall because the buyer has no emotional anchor to the relationship"
     ],
+    "constraints": "",
+    "custom_card": true,
     "sender_email": "joe@sentrada.io",
     "card_phone": "+44 7815 814855"
   },
