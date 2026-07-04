@@ -1,19 +1,19 @@
 {
   "sender": {
-    "sender_name": "Joe Chapman",
-    "company": "Sentrada",
-    "what_they_sell": "Executive response generation. Deep-researched, one-of-one physical pieces (A2 newspaper front pages and claymation scenes) printed on rigid foam board, packaged in premium boxes, and delivered to senior B2B buyers' desks. The piece earns attention, the follow-up converts it.",
-    "proof_points": "First Sentrada campaign (June 2026): 20 one-of-one pieces to VC partners, 8 responses in the first week; one founder has his piece on his office wall. Secondary record: responses from CEOs of Starbucks, L'Oreal and Danone, a meeting with the CEO of VINCI Construction, 10 years of enterprise outbound. First client doubled their order from 10 to 20 pieces before anything shipped.",
-    "booking_link": "https://sentrada.io",
+    "sender_name": "Matthew Codd",
+    "company": "Cosmic Partners",
+    "what_they_sell": "SaaS recruitment firm placing senior sales hires (VP Sales, CROs, Heads of Sales) into B2B SaaS companies. Matthew runs the sales and advisory side; his business partner Natasha handles recruitment delivery. They also advise SaaS companies on building out their sales functions. They focus on profitability and revenue per head rather than volume, and work with fewer clients at higher ACVs.",
+    "proof_points": "",
+    "booking_link": "",
     "problems": [
-      "Enterprise pipeline is unpredictable because outbound to senior buyers has stopped working: email response rates are collapsing, cold calls don't reach C-suite, and the accounts that matter most are the hardest to engage",
-      "Sales teams are sending more volume with less result: AI has made personalised email easy to send and impossible to notice, so the highest-value accounts get buried in noise alongside everyone else",
-      "No-decision drag on enterprise deals: even when meetings happen, the lack of a memorable first impression means deals stall because the buyer has no emotional anchor to the relationship"
+      "Post-funding SaaS companies need to hire a senior sales leader fast, and most get it wrong first time, burning 6-12 months of runway",
+      "Founders who have never built a sales team don't know what a great VP Sales or CRO looks like, so founder-led sales lingers past its ceiling and revenue targets slip",
+      "Even when they know they need someone, the best senior sales candidates are passive and hard to reach through job boards or LinkedIn"
     ],
     "constraints": "",
-    "custom_card": true,
-    "sender_email": "joe@sentrada.io",
-    "card_phone": "+44 7815 814855"
+    "custom_card": false,
+    "sender_email": "",
+    "card_phone": ""
   },
   "models": {
     "p2": "opus",
