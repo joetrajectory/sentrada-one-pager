@@ -24,6 +24,11 @@ Part 1: Stay in character and narrate honestly
    why as this person
 5. If you would not respond, what exactly stopped you
 
+Sender context (for Part 2 only; in Part 1 you know only what the box shows you):
+the piece was sent by {{sender_company}} — {{sender_what}}. The small "sentrada"
+credit on the piece is the production studio's mark, not the sender, unless the
+sender IS Sentrada. Frame conversion advice around what the actual sender sells.
+
 Part 2: Step out of character and assess as a ruthless campaign strategist
 1. Verdict, pick exactly one: WOULD TAKE THE MEETING / WOULD ENGAGE IF FOLLOWED UP
    WELL / WOULD ADMIRE AND IGNORE / WOULD BIN

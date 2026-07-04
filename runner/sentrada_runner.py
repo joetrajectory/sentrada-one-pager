@@ -1461,10 +1461,13 @@ def _p6b(config, folder, image_path, meta, research):
                                 "read first. It says:\n\n" + card_text + "\n")
         except (ValueError, OSError):
             pass
+    sender = (config.get("sender") or meta.get("sender") or {})
     values = {
         "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
         "recipient_company": meta["recipient_company"], "research": research,
         "card_context": card_context,
+        "sender_company": sender.get("company", "unknown"),
+        "sender_what": sender.get("what_they_sell", ""),
     }
     print(f"[prompt 6B] simulating the recipient ({model_for(config, 'p6b')}, vision)...")
     sixb = vision_call(config, fill(load_template("prompt6b_recipient.md"), values),
