@@ -616,7 +616,24 @@ def main():
     if not args.output and not args.check:
         ap.error("--output is required unless --check is given")
 
+    # --check gates the print master, so validate at print resolution unless
+    # the caller pinned a size (mirrors crossword.py defaulting check to a
+    # print-density render rather than the screen preview).
+    if args.check and not (args.print_dpi or args.print_size or args.render_size):
+        args.print_dpi = 360
+
     model = load_data(args.data) if args.data else load_text(args.text)
+
+    # House copy rules (CLAUDE.md): no em dashes, no exclamation marks. The
+    # engine prints the copy verbatim, so a violation here means it slipped
+    # through upstream; warn loudly but leave the shipping decision to the gate.
+    _, paras, _ = model
+    for i, p in enumerate(paras, 1):
+        if "—" in p or "–" in p:
+            print(f"[warn] paragraph {i} contains an em/en dash; house copy rules forbid them")
+        if "!" in p:
+            print(f"[warn] paragraph {i} contains an exclamation mark; check against house copy rules")
+
     W, H = size_for(args)
     surf, tier, failures = render(model, W, H)
 
