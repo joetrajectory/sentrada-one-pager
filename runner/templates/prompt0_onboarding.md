@@ -60,6 +60,15 @@ Booking link: [URL]
 5. **Voice notes** (optional): sign-off preferences, phrases they use, phrases
    they would never use.
 
+6. **Measurement capabilities** (optional; powers the crossword's open-loop
+   mechanic): what the sender can genuinely measure or compute about a
+   prospect's business, in plain language ("we benchmark salary bands across
+   400 placed roles", "we can audit a careers page's candidate reach"). Be
+   strict: this decides whether follow-ups REVEAL a number (Tier A) or OFFER
+   to measure one (Tier B), and an inflated capability here becomes a broken
+   promise later. Empty is safe: the pipeline then defaults to conservative
+   offers.
+
 ## Then run the approval loop
 
 Present the draft profile to the sender and require explicit approval:
@@ -92,6 +101,7 @@ approval line:
     ],
     "constraints": "",
     "custom_card": false,
+    "measurement_capabilities": "",
     "sender_email": "",
     "card_phone": ""
   }

@@ -10,6 +10,7 @@ The piece is a premium visual piece (newspaper front page, a printed cold email,
 1. {{problem_1}}
 2. {{problem_2}}
 3. {{problem_3}}
+**Sender measurement capabilities (crossword open-loop tier judgement; may be empty):** {{sender_capabilities}}
 **Research output:**
 {{research}}
 
@@ -110,6 +111,17 @@ Weak: "We can help with your outbound challenges" (generic)
 
 **{RESERVE_DETAIL}:** One concrete, verifiable, attributable detail from the research that is NOT the key metric and is NOT used in the headline or the artefact. Held back deliberately so the day-7 follow-up bump (Prompt 7, Touch 3) has a fresh fact to open with. Must be specific and citable (a named hire, a recent deal, a product launch, a keynote, a dated quote). NEVER litigation, a legal dispute, regulatory action, redundancies or an executive departure: the follow-up prompt is barred from using misfortune as leverage, so a reserve detail of that kind leaves Touch 3 with nothing (this applies to every brief field, not just this one). If the research offers no second verifiable detail beyond the key metric, write "none".
 
+**{OPEN_LOOP} (crossword only; "none" for every other format):** The crossword's conversion device. Select ONE metric about the recipient's OWN business that they plausibly do not currently have and the sender can supply. One clue will point at it; the answer in the grid stays a normal solvable word (the withheld thing is the metric, never the word), and the follow-up closes the loop. Six tests, ALL must pass or you output "none" (the mechanic self-skips; never force it):
+
+1. **Material:** the number matters to the recipient's business, at their seniority. Not trivia.
+2. **Plausibly unknown to them:** they do not have this number today (it requires outside measurement, cross-company benchmarking, or analysis they have no reason to have run). If they would know it, it fails.
+3. **Sender-deliverable:** judge against the sender's measurement capabilities above (when empty, judge from what the sender sells, and be conservative). Set the tier: **Tier A** when the sender can actually compute the number and reveal it in the follow-up; **Tier B** when the sender can credibly offer to measure it. If the sender could not credibly do either, it fails.
+4. **Expressible as a normal solvable category word:** the grid answer is the metric's everyday category word (e.g. the metric "how many of your 47 job postings a senior candidate actually sees" could sit behind the answer REACH). 3-15 letters, guessable from a clean clue, letter-friendly (common letters E S T A R N I O intersect best). If every candidate word is obscure or unguessable, it fails.
+5. **True:** the framing must survive scrutiny. The claim is only ever "here is a number you do not have"; if the recipient plausibly has it, or the sender's measurement would be hand-waving, it fails.
+6. **The recipient's reality, not the sender's promise:** the metric must describe the recipient's existing business reality (their market, their funnel, their footprint, their buyers as they are today), never the sender's prospective or hypothetical performance for them. "What our channel would achieve for you" fails: if the number only exists once the sender acts, it is a pitch, not a holdback. If no metric passes all six tests, output "none" and let the fallback handle it.
+
+**{HERO_FACT} (crossword only; "" otherwise):** A separate, KNOWN, impressive, company-specific fact from the research, for credibility: the single fact that most makes the recipient think "how did they know that". Verifiable, cited, and distinct from the open-loop metric and the reserve detail. This becomes the grid's hero anchor.
+
 ### Step 3b: Tone Self-Check (run before outputting the brief)
 
 Re-read your {KEY_METRIC} and {CORE_PROBLEM} fields. For each, ask: "Would this recipient feel acknowledged or exposed?" Specifically:
@@ -147,6 +159,8 @@ Then, as the FINAL thing in your reply, output a single fenced ```json code bloc
   "problem_label": "...",
   "companion_card_hook": "...",
   "reserve_detail": "one held-back verifiable detail for the day-7 bump, or 'none'",
+  "open_loop": "crossword only. Either the literal string 'none', or an object: {\"metric\": \"what the withheld number is, in one sentence\", \"question\": \"the question it answers for the recipient\", \"grid_answer\": \"the normal solvable category word, ALL CAPS, 3-15 letters\", \"tier\": \"A or B\", \"tier_A_number\": \"the actual number when tier is A and the sender has computed it; otherwise empty string\"}",
+  "hero_fact": "crossword only: the known impressive company-specific fact for the hero anchor, with its citation; otherwise empty string",
   "absurdity": "claymation only; otherwise empty string",
   "comedy_potential": "claymation only, e.g. 7/10; otherwise empty string"
 }

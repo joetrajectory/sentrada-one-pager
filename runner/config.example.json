@@ -11,7 +11,8 @@
       "First sender problem the recipient's company plausibly has, in plain language.",
       "Second sender problem.",
       "Optional third sender problem."
-    ]
+    ],
+    "measurement_capabilities": ""
   },
   "models": {
     "p2": "opus",
@@ -22,21 +23,18 @@
     "p6b": "opus"
   },
   "vision_backend": "cli",
-
   "engine": "newspaper/newspaper.py",
   "newspaper_template": "newspaper/Newspaper Template - Upscaled - 25mb.jpg",
-
   "crossword_engine": "crossword/crossword.py",
   "crossword_template": "crossword/Blank crossword template 25mb - upscaled.jpg",
   "crossword_min_words": 15,
   "crossword_max_words": 20,
   "crossword_seed": 42,
-
   "email_engine": "email/email.py",
   "email_avatar_color": "#C05933",
   "email_timestamp": "09:14",
   "email_unread_count": 1284,
   "email_postscript": "Yes, I printed an email at A2 and had it delivered to your desk.",
-
-  "card_engine": "card/card.py"
+  "card_engine": "card/card.py",
+  "crossword_open_loop_seed_retries": 5
 }

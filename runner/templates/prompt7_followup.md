@@ -10,6 +10,7 @@ Key metric: {{key_metric}}
 Operational details: {{operational_details}}
 Companion card hook (seed from Brief Agent, treat as a starting idea, not the final word): {{companion_card_hook}}
 Reserve research detail (not used in artefact or Touch 1): {{reserve_detail}}
+Open-loop record (crossword holdback; "none" when the piece carries no open loop): {{open_loop_block}}
 Research basis for fact-checking card and follow-up claims:
 {{research}}
 
@@ -58,6 +59,20 @@ For all other verdicts, proceed.
 
 1. **Highest-leverage change is the spine.** When it concerns the conversion copy (the usual case), it is the single most important instruction here. It usually carries two parts. A specific, named, verifiable hook: deploy it as the Touch 1 opener. A structural reframe: apply it to the frame of the card and the CTA of every touch. If the highest-leverage change instead concerns the piece itself (a flat stat, a visual flaw), ignore it here, that loops back to pre-print regeneration.
 2. **The copy must neutralise the predicted failure mode, invisibly.** Address the underlying concern. NEVER name the failure mode, the simulation, or the fact that the reaction was predicted. The failure mode varies by recipient: a doubt about substance, a timing or budget objection, an incumbent already in place, or that the recipient is an influencer rather than a buyer. Read what 6B actually found and counter that. Worked example: if the failure mode is "assumes the piece is a gimmick and the product underneath is thin", the copy counters with substance about what the sender does, it does not say "you might think this is a gimmick". If the failure mode is "recipient is the connector, not the buyer", the card and follow-up reframe the sender as a resource the recipient deploys or recommends, and the CTA becomes a craft conversation or a referral, not a request to be sold to.
+
+---
+
+## Closing the open loop (fires ONLY when the open-loop record above is not "none")
+
+When an open-loop record is supplied, one clue on the printed crossword points at a number about the recipient's own business that they do not currently have. The piece gives no hint of this: the clue reads like any other clue. The follow-up is where the loop closes, and when the record exists it is the sequence's primary conversion device, taking the Touch 1 slot the 6B hook would otherwise lead with (weave the 6B read into the framing rather than running both as separate devices).
+
+- Reference the clue by its grid number naturally, the way a person would ("16 Across is the one worth a second look"). The number in the record is the real printed number; use it exactly.
+- Name what the clue was really pointing at: the metric from the record, in the recipient's terms, as a number they do not have.
+- **Tier A:** the sender has computed the actual number. Reveal it in Touch 1, plainly and without ceremony, and let the reveal carry the CTA ("the answer is 12%; fifteen minutes and I will show you how it breaks down"). Never tease a number the record already contains.
+- **Tier B:** the sender can measure it. Offer the measurement as the CTA, specific about what they would get, never vague ("worth finding out?").
+- The claim is only ever "here is a number you do not have". Never imply the recipient is negligent for not having it, and never inflate what the sender can deliver beyond the tier.
+- Touches 2 and 3 may echo the open question once ("still happy to put a number on 16 Across") but must not re-explain the mechanic.
+- If the record above is "none", this entire section does not exist for you: write the sequence exactly as you would have without it, leading Touch 1 with the 6B hook as usual, and never reference grid numbers.
 
 ---
 

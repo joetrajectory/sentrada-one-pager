@@ -13,6 +13,9 @@ Moment: {{moment}}
 Problem label: {{problem_label}}
 Operational details: {{operational_details}}
 
+Open-loop selection from the brief (may be "none", in which case the open-loop rules below do not apply): {{open_loop_brief}}
+Hero fact from the brief (the known impressive fact that anchors credibility): {{hero_fact}}
+
 Recipient: {{recipient_name}}, {{recipient_title}} at {{recipient_company}}
 
 Sender profile:
@@ -49,13 +52,24 @@ of your candidates and builds the grid, so over-provide good ones.
   hard, the middle medium. Long clues overflow the printed grid, so cut every word
   that is not doing work.
 - Every clue must be factually accurate to the research. The recipient will know.
-- Anchor the concept: mark the ONE candidate (two at most) that carries the brief's
-  central idea with `"anchor": true`. This is usually the answer tied to the key
-  metric or the recognition element. The grid generator places anchors first and
-  tries hardest to land them, so the puzzle is built around your concept rather than
-  leaving it to chance. Pick a letter-friendly anchor (common letters E S T A R N I O
-  intersect best); a very long or awkward answer may not place. Leave `anchor` off
-  every other candidate.
+- Designated clues (anchors). The grid generator places anchors first and tries
+  hardest to land them, so the puzzle is built around your concept rather than
+  leaving it to chance. Pick letter-friendly anchors (common letters E S T A R N I O
+  intersect best); a very long or awkward answer may not place.
+  - **Hero clue:** ONE candidate carrying the hero fact from the brief (or, when no
+    hero fact is supplied, the brief's central idea: usually the key metric or the
+    recognition element). Mark it `"anchor": true`. This is the credibility clue,
+    the known fact that makes the recipient think "how did they know that".
+  - **Open-loop clue (only when the brief's open-loop selection above is not
+    "none"):** ONE candidate whose answer is the brief's `grid_answer`. Mark it
+    `"anchor": true, "open_loop": true`. THE CLUE MUST READ LIKE ANY OTHER CLUE:
+    a normal, clean, solvable clue for the answer word, no wink, no gap, no
+    "guess the number", no hint that anything is withheld. The withheld thing is
+    the metric behind the clue, and it lives entirely in the follow-up, never on
+    the piece. The clue may gesture at the metric's territory (that is what makes
+    the follow-up's reveal land) but must be honestly solvable from the recipient's
+    own knowledge.
+  - Leave `anchor` off every other candidate. Never mark more than these two.
 - Content boundary (self-published test): every answer and clue must come from the
   recipient's public professional footprint: their company, their work, published
   statements, talks, stated methods, or details they have published about
@@ -104,9 +118,11 @@ Every answer ALL CAPS, letters only, no spaces, 3-15 characters:
 
 Exactly 25-30 candidates. Each answer is a single ALL-CAPS word (letters only, no
 spaces, 3-15 characters) paired with a short clue of 4-8 words (10 maximum). Mark the
-one candidate (two at most) carrying the brief's central concept with `"anchor": true`;
-omit `anchor` on every other candidate. Add no other field beyond answer, clue, and
-the optional anchor. No em dashes anywhere.
+hero candidate with `"anchor": true`, and, only when the brief supplies an open-loop
+selection, mark that one candidate with `"anchor": true, "open_loop": true` (e.g.
+`{"answer": "REACH", "clue": "What a job post buys, or doesn't", "anchor": true,
+"open_loop": true}`). Omit both flags on every other candidate. Add no other field
+beyond answer, clue, and the optional anchor / open_loop flags. No em dashes anywhere.
 
 2) After the JSON block, a section headed exactly "FACT CHECK LIST:" listing every
 factual claim used in the clues, each with its source and date from the research.

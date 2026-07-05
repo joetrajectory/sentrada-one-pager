@@ -367,6 +367,14 @@ def crossword_violations(data):
     if anchors > 3:
         v.append(f"too many anchor candidates ({anchors}); mark at most 2-3 (the "
                  "brief's central concept) or the grid cannot place them all.")
+    open_loops = [c for c in cands if c.get("open_loop")]
+    if len(open_loops) > 1:
+        v.append(f"{len(open_loops)} candidates are marked open_loop; exactly one "
+                 "candidate may carry the open-loop flag.")
+    for c in open_loops:
+        if not c.get("anchor"):
+            v.append(f"open-loop candidate '{c.get('answer', '')}' must also be "
+                     "marked \"anchor\": true (the grid must try hardest to place it).")
     return v
 
 
@@ -401,6 +409,9 @@ def crossword_engine_data(data, company, config):
                 # brief's central concept first. Omitted when falsy (backward
                 # compatible: no anchors -> identical behaviour).
                 **({"anchor": True} if c.get("anchor") else {}),
+                # The open-loop marker rides along for the runner's own seed-retry
+                # and record-keeping; the grid generator ignores unknown keys.
+                **({"open_loop": True} if c.get("open_loop") else {}),
             }
             for c in (data.get("candidates") or [])
         ],
@@ -661,6 +672,9 @@ def _build_base_values(args, sender, research, fmt):
         "sender_proof": sender.get("proof_points", ""),
         "booking_link": sender.get("booking_link", ""),
         "sender_name": sender.get("sender_name", ""),
+        # Crossword open-loop tier judgement (P2). Optional; empty means P2
+        # judges deliverability from what_they_sell and prefers Tier B.
+        "sender_capabilities": sender.get("measurement_capabilities", ""),
         "format": {"newspaper": "Newspaper Front Page",
                    "crossword": "Crossword",
                    "email": "The Email"}.get(fmt, "Claymation Scene"),
@@ -1077,11 +1091,47 @@ def _extract_6b_leverage(sixb):
     return "Highest-leverage change: " + (body[:600] if body else "(see qc_recipient.md)")
 
 
+def _crossword_placement(engine_path, engine_data, answer):
+    """Where did `answer` land in the rendered grid? Recomputes the engine's own
+    deterministic grid (same candidates, seed and attempts via read-only import
+    of the engine modules; no engine code changes) and returns
+    {number, direction} or None. Numbering matches the render exactly because
+    the engine derives its grid from the same data.json."""
+    eng_dir = os.path.dirname(os.path.abspath(engine_path))
+    if eng_dir not in sys.path:
+        sys.path.insert(0, eng_dir)
+    import crossword as _cw          # for CONFIG["grid_attempts"], mirroring build()
+    import grid_generator as _gg
+    grid = _gg.generate_grid(
+        engine_data["candidates"],
+        min_words=engine_data.get("min_words", _cw.CONFIG["min_words"]),
+        max_words=engine_data.get("max_words", _cw.CONFIG["max_words"]),
+        seed=engine_data.get("seed"),
+        attempts=_cw.CONFIG["grid_attempts"],
+        anchors=engine_data.get("anchors"))
+    for e in grid["placed"]:
+        if e["answer"] == str(answer).upper():
+            return {"number": e["number"], "direction": e["direction"]}
+    return None
+
+
+def _open_loop_anchor_fails(out, answer):
+    """True when the engine --check output's ONLY [FAIL] lines are the
+    designated-anchor placement failure for `answer` (the open-loop word).
+    Any other failure (clue fit, solvability, the hero anchor) returns False
+    so it takes the existing feedback/hard-fail path."""
+    fails = [ln for ln in out.splitlines() if "[FAIL]" in ln]
+    return bool(fails) and all(
+        "anchor" in ln and f"'{str(answer).upper()}'" in ln for ln in fails)
+
+
 def _generate_crossword(args, config, folder, base_values, brief, meta):
     """Crossword path. Mirrors _generate_newspaper: P4 (crossword branch) ->
     structural + factual-grounding gates -> render via the crossword engine ->
     the shared P6 -> P6B -> P7 chain. Nothing here touches the newspaper path."""
     template = load_template("prompt4_copy_crossword.md")
+    ol_brief = brief.get("open_loop")
+    ol_brief = ol_brief if isinstance(ol_brief, dict) else None
     brief_values = dict(base_values, **{
         "core_problem": brief.get("core_problem", ""),
         "key_metric": brief.get("key_metric", ""),
@@ -1089,6 +1139,9 @@ def _generate_crossword(args, config, folder, base_values, brief, meta):
         "moment": brief.get("moment", ""),
         "problem_label": brief.get("problem_label", ""),
         "operational_details": brief.get("operational_details", ""),
+        "open_loop_brief": (json.dumps(ol_brief, ensure_ascii=False)
+                            if ol_brief else "none"),
+        "hero_fact": str(brief.get("hero_fact", "") or ""),
     })
 
     model = model_for(config, "p4")
@@ -1129,9 +1182,46 @@ def _generate_crossword(args, config, folder, base_values, brief, meta):
         # and factually grounded (no point validating layout on copy we'll redo).
         if not problems:
             engine_data = crossword_engine_data(data, args.company, config)
-            write_file(data_path, json.dumps(engine_data, indent=2))
-            print("[engine] running --check on data.json (grid placement + clue fit)...")
-            rc, out = run_crossword_engine(engine_path, template_path, data_path, check=True)
+            ol_answer = next((c["answer"] for c in engine_data["candidates"]
+                              if c.get("open_loop")), None)
+            base_seed = engine_data["seed"]
+            # The open-loop word must anchor the grid, but a placement miss is a
+            # seed problem before it is a copy problem: retry seeds, then fall
+            # back to running it as an ordinary candidate (spec: retry-then-
+            # fallback, never hard-fail). The hero anchor keeps the existing
+            # behaviour: its failure falls through to P4 feedback and, after 3
+            # attempts, halts the piece.
+            retries = max(1, int(config.get("crossword_open_loop_seed_retries", 5)))
+            seeds = [base_seed + i for i in range(retries)] if ol_answer else [base_seed]
+            open_loop_fallback = False
+            rc, out = 1, ""
+            for s in seeds:
+                engine_data["seed"] = s
+                write_file(data_path, json.dumps(engine_data, indent=2))
+                print(f"[engine] running --check on data.json (grid placement + "
+                      f"clue fit, seed {s})...")
+                rc, out = run_crossword_engine(engine_path, template_path, data_path,
+                                               check=True)
+                if rc == 0 or not (ol_answer and _open_loop_anchor_fails(out, ol_answer)):
+                    break
+                print(f"[open-loop] seed {s}: anchor '{ol_answer}' would not place; "
+                      "retrying with the next seed...")
+            if rc != 0 and ol_answer and _open_loop_anchor_fails(out, ol_answer):
+                # Fallback: strip the anchor flag from the open-loop candidate
+                # ONLY. The word stays in the pool as an ordinary candidate; the
+                # mechanic is dropped for this piece and P7 gets no record.
+                print(f"[open-loop] FALLBACK: '{ol_answer}' would not place as an "
+                      f"anchor across {len(seeds)} seed(s). Running it as an "
+                      "ordinary candidate; no open-loop record will reach P7.")
+                for c in engine_data["candidates"]:
+                    if c.get("open_loop"):
+                        c.pop("anchor", None)
+                engine_data["seed"] = base_seed
+                open_loop_fallback = True
+                write_file(data_path, json.dumps(engine_data, indent=2))
+                print("[engine] re-running --check without the open-loop anchor...")
+                rc, out = run_crossword_engine(engine_path, template_path, data_path,
+                                               check=True)
             print(out.strip())
             if rc == 0:
                 break
@@ -1173,6 +1263,37 @@ def _generate_crossword(args, config, folder, base_values, brief, meta):
 
     meta["piece_reference"] = (
         f'the "{args.company}" crossword, subtitle "{engine_data.get("subtitle", "")}"')
+
+    # Open-loop record for P7: look up the clue number the grid assigned to the
+    # open-loop answer. Only written when the mechanic ran to completion; on
+    # fallback the piece record logs why instead, and P7 sees no record.
+    if ol_answer and not open_loop_fallback and ol_brief:
+        placement = _crossword_placement(engine_path, engine_data, ol_answer)
+        if placement:
+            meta["open_loop"] = {
+                "answer": str(ol_answer).upper(),
+                "clue": next((c.get("clue", "") for c in engine_data["candidates"]
+                              if c.get("open_loop")), ""),
+                "clue_number": placement["number"],
+                "direction": placement["direction"],
+                "metric": str(ol_brief.get("metric", "")),
+                "question": str(ol_brief.get("question", "")),
+                "tier": str(ol_brief.get("tier", "")).upper(),
+                "tier_A_number": str(ol_brief.get("tier_A_number", "")),
+            }
+            print(f"[open-loop] '{ol_answer}' placed at {placement['number']} "
+                  f"{placement['direction'].title()} (tier {meta['open_loop']['tier']}); "
+                  "recorded for P7.")
+        else:
+            meta["open_loop_fallback"] = ("open-loop answer passed --check as an anchor "
+                                          "but was not found in the recomputed grid; no "
+                                          "record passed to P7")
+            print("[open-loop] WARNING: placement lookup did not find the answer; "
+                  "no open-loop record passed to P7.")
+    elif ol_answer and open_loop_fallback:
+        meta["open_loop_fallback"] = (f"anchor '{ol_answer}' unplaceable across "
+                                      f"{len(seeds)} seed(s); ran as ordinary candidate; "
+                                      "no open-loop record passed to P7")
     write_file(os.path.join(folder, "meta.json"), json.dumps(meta, indent=2))
 
     print(f"\n[rendered] {os.path.relpath(output_path, REPO_ROOT)}")
@@ -1532,9 +1653,27 @@ def _p7(config, folder, delivery_date):
     fmt_label = {"newspaper": "Newspaper Front Page",
                  "crossword": "Crossword",
                  "email": "The Email"}.get(meta["format"], "Claymation Scene")
+
+    # Crossword holdback: hand P7 the open-loop record when the build wrote one.
+    # "none" keeps the closing-the-loop section inert (backward compatible).
+    ol = meta.get("open_loop") if isinstance(meta.get("open_loop"), dict) else None
+    if ol and ol.get("clue_number") and ol.get("metric"):
+        open_loop_block = (
+            f"the grid answer {ol.get('answer', '')} at "
+            f"{ol['clue_number']} {str(ol.get('direction', '')).title()}, printed clue "
+            f"\"{ol.get('clue', '')}\". The metric behind it (which the recipient does "
+            f"not have): {ol['metric']}. The question it answers for them: "
+            f"{ol.get('question', '')}. Tier {str(ol.get('tier', '')).upper() or 'B'}"
+            + (f"; the sender has computed the actual number: {ol['tier_A_number']}"
+               if str(ol.get("tier_A_number", "")).strip() else
+               " (the sender offers to measure it)"))
+    else:
+        open_loop_block = "none"
+
     values = {
         "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
         "recipient_company": meta["recipient_company"], "format": fmt_label,
+        "open_loop_block": open_loop_block,
         "piece_reference": _piece_reference(folder, meta),
         "problem_label": brief.get("problem_label", ""), "core_problem": brief.get("core_problem", ""),
         "key_metric": brief.get("key_metric", ""), "operational_details": brief.get("operational_details", ""),
