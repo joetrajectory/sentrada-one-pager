@@ -946,21 +946,31 @@ def render_statbox(cr, ctx, data):
     desc_budget = zh - ink_r.height - gap1 - gap2 - src_h_est - H * 0.02
 
     dl = make_layout(cr)
-    dl.set_width(int(zw * 0.92 * SCALE))
+    desc_wrap_w = zw * 0.92
+    dl.set_width(int(desc_wrap_w * SCALE))
     dl.set_alignment(Pango.Alignment.CENTER)
 
-    def desc_h(size):
+    def desc_metrics(size):
         set_font(dl, cfg["font_body"], size)
         # Leading matched proportionally to the body (1.20); the descriptor was
         # noticeably looser than the rest of the page at 1.18 of a large size.
         dl.set_attributes(build_attrs(desc, leading_px=1.06 * size))
         dl.set_text(desc, -1)
-        return measure(dl)[1]
+        return dl.get_pixel_extents()[0].width, measure(dl)[1]
 
-    dsize, _ = largest_fitting(
-        lambda s: desc_h(s) <= desc_budget, 0.010 * H, cfg["size_stat_descriptor"] * H)
-    desc_h(dsize)
+    # Size on BOTH axes. bind_connectors makes chunks like "by Cognism SDRs"
+    # unbreakable, so the widest line can exceed the wrap width; Pango then lets
+    # it overhang the box instead of wrapping. Height alone used to be checked,
+    # which let an overwide line ship with its first glyph outside the box.
+    def desc_ok(size):
+        w, h = desc_metrics(size)
+        return h <= desc_budget and w <= desc_wrap_w
+
+    dsize, desc_fits = largest_fitting(desc_ok, 0.010 * H, cfg["size_stat_descriptor"] * H)
+    desc_metrics(dsize)
     dw, dh = measure(dl)
+    ctx["statbox_desc_wide"] = not desc_fits and \
+        dl.get_pixel_extents()[0].width > desc_wrap_w + 1
 
     sl, sw, sh = None, 0.0, 0.0
     if has_source:
@@ -1479,6 +1489,10 @@ def run_checks(ctx, data, cfg):
         add("fail", "lead_article", "columns overflow past the column-zone bottom")
     if ctx.get("statbox_overflow"):
         add("warn", "stat_descriptor", "stat block is taller than the box; descriptor/source crowd the edges")
+    if ctx.get("statbox_desc_wide"):
+        add("fail", "stat_descriptor",
+            "descriptor line overhangs the stat box even at minimum size; "
+            "shorten the descriptor or its bound phrases")
 
     # --- Rail gaps -----------------------------------------------------------
     if ctx.get("rail_gap_capped"):
