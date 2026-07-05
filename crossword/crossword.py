@@ -326,6 +326,10 @@ def render_title(cr, ctx, data):
         "max_lines": max_lines,
         "overflow_px": max(0.0, widest - content_w),
         "collides_grid": header_bottom > grid_top + 1.0,
+        # Fit succeeded but deviated from the configured design: surfaced as a
+        # WARN so the operator knows the piece wrapped or shrank without having
+        # to spot it in the render.
+        "shrunk_to": size / H if size < cfg["size_subtitle"] * H - 0.5 else None,
     }
 
 
@@ -765,6 +769,15 @@ def run_checks(ctx, gridres, cfg):
                 f"subtitle does not fit the content width within {sf['max_lines']} lines even at "
                 f"the minimum size ({sf['lines']} lines, {sf['overflow_px']:.0f}px over); "
                 "shorten the subtitle")
+    elif sf and (sf["lines"] > 1 or sf["shrunk_to"]):
+        how = []
+        if sf["lines"] > 1:
+            how.append(f"wrapped to {sf['lines']} lines")
+        if sf["shrunk_to"]:
+            how.append(f"shrunk to {sf['shrunk_to']:.4f}H (configured {cfg['size_subtitle']:.4f}H)")
+        add("warn", "subtitle",
+            "subtitle " + " and ".join(how) + " to fit; fine to ship, but a shorter "
+            "subtitle would sit on one line at full size")
     if ctx.get("clues_fit") is False:
         add("fail", "clues", "clues do not fit the two columns at the minimum size")
     sep = ctx.get("separator")
