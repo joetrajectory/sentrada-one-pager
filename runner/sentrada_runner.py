@@ -1233,9 +1233,11 @@ def _generate_crossword(args, config, folder, base_values, brief, meta):
                                 "never more than 10) and favour shorter answers. Keep "
                                 "25-30 candidates; the grid uses the best 15-20.")
             if any("anchor" in f.lower() for f in fails):
-                problems.append("An anchor answer could not be placed. Use at most one "
-                                "anchor, or choose a shorter, more letter-friendly anchor "
-                                "(common letters E S T A R N I O intersect best).")
+                problems.append("An anchor answer could not be placed. KEEP the hero "
+                                "designation (and the open-loop designation if the brief "
+                                "supplied one), but choose shorter, more letter-friendly "
+                                "answers for the designated candidates (common letters "
+                                "E S T A R N I O intersect best).")
 
         if attempt >= 3:
             die("Prompt 4 crossword failed the gates after 3 attempts (candidate "
@@ -1657,6 +1659,35 @@ def _p7(config, folder, delivery_date):
     # Crossword holdback: hand P7 the open-loop record when the build wrote one.
     # "none" keeps the closing-the-loop section inert (backward compatible).
     ol = meta.get("open_loop") if isinstance(meta.get("open_loop"), dict) else None
+    if ol and meta.get("format") == "crossword":
+        # The stored clue number is a build-time snapshot; a re-render after a
+        # copy fix renumbers the grid (the piece_reference failure class). Verify
+        # against the current data.json and correct or drop the record.
+        data_path = os.path.join(folder, "data.json")
+        if os.path.exists(data_path):
+            try:
+                engine_path = os.path.join(REPO_ROOT,
+                                           config.get("crossword_engine",
+                                                      "crossword/crossword.py"))
+                live = _crossword_placement(engine_path,
+                                            json.loads(read_file(data_path)),
+                                            ol.get("answer", ""))
+            except Exception as e:                       # lookup is best-effort
+                print(f"[open-loop] placement re-check failed ({e}); "
+                      "using the stored record.")
+                live = {"number": ol.get("clue_number"),
+                        "direction": ol.get("direction")}
+            if live is None:
+                print(f"[open-loop] '{ol.get('answer', '')}' is no longer in the "
+                      "current grid (re-rendered since the record was written); "
+                      "dropping the open-loop record for this follow-up.")
+                ol = None
+            elif (live["number"] != ol.get("clue_number")
+                  or live["direction"] != ol.get("direction")):
+                print(f"[open-loop] grid renumbered since the record was written: "
+                      f"{ol.get('clue_number')} {ol.get('direction')} -> "
+                      f"{live['number']} {live['direction']}. Using the live number.")
+                ol = dict(ol, clue_number=live["number"], direction=live["direction"])
     if ol and ol.get("clue_number") and ol.get("metric"):
         open_loop_block = (
             f"the grid answer {ol.get('answer', '')} at "
@@ -1696,6 +1727,15 @@ def _p7(config, folder, delivery_date):
     sender_facts = "\n".join(
         f"- {x}" for x in (sender.get("company", ""), sender.get("what_they_sell", ""),
                            sender.get("proof_points", "")) if str(x).strip())
+    if open_loop_block != "none":
+        # The open-loop metric (and any Tier A number) is a sender-supplied fact
+        # that exists in neither the research nor the profile; without this the
+        # grounding gate would flag the reveal as unsupported and strip the
+        # mechanic's payoff.
+        sender_facts += ("\n- Open-loop record for this piece (sender-supplied; the "
+                         "metric and any revealed number are the sender's own "
+                         "assertions, legitimate for the follow-up to state): "
+                         + open_loop_block)
     reply, gate = None, {"grounded": None, "attempts": 0, "issues": []}
     for attempt in range(1, 4):
         prompt = base_prompt
