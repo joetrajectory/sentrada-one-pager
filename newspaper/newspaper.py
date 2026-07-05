@@ -312,6 +312,31 @@ def keep_phrases_together(text):
     return "".join(out)
 
 
+# Short function words that must never sit alone on a line in a centred, narrow
+# block (the stat descriptor wrapped "Cold calls made / by / Cognism SDRs").
+_CONNECTORS = frozenset(
+    "a an and as at but by for from in into nor of on or over per so the to "
+    "under via with".split())
+
+
+def bind_connectors(text):
+    """Attach short lowercase function words to the FOLLOWING word with a
+    non-breaking space ("by Cognism", "in 2025"), so a wrap can never strand a
+    connector alone on its own line. Runs after keep_phrases_together, whose
+    NBSPs stay intact because splitting here is on plain spaces only."""
+    if not text:
+        return text
+    nbsp = chr(0x00A0)
+    tokens = text.split(" ")
+    out = []
+    for i, t in enumerate(tokens):
+        if out and t and tokens[i - 1].lower() in _CONNECTORS:
+            out[-1] += nbsp + t
+        else:
+            out.append(t)
+    return " ".join(out)
+
+
 def prevent_orphan(text, words=2):
     """Bind the final `words` tokens with non-breaking spaces so a wrap can never
     strand a single short word on its own last line. Used on the headline (so
@@ -836,7 +861,7 @@ def render_pullquote(cr, ctx, data):
     zx, zy, zw, zh = ctx["px"]["pullquote"]
 
     quote = "“" + sanitise(data["pull_quote_text"]) + "”"
-    attrib = sanitise(keep_phrases_together(data["pull_quote_attribution"]))
+    attrib = bind_connectors(sanitise(keep_phrases_together(data["pull_quote_attribution"])))
 
     # Attribution first (fixed size) so we can reserve its space, then a gap,
     # before sizing the quote to fill the rest of this tall closing block.
@@ -888,7 +913,7 @@ def render_statbox(cr, ctx, data):
     zx, zy, zw, zh = ctx["px"]["statbox"]
 
     number = sanitise(data["stat_number"])
-    desc = keep_phrases_together(sanitise(data["stat_descriptor"]))
+    desc = bind_connectors(keep_phrases_together(sanitise(data["stat_descriptor"])))
     source = sanitise(data.get("stat_source", ""))  # optional
 
     # Stat number: the single most dominant element on the page. Size it on its
