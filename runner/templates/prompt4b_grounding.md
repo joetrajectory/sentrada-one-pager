@@ -24,10 +24,12 @@ Do NOT flag:
 - Synthesis that combines researched facts into a fair characterisation.
 - Claims about the SENDER (its proof points, customers, results, or offering) that
   the sender-provided facts support.
-- Fictional newspaper furniture: the masthead name, the edition line, and the
-  fictional bylines are invented by design and are not factual claims.
+- Fictional newspaper furniture: the masthead name and the fictional bylines are
+  invented by design and are not factual claims. The edition line's DESCRIPTOR is
+  furniture too, but its CITY LIST is checkable: those cities read as the subject
+  company's real locations, so flag any city the research does not support.
 
-Beyond factual grounding, ALSO flag these three content violations, using the same
+Beyond factual grounding, ALSO flag these content violations, using the same
 output format (the offending phrase in "claim", the category and reason in "issue"):
 
 1. PERSONAL DETAIL: any detail about the recipient that is personal rather than
@@ -50,6 +52,14 @@ output format (the offending phrase in "claim", the category and reason in "issu
    when the research supports it as fact and even when framed as an observation.
    "Your employer's lawsuit means budget scrutiny" reads as surveillance, not
    research. Flag the offending phrase regardless of factual accuracy.
+5. STRIPPED QUALIFIER: any research figure carrying a qualifier ("over", "more
+   than", "around", "approximately", a trailing "+") that the copy states bare or
+   exact. Stating a floor or an estimate as a precise number is an unsupported
+   precision claim, the mirror image of over-claiming (as "over 13 years" from
+   "13 years" is). Exemplar: research says "148,000+ colleagues" and the copy says
+   "148,000 colleagues" — flag it; the copy needs "around 148,000" or "more than
+   148,000". Check every bare number in the copy against the research's wording
+   for that same quantity. Flag the phrase and name the research's qualifier.
 
 Source research (facts about the RECIPIENT and their company):
 {{research}}

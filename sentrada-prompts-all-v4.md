@@ -240,6 +240,14 @@ crosses 600 customers above $1m as $225m restructuring funds the enterprise push
 (achievement plus the bet). Anti-exemplar: "...but its senior-buyer outreach is
 unproven" (a verdict on the recipient's own function, on the surface).
 
+THESIS CONTAINMENT RULE: the implicit connection to the sender's problem lives in
+exactly one place, the closing arc of the lead article's body. The headline,
+sidebars, pull quote and hero stat must read as pure observed journalism and must
+not gesture at the sender's mechanism, category or thesis. Test each surface
+element: would it survive unchanged if a different vendor had commissioned the
+research? If a surface element only makes sense because of what the sender sells,
+rewrite it.
+
 PRECISION RULE (roles and relative clauses): attach every verb to the right noun.
 "Runs" is not "attends"; "owns" is not "contributes to". Re-read every relative
 clause and confirm it attaches to the thing the research supports. Failure
@@ -259,13 +267,22 @@ sender does not exist; the only permitted sender mark is the small "sentrada" cr
 - Lead article: EXACTLY 600-640 words (target 620). Count before outputting. Over
   640, cut. Under 600, expand. This is a hard production constraint.
 - Each sidebar story: headline 5-9 words, body 60-80 words. Exactly three of them.
-- Pull quote: a real attributed quote from the research, 15-25 words.
+- Pull quote: a real attributed quote from the research, 15-25 words, and it must
+  be ABOUT the subject company (or the recipient speaking in their current role).
+  A recipient quote about a previous employer or another company may support the
+  body copy but never takes the pull-quote slot: the page's largest visual element
+  cannot lead the eye to another company's name. When the research offers no
+  on-company quote from the recipient, prefer a leadership or institutional quote
+  about the subject company over an off-company recipient quote.
 - Headline: 8-15 words. Company or fund name plus problem framed as a newspaper
   headline (present tense, active voice). Two-punch structure: the first punch
   establishes credibility or scale, the second names the tension.
 - Masthead: a fictional broadsheet publication name, e.g. "The Venture Record".
 - Edition line: a plausible edition descriptor and city list, e.g. "Venture Capital
-  and SaaS Leadership / London, San Francisco, Berlin".
+  and SaaS Leadership / London, San Francisco, Berlin". The cities must be locations
+  the research supports for the subject company (offices, hubs, home markets). The
+  recipient knows where their own company operates, so an invented city reads as a
+  factual error, not as newspaper furniture.
 - Date: month and year only, e.g. "June 2026".
 - Lead figure: the single most striking metric from the research. Split it into the
   bare figure (stat_number) and a one-line descriptor (stat_descriptor).
@@ -466,10 +483,12 @@ Do NOT flag:
 - Synthesis that combines researched facts into a fair characterisation.
 - Claims about the SENDER (its proof points, customers, results, or offering) that
   the sender-provided facts support.
-- Fictional newspaper furniture: the masthead name, the edition line, and the
-  fictional bylines are invented by design and are not factual claims.
+- Fictional newspaper furniture: the masthead name and the fictional bylines are
+  invented by design and are not factual claims. The edition line's DESCRIPTOR is
+  furniture too, but its CITY LIST is checkable: those cities read as the subject
+  company's real locations, so flag any city the research does not support.
 
-Beyond factual grounding, ALSO flag these three content violations, using the same
+Beyond factual grounding, ALSO flag these content violations, using the same
 output format (the offending phrase in "claim", the category and reason in "issue"):
 
 1. PERSONAL DETAIL: any detail about the recipient that is personal rather than
@@ -492,6 +511,14 @@ output format (the offending phrase in "claim", the category and reason in "issu
    when the research supports it as fact and even when framed as an observation.
    "Your employer's lawsuit means budget scrutiny" reads as surveillance, not
    research. Flag the offending phrase regardless of factual accuracy.
+5. STRIPPED QUALIFIER: any research figure carrying a qualifier ("over", "more
+   than", "around", "approximately", a trailing "+") that the copy states bare or
+   exact. Stating a floor or an estimate as a precise number is an unsupported
+   precision claim, the mirror image of over-claiming (as "over 13 years" from
+   "13 years" is). Exemplar: research says "148,000+ colleagues" and the copy says
+   "148,000 colleagues" — flag it; the copy needs "around 148,000" or "more than
+   148,000". Check every bare number in the copy against the research's wording
+   for that same quantity. Flag the phrase and name the research's qualifier.
 
 Source research (facts about the RECIPIENT and their company):
 {{research}}

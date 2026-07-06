@@ -41,6 +41,14 @@ crosses 600 customers above $1m as $225m restructuring funds the enterprise push
 (achievement plus the bet). Anti-exemplar: "...but its senior-buyer outreach is
 unproven" (a verdict on the recipient's own function, on the surface).
 
+THESIS CONTAINMENT RULE: the implicit connection to the sender's problem lives in
+exactly one place, the closing arc of the lead article's body. The headline,
+sidebars, pull quote and hero stat must read as pure observed journalism and must
+not gesture at the sender's mechanism, category or thesis. Test each surface
+element: would it survive unchanged if a different vendor had commissioned the
+research? If a surface element only makes sense because of what the sender sells,
+rewrite it.
+
 PRECISION RULE (roles and relative clauses): attach every verb to the right noun.
 "Runs" is not "attends"; "owns" is not "contributes to". Re-read every relative
 clause and confirm it attaches to the thing the research supports. Failure
@@ -60,13 +68,22 @@ sender does not exist; the only permitted sender mark is the small "sentrada" cr
 - Lead article: EXACTLY 600-640 words (target 620). Count before outputting. Over
   640, cut. Under 600, expand. This is a hard production constraint.
 - Each sidebar story: headline 5-9 words, body 60-80 words. Exactly three of them.
-- Pull quote: a real attributed quote from the research, 15-25 words.
+- Pull quote: a real attributed quote from the research, 15-25 words, and it must
+  be ABOUT the subject company (or the recipient speaking in their current role).
+  A recipient quote about a previous employer or another company may support the
+  body copy but never takes the pull-quote slot: the page's largest visual element
+  cannot lead the eye to another company's name. When the research offers no
+  on-company quote from the recipient, prefer a leadership or institutional quote
+  about the subject company over an off-company recipient quote.
 - Headline: 8-15 words. Company or fund name plus problem framed as a newspaper
   headline (present tense, active voice). Two-punch structure: the first punch
   establishes credibility or scale, the second names the tension.
 - Masthead: a fictional broadsheet publication name, e.g. "The Venture Record".
 - Edition line: a plausible edition descriptor and city list, e.g. "Venture Capital
-  and SaaS Leadership / London, San Francisco, Berlin".
+  and SaaS Leadership / London, San Francisco, Berlin". The cities must be locations
+  the research supports for the subject company (offices, hubs, home markets). The
+  recipient knows where their own company operates, so an invented city reads as a
+  factual error, not as newspaper furniture.
 - Date: month and year only, e.g. "June 2026".
 - Lead figure: the single most striking metric from the research. Split it into the
   bare figure (stat_number) and a one-line descriptor (stat_descriptor).

@@ -590,6 +590,11 @@ def run_email_engine(engine_path, data_path, output_path=None, check=False):
 
 def newspaper_copy_text(data):
     parts = [
+        # The edition line's city list reads as the company's real locations, so
+        # the grounding gate must see it (a fabricated city once shipped inside
+        # the "fictional furniture" blind spot). The masthead stays out: it is
+        # furniture by design and P4b is told never to flag it.
+        "EDITION LINE: " + data.get("edition_line", ""),
         "HEADLINE: " + data.get("headline", ""),
         "STAT: " + data.get("stat_number", "") + " " + data.get("stat_descriptor", ""),
         "LEAD ARTICLE: " + data.get("lead_article", ""),

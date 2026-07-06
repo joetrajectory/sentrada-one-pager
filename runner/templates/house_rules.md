@@ -35,6 +35,15 @@ four times the industry average. But the senior enterprise buyers the upmarket p
 depends on are not in the callable cohort." Acknowledge the win in their language,
 then extend beyond it.
 
+QUALIFIER PRESERVATION RULE (contested and qualified numbers): a figure the
+research gives with a qualifier ("over", "more than", "around", "approximately",
+a trailing "+") keeps an equivalent qualifier in the copy. Stripping it turns a
+floor or an estimate into a false precision the recipient can catch: "148,000+"
+is not "148,000", and "over £1.6bn" is not "£1.6bn". Where the research offers
+conflicting figures for the same quantity, use the subject company's own
+published figure, hedged ("around..."), state it once as a load-bearing stat,
+and do not repeat the bare number elsewhere in the copy.
+
 PERSONALISATION PRINCIPLE: Personalisation should reward close reading on second
 look, not advertise itself on first. The recipient's company name inside a headline
 that makes sense as a story, not as a banner overlay. Operational details woven

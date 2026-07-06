@@ -36,7 +36,11 @@ The research to gate:
      answer/clue candidate; thin research makes a thin grid.
    - Newspaper: enough attributable material for a 620-word article plus three
      sidebars: real quotes with attribution, statistics with sources, at least
-     three distinct story angles.
+     three distinct story angles. The pull-quote slot additionally needs at least
+     one strong quote ABOUT the subject company; flag as a gap when the
+     recipient's only verbatim quotes concern a previous employer or another
+     company (the page's largest visual element is at risk, and the human should
+     know before approving the brief).
    - The Email (printed at A2): the recipient's own stated strategy or words to
      mirror, one sharp sourced metric, and one credible proof or noticed detail.
 7. **Sender-problem evidence:** an evidence assessment against the sender's
