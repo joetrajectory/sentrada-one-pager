@@ -1,20 +1,20 @@
 {
   "sender": {
-    "sender_name": "Matthew Codd",
-    "company": "Cosmic Partners",
-    "what_they_sell": "SaaS recruitment firm placing senior sales hires (VP Sales, CROs, Heads of Sales) into B2B SaaS companies. Matthew runs the sales and advisory side; his business partner Natasha handles recruitment delivery. They also advise SaaS companies on building out their sales functions. They focus on profitability and revenue per head rather than volume, and work with fewer clients at higher ACVs.",
+    "sender_name": "",
+    "company": "Sideways6",
+    "what_they_sell": "An employee idea-management platform that helps large enterprises capture, evaluate and act on ideas from frontline and deskless employees, meeting them in the tools they already use (Microsoft Teams, Viva Engage/Workplace, email). It turns frontline knowledge into measurable operational improvement: cost savings, process and safety gains, and engagement that converts to results.",
     "proof_points": "",
     "booking_link": "",
     "problems": [
-      "Post-funding SaaS companies need to hire a senior sales leader fast, and most get it wrong first time, burning 6-12 months of runway",
-      "Founders who have never built a sales team don't know what a great VP Sales or CRO looks like, so founder-led sales lingers past its ceiling and revenue targets slip",
-      "Even when they know they need someone, the best senior sales candidates are passive and hard to reach through job boards or LinkedIn"
+      "Frontline and deskless employees see the daily problems and improvement opportunities first, but large enterprises have no reliable channel to capture those ideas, so improvement stalls and the knowledge is lost",
+      "Transformation and operational-excellence programmes are run top-down and miss the ground-truth of the people doing the work, so change is resisted and adoption stays low",
+      "Companies run engagement surveys that ask people how they feel but give them no way to act on what they would change, so engagement initiatives never convert into operational results"
     ],
     "constraints": "",
     "custom_card": false,
+    "measurement_capabilities": "",
     "sender_email": "",
-    "card_phone": "",
-    "measurement_capabilities": ""
+    "card_phone": ""
   },
   "models": {
     "p2": "opus",
