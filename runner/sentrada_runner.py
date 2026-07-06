@@ -449,6 +449,10 @@ def email_copy_text(data):
             parts.append("SIGN-OFF: " + " / ".join(lines))
         else:
             parts.append(str(b.get("text", "")))
+    # A custom recipient-specific postscript is rendered on the piece and must be
+    # gated like the body (the house P.S. is engine-authored and exempt).
+    if str(data.get("postscript", "")).strip():
+        parts.append("POSTSCRIPT: " + str(data["postscript"]))
     return "\n".join(parts)
 
 
@@ -596,7 +600,10 @@ def newspaper_copy_text(data):
         # furniture by design and P4b is told never to flag it.
         "EDITION LINE: " + data.get("edition_line", ""),
         "HEADLINE: " + data.get("headline", ""),
-        "STAT: " + data.get("stat_number", "") + " " + data.get("stat_descriptor", ""),
+        "STAT: " + data.get("stat_number", "") + " " + data.get("stat_descriptor", "")
+        # The printed source attribution is a factual claim about provenance;
+        # it must be visible to the gate (same blind-spot class as the edition line).
+        + ((" | " + data["stat_source"]) if data.get("stat_source") else ""),
         "LEAD ARTICLE: " + data.get("lead_article", ""),
         "PULL QUOTE: " + data.get("pull_quote_text", "")
         + " -- " + data.get("pull_quote_attribution", ""),

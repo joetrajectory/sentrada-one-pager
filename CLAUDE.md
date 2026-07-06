@@ -190,6 +190,14 @@ Layer C: Variation variables (auto-assigned: scene archetype, people visibility,
 
 ## Gotchas (add to this list as failure patterns emerge)
 
+- When a gate passes something it shouldn't, first ask whether the gate ever SAW
+  it. The copy-text builders (newspaper_copy_text, crossword_copy_text,
+  email_copy_text) define P4b's field of vision; any recipient-visible text zone
+  they omit is ungated by construction. A fabricated edition-line city shipped
+  through exactly this blind spot, and stat_source and the email's custom
+  postscript had the same gap. When an engine gains a new rendered text field,
+  add it to the copy-text builder in the same commit.
+
 Production-format lessons now live as rules inside the prompt templates
 (runner/templates/) and their Notion sources; the gotchas below mostly concern
 the image-gen pipeline (parked formats).

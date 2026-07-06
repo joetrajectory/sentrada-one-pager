@@ -267,13 +267,16 @@ sender does not exist; the only permitted sender mark is the small "sentrada" cr
 - Lead article: EXACTLY 600-640 words (target 620). Count before outputting. Over
   640, cut. Under 600, expand. This is a hard production constraint.
 - Each sidebar story: headline 5-9 words, body 60-80 words. Exactly three of them.
-- Pull quote: a real attributed quote from the research, 15-25 words, and it must
-  be ABOUT the subject company (or the recipient speaking in their current role).
-  A recipient quote about a previous employer or another company may support the
-  body copy but never takes the pull-quote slot: the page's largest visual element
-  cannot lead the eye to another company's name. When the research offers no
-  on-company quote from the recipient, prefer a leadership or institutional quote
-  about the subject company over an off-company recipient quote.
+- Pull quote: a real attributed quote from the research, 15-25 words. The slot
+  serves the subject company's story: best is the recipient or their leadership
+  speaking about the subject company; a respected industry voice or named study
+  framing the subject's market is also legitimate (real broadsheets do this).
+  What never takes the slot is a quote whose face value foregrounds ANOTHER
+  company, including the recipient quoted about a previous employer: the page's
+  largest visual element cannot lead the eye to someone else's brand. When the
+  only recipient verbatims are off-company, use an on-company leadership or
+  institutional quote in the slot and keep the recipient's off-company quote in
+  the body, where the copy can make the connection explicit.
 - Headline: 8-15 words. Company or fund name plus problem framed as a newspaper
   headline (present tense, active voice). Two-punch structure: the first punch
   establishes credibility or scale, the second names the tension.
