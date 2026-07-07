@@ -2566,6 +2566,180 @@ def _write_batch_summary(manifest_path, results):
 
 # --- CLI --------------------------------------------------------------------
 
+# --- gate-probe: regression harness for the copy gates -----------------------
+# Turns the validation method that found the edition-line / stat_source /
+# postscript blind spots into a repeatable command. Each probe plants a known
+# violation into a copy of a real piece's data and asserts the grounding gate
+# flags it; the clean copy must still pass (baseline). Probes go through the
+# format's copy-text builder on purpose: a probe planted in a field the builder
+# omits comes back MISSED, which is exactly the blind-spot signal.
+# Run after any edit to prompt4b, house_rules, or a copy-text builder.
+
+_GATE_PROBES = {
+    "newspaper": [
+        ("fabricated-city", "reykjavik",
+         lambda d: d.__setitem__("edition_line", d.get("edition_line", "") + ", Reykjavik")),
+        ("fabricated-metric", "23.7",
+         lambda d: d.__setitem__("lead_article", d.get("lead_article", "")
+                                 + " Internal figures put the gain at 23.7% in a single quarter.")),
+        ("litigation-leverage", "tribunal",
+         lambda d: d.__setitem__("lead_article", d.get("lead_article", "")
+                                 + " With an employment tribunal hanging over the programme, "
+                                   "the case for acting now is sharper still.")),
+        ("personal-detail", "village",
+         lambda d: d.__setitem__("lead_article", d.get("lead_article", "")
+                                 + " Away from the office, he is understood to live quietly "
+                                   "with his family in a village outside the city.")),
+        ("over-attributed-proof", "ftse",
+         lambda d: d.__setitem__("lead_article", d.get("lead_article", "")
+                                 + " Pieces like this one have already earned replies from "
+                                   "three FTSE 100 chief executives.")),
+        ("misattributed-quote", "memo",
+         lambda d: d.__setitem__("pull_quote_attribution", "Company internal memo, 2026")),
+    ],
+    "email": [
+        ("fabricated-postscript", "initech",
+         lambda d: d.__setitem__("postscript",
+                                 "P.S. Your peers at Initech saw a 40% lift within a month.")),
+        ("fabricated-customer", "globex",
+         lambda d: d["body"].append({"type": "p", "text": "Teams at Globex Corporation cut "
+                                     "their integration backlog in half with us."})),
+    ],
+    "crossword": [
+        ("fabricated-clue", "reykjavik",
+         lambda d: d["candidates"].append({"answer": "REYKJAVIK",
+                                           "clue": "Home of the company's newest office"})),
+        ("litigation-clue", "tribunal",
+         lambda d: d["candidates"].append({"answer": "TRIBUNAL",
+                                           "clue": "Where the restructuring row may end up"})),
+    ],
+}
+
+_COPY_TEXT_BUILDERS = {"newspaper": lambda d: newspaper_copy_text(d),
+                       "email": lambda d: email_copy_text(d),
+                       "crossword": lambda d: crossword_copy_text(d)}
+
+
+def _lint_probes():
+    """Deterministic lint probes: build tiny synthetic piece folders and assert
+    _copy_lint raises the expected hold/warn. Free (no model calls)."""
+    import tempfile
+    cases = [
+        ("lint-em-dash", "newspaper",
+         {"followup.md": "**TOUCH 1 EMAIL**\nSubject: x\n\nBody — with an em dash.\n"},
+         "hold", "em dash"),
+        ("lint-banned-opener", "newspaper",
+         {"followup.md": "**TOUCH 1 EMAIL**\nSubject: x\n\nSomething arrived on your desk this week.\n"},
+         "hold", "banned line"),
+        ("lint-missing-subject", "newspaper",
+         {"followup.md": "**TOUCH 1 EMAIL**\n\nNo subject line here at all.\n"},
+         "hold", "no subject line"),
+        ("lint-long-connection-note", "newspaper",
+         {"followup.md": "**TOUCH 1 EMAIL**\nSubject: x\n\nBody.\n\n"
+                         "**TOUCH 2 CONNECTION NOTE VARIANT**\n" + ("w" * 300) + "\n\n**TOUCH 3**\nx\n"},
+         "hold", "connection-note"),
+        ("lint-grid-ref", "crossword",
+         {"data.json": json.dumps({"title": "T", "subtitle": "The one that stings is 14-Across",
+                                   "candidates": []})},
+         "hold", "grid-number"),
+        ("lint-litigation-warn", "newspaper",
+         {"followup.md": "**TOUCH 1 EMAIL**\nSubject: x\n\nThe lawsuit changes the maths.\n"},
+         "warn", "litigation"),
+    ]
+    results = []
+    for name, fmt, files, kind, needle in cases:
+        with tempfile.TemporaryDirectory() as td:
+            for fn, content in files.items():
+                write_file(os.path.join(td, fn), content)
+            holds, warns = _copy_lint(td, fmt)
+            hits = holds if kind == "hold" else warns
+            caught = any(needle.lower() in h.lower() for h in hits)
+            results.append((name, caught,
+                            "; ".join(hits)[:70] if hits else "(nothing raised)"))
+    return results
+
+
+def cmd_gate_probe(args):
+    _usage_reset()
+    config = load_config(args.config)
+    folder = args.folder
+    only = {c.strip() for c in (args.classes or "").split(",") if c.strip()}
+
+    print("\n" + "=" * 70)
+    print("GATE PROBE — regression harness for the copy gates")
+    print("=" * 70)
+
+    failures = 0
+
+    print("\n[lint probes] deterministic, no model calls:")
+    for name, caught, detail in _lint_probes():
+        mark = "CAUGHT" if caught else "MISSED"
+        failures += 0 if caught else 1
+        print(f"  {mark:7} {name:28} {detail}")
+
+    if args.lint_only:
+        _finish_gate_probe(failures)
+        return
+
+    meta = json.loads(read_file(os.path.join(folder, "meta.json")))
+    fmt = meta.get("format")
+    probes = _GATE_PROBES.get(fmt)
+    if not probes:
+        die(f"gate-probe has no model probes for format '{fmt}'.")
+    data = json.loads(read_file(os.path.join(folder, "data.json")))
+    research = read_file(os.path.join(folder, "research.md"))
+    build = _COPY_TEXT_BUILDERS[fmt]
+    # The piece's copy may legitimately cite its BUILD-TIME sender's proof, so
+    # judge it against the sender it was written under (meta snapshot), not
+    # whatever sender happens to be live in config today.
+    sender = meta.get("sender") or config.get("sender", {})
+    sender_facts = "\n".join(
+        f"- {x}" for x in (sender.get("company", ""), sender.get("what_they_sell", ""),
+                           sender.get("proof_points", "")) if str(x).strip())
+
+    if not args.skip_baseline:
+        print(f"\n[baseline] the piece's own copy must pass clean ({fmt})...")
+        g, issues = grounding_check(config, research, build(data), sender_facts=sender_facts)
+        if g:
+            print("  CLEAN   baseline grounded (as required)")
+        else:
+            failures += 1
+            print("  DIRTY   baseline copy is NOT grounded; probe results below are "
+                  "unreliable. Fix the piece or pick a clean one:")
+            for i in issues:
+                print(f"          - {i.get('claim', '')[:60]} -> {i.get('issue', '')[:60]}")
+
+    print(f"\n[model probes] one grounding call each ({fmt}):")
+    import copy as _copy
+    for name, marker, inject in probes:
+        if only and name not in only:
+            continue
+        poisoned = _copy.deepcopy(data)
+        inject(poisoned)
+        g, issues = grounding_check(config, research, build(poisoned),
+                                    sender_facts=sender_facts)
+        blob = json.dumps(issues).lower()
+        caught = (not g) and marker.lower() in blob
+        mark = "CAUGHT" if caught else "MISSED"
+        failures += 0 if caught else 1
+        why = "" if caught else (" (gate passed it)" if g else
+                                 f" (flagged, but no issue mentions '{marker}')")
+        print(f"  {mark:7} {name:28}{why}")
+
+    _finish_gate_probe(failures)
+
+
+def _finish_gate_probe(failures):
+    print("-" * 70)
+    if failures:
+        print(f"{failures} probe(s) MISSED. A gate or copy-text builder has a blind "
+              "spot (or the baseline is dirty). Do not trust the gates until fixed.")
+        _print_usage("gate-probe")
+        sys.exit(1)
+    print("All probes caught. The gates see what they need to see.")
+    _print_usage("gate-probe")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Sentrada chain runner")
     sub = ap.add_subparsers(dest="command", required=True)
@@ -2596,6 +2770,21 @@ def main():
     q.add_argument("--image", required=True, help="the final image file (PNG or JPG)")
     q.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     q.set_defaults(func=cmd_qc)
+
+    gp = sub.add_parser("gate-probe",
+                        help="regression-test the copy gates by planting known "
+                             "violations in a piece's data and asserting they are caught")
+    gp.add_argument("--folder", required=True,
+                    help="a piece folder with meta.json, data.json and research.md "
+                         "whose copy is known-clean (the baseline)")
+    gp.add_argument("--lint-only", action="store_true",
+                    help="run only the free deterministic lint probes")
+    gp.add_argument("--skip-baseline", action="store_true",
+                    help="skip the clean-copy baseline check")
+    gp.add_argument("--classes", default="",
+                    help="comma-separated probe names to run (default: all for the format)")
+    gp.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    gp.set_defaults(func=cmd_gate_probe)
 
     sc = sub.add_parser("ship-check",
                         help="print-readiness gate: hold any piece whose render is newer "

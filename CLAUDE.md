@@ -128,7 +128,7 @@ Chain runner (runner/config.json "models"): p1b sonnet (research gate), p2 opus
 Image-gen pipeline (parked formats): Opus for research/review/format; Sonnet for
 brief/copy/prompt/followup.
 
-## Format library (3 production formats, v9.0 — deterministic engines, A2 at 360 DPI)
+## Format library (3 production formats, v10.0 — deterministic engines, A2 at 360 DPI)
 
 Newspaper Front Page — newspaper/newspaper.py (Pango/Cairo on the upscaled
   template; 620-word lead, three sidebars, pull quote, hero stat)
@@ -232,6 +232,10 @@ python runner/sentrada_runner.py ...
   qc            re-run Prompts 6 + 6B against a final image
   followup      re-run Prompt 7 for a piece
   ship-check    print-readiness gate; run before staging anything for print
+  gate-probe    regression-test the copy gates: plants known violations in a
+                clean piece's data and asserts P4b + the lint catch them; run
+                after any edit to prompt4b, house_rules or a copy-text builder
+                (--lint-only for the free deterministic subset)
   birch-csv     shipping CSV for the print supplier (holds addresses; never commit)
   outcome       record what happened to a sent piece (replied/meeting/no_response/...)
   calibration   compare 6B predictions against recorded outcomes
@@ -246,7 +250,9 @@ Legacy slash commands (/generate-artefact, /research-company, /review-output,
 
 runner/            # THE PRODUCTION PIPELINE: sentrada_runner.py, templates/
                    # (prompt templates mirrored from Notion), config.json (sender
-                   # profile + engine paths; committed), pieces/ [GITIGNORED]
+                   # profile + engine paths; committed), sender.*.json (parked
+                   # sender profiles for swapping between clients; committed so
+                   # they survive container resets), pieces/ [GITIGNORED]
 newspaper/         # Newspaper layout engine (Pango/Cairo + upscaled template)
 crossword/         # Crossword engine + grid generator + upscaled template
 email/             # The Email engine (procedural Gmail chrome)
