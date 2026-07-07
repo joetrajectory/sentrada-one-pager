@@ -91,6 +91,13 @@ sender does not exist; the only permitted sender mark is the small "sentrada" cr
 - Lead figure: the single most striking metric from the research. Split it into the
   bare figure (stat_number) and a one-line descriptor (stat_descriptor).
 
+CITATIONS ARE NEVER PRINTED: the brief and research carry bracketed source tags
+([Annual Report 2025], [corporate.example.com]) for fact-checking; none of them
+appear in any rendered field. A broadsheet attributes in prose ("the company's
+preliminary results show", "according to its latest annual report") where a
+claim needs attribution, and the FACT CHECK LIST below the JSON is where every
+bracketed source belongs.
+
 Lead article arc (third person, factual broadsheet tone, fictional byline): news
 hook; context (scale, figures); industry data with named sources and statistics;
 the subject's own words (a real attributed quote); portfolio or operational

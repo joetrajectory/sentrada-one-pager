@@ -1880,6 +1880,12 @@ def _copy_lint(folder, fmt):
             strings = list(_strings_in(data))
             if any("—" in s for s in strings):
                 holds.append("lint: em dash in data.json copy (house rule: none)")
+            cite = next((m.group(0) for s in strings
+                         for m in [re.search(r"\[[^\]\[]{3,60}\]", s)] if m), None)
+            if cite:
+                holds.append(f"lint: bracket citation printed in copy ({cite}) — "
+                             "citations live in the fact-check list; the piece "
+                             "attributes in prose")
             if any("!" in s for s in strings):
                 holds.append("lint: exclamation mark in data.json copy (house rule: none)")
             if fmt == "crossword":
