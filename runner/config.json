@@ -1,20 +1,19 @@
 {
   "sender": {
-    "sender_name": "",
-    "company": "Sideways6",
-    "what_they_sell": "An employee idea-management platform that helps large enterprises capture, evaluate and act on ideas from frontline and deskless employees, meeting them in the tools they already use (Microsoft Teams, Viva Engage/Workplace, email). It turns frontline knowledge into measurable operational improvement: cost savings, process and safety gains, and engagement that converts to results.",
-    "proof_points": "",
-    "booking_link": "",
+    "sender_name": "Joe Chapman",
+    "company": "Sentrada",
+    "what_they_sell": "Executive response generation. Deep-researched, one-of-one physical pieces (A2 newspaper front pages and claymation scenes) printed on rigid foam board, packaged in premium boxes, and delivered to senior B2B buyers' desks. The piece earns attention, the follow-up converts it.",
+    "proof_points": "First Sentrada campaign (June 2026): 20 one-of-one pieces to VC partners, 8 responses in the first week; one founder has his piece on his office wall. Secondary record: responses from CEOs of Starbucks, L'Oreal and Danone, a meeting with the CEO of VINCI Construction, 10 years of enterprise outbound. First client doubled their order from 10 to 20 pieces before anything shipped.",
+    "booking_link": "https://sentrada.io",
     "problems": [
-      "Frontline and deskless employees see the daily problems and improvement opportunities first, but large enterprises have no reliable channel to capture those ideas, so improvement stalls and the knowledge is lost",
-      "Transformation and operational-excellence programmes are run top-down and miss the ground-truth of the people doing the work, so change is resisted and adoption stays low",
-      "Companies run engagement surveys that ask people how they feel but give them no way to act on what they would change, so engagement initiatives never convert into operational results"
+      "Enterprise pipeline is unpredictable because outbound to senior buyers has stopped working: email response rates are collapsing, cold calls don't reach C-suite, and the accounts that matter most are the hardest to engage",
+      "Sales teams are sending more volume with less result: AI has made personalised email easy to send and impossible to notice, so the highest-value accounts get buried in noise alongside everyone else",
+      "No-decision drag on enterprise deals: even when meetings happen, the lack of a memorable first impression means deals stall because the buyer has no emotional anchor to the relationship"
     ],
     "constraints": "",
-    "custom_card": false,
-    "measurement_capabilities": "",
-    "sender_email": "",
-    "card_phone": ""
+    "custom_card": true,
+    "sender_email": "joe@sentrada.io",
+    "card_phone": "+44 7815 814855"
   },
   "models": {
     "p2": "opus",
