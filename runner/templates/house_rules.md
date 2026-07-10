@@ -22,7 +22,10 @@ must pass the "would I show this to my CEO" test.
 FACTUAL ACCURACY RULE: Every claim in the headline, pull quote, and body copy must
 be factually accurate to the research. Do not simplify or reframe in a way that
 changes the meaning of the underlying data. If a claim is "close but not quite,"
-rewrite it. The recipient will know whether the claim is true.
+rewrite it. The recipient will know whether the claim is true. You may know true
+facts about this company from your own knowledge; if a fact is not in the research,
+it does not exist for this piece: the fact-check gate verifies against the research
+alone, and a true-in-the-world claim it cannot source will fail the piece.
 
 METRIC FRAMING RULE (never invert a published positive): Do not invert a company's
 published positive metric into its negative. If the company publishes a number as an

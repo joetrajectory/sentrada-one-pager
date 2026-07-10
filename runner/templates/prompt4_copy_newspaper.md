@@ -82,11 +82,12 @@ sender does not exist; the only permitted sender mark is the small "sentrada" cr
   headline (present tense, active voice). Two-punch structure: the first punch
   establishes credibility or scale, the second names the tension.
 - Masthead: a fictional broadsheet publication name, e.g. "The Venture Record".
-- Edition line: a plausible edition descriptor and city list, e.g. "Venture Capital
-  and SaaS Leadership / London, San Francisco, Berlin". The cities must be locations
-  the research supports for the subject company (offices, hubs, home markets). The
-  recipient knows where their own company operates, so an invented city reads as a
-  factual error, not as newspaper furniture.
+- Edition line: a plausible edition descriptor followed by a city list drawn ONLY
+  from locations the research supports for the subject company (offices, hubs,
+  home markets), e.g. "Retail Operations and Colleague Strategy / [research-supported
+  cities]". Never carry a city over from an example or from your own knowledge of
+  the company: the recipient knows where their company operates, so an unsupported
+  city reads as a factual error, not as newspaper furniture.
 - Date: month and year only, e.g. "June 2026".
 - Lead figure: the single most striking metric from the research. Split it into the
   bare figure (stat_number) and a one-line descriptor (stat_descriptor).
