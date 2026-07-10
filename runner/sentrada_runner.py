@@ -1632,6 +1632,14 @@ def _p6b(config, folder, image_path, meta, research, package=False):
                 f"card (step 8b) or import custom copy with `package-qc --card-file`.")
         card = json.loads(read_file(card_path))
         lines = [card.get("salutation", "").rstrip(",") + ","] + list(card.get("body", []))
+        # The engine prints a contact block at the foot of every generated card;
+        # omit it and the simulation wrongly judges the send as unsigned (two
+        # "anonymous sender" verdicts shipped through exactly that gap).
+        contact = card.get("contact") or {}
+        foot = ", ".join(str(v) for v in (contact.get("name"), contact.get("company"),
+                                          contact.get("email"), contact.get("phone")) if v)
+        if foot:
+            lines.append("[printed at the foot of the card] " + foot)
         card_text = "\n".join(x for x in lines if x.strip())
         if not card_text.strip():
             die(f"{slug}-card.json has no card text to show the simulation.")
