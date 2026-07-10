@@ -205,8 +205,10 @@ Layer C: Variation variables (auto-assigned: scene archetype, people visibility,
   email_copy_text) define P4b's field of vision; any recipient-visible text zone
   they omit is ungated by construction. A fabricated edition-line city shipped
   through exactly this blind spot, and stat_source and the email's custom
-  postscript had the same gap. When an engine gains a new rendered text field,
-  add it to the copy-text builder in the same commit.
+  postscript had the same gap. Now mechanical: a ship-check lint holds any
+  data.json string field that is absent from the copy-text output and not on
+  the format's furniture exempt list (_COPY_TEXT_EXEMPT), so a new rendered
+  field fails until it is consciously routed through the builder or exempted.
 
 Production-format lessons now live as rules inside the prompt templates
 (runner/templates/) and their Notion sources; the gotchas below mostly concern

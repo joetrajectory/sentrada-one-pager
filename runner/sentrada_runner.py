@@ -1985,6 +1985,59 @@ def touch2_opener(folder):
     return line[:60] or None
 
 
+# Gate field-of-vision coverage: the copy-text builders define what P4b sees,
+# so any data.json text zone they omit is ungated by construction (the class
+# that shipped a fabricated edition-line city). This check makes the rule
+# "add new rendered fields to the builder in the same commit" mechanical:
+# every string leaf in data.json must either appear in the builder's output
+# or be an explicitly exempted piece of furniture below. A new engine field
+# therefore fails ship-check until someone consciously routes or exempts it.
+
+_COPY_TEXT_EXEMPT = {
+    # Fictional furniture by design (P4b is told never to flag the masthead
+    # and bylines) plus the date line.
+    "newspaper": {"masthead_name", "byline", "date",
+                  "sidebar_1_byline", "sidebar_2_byline", "sidebar_3_byline"},
+    "crossword": set(),
+    # Gmail chrome and runner-injected sender identity (human-owned config,
+    # never P4 output). body[].type is a schema tag, not rendered text.
+    "email": {"copy_source", "sender", "recipient", "account",
+              "timestamp", "label", "type"},
+}
+
+
+def ungated_copy_fields(data, fmt):
+    """Key paths of data.json string values invisible to the grounding gate:
+    present in the piece data but absent from the copy text P4b reads and not
+    exempted as furniture. Empty list means full gate coverage."""
+    builders = {"newspaper": newspaper_copy_text, "crossword": crossword_copy_text,
+                "email": email_copy_text}
+    builder = builders.get(fmt)
+    if not builder:
+        return []
+    norm = lambda s: re.sub(r"\s+", " ", s).strip().lower()
+    text = norm(builder(data))
+    exempt = _COPY_TEXT_EXEMPT.get(fmt, set())
+    missing = []
+
+    def walk(obj, path):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if k in exempt:
+                    continue
+                walk(v, f"{path}.{k}" if path else k)
+        elif isinstance(obj, list):
+            for i, v in enumerate(obj):
+                walk(v, f"{path}[{i}]")
+        elif isinstance(obj, str):
+            s = norm(obj)
+            if len(s) >= 3 and s not in text:   # <3 chars: too short to gate
+                missing.append(path)
+
+    walk(data, "")
+    return missing
+
+
 def _copy_lint(folder, fmt):
     """Deterministic checks for the text rules the prompts promise but nothing
     enforced. Cheap, no model calls, run on every ship-check. Returns
@@ -2009,6 +2062,11 @@ def _copy_lint(folder, fmt):
                              "attributes in prose")
             if any("!" in s for s in strings):
                 holds.append("lint: exclamation mark in data.json copy (house rule: none)")
+            for path in ungated_copy_fields(data, fmt):
+                holds.append(f"lint: data.json field \"{path}\" is invisible to the "
+                             "grounding gate (absent from the copy-text builder) — "
+                             "recipient-visible text must be routed through "
+                             f"{fmt}_copy_text or exempted as furniture")
             if fmt == "crossword":
                 fields = [data.get("title", ""), data.get("subtitle", "")]
                 fields += [c.get("clue", "") for c in data.get("candidates", [])]
@@ -2386,11 +2444,26 @@ def cmd_birch_csv(args):
 def cmd_followup(args):
     _usage_reset()
     config = load_config(args.config)
-    reply = _p7(config, args.folder, args.delivery_date)
+    folder = args.folder
+    reply = _p7(config, folder, args.delivery_date)
+    # Mirror the chain's conversion tail: render the card (skipped for
+    # custom-card senders) and, when one exists, refresh the package pass so
+    # the regenerated card copy never ships judged only in its previous form.
+    card_png = _generate_card(config, folder, reply)
+    vpkg = None
+    if card_png:
+        slug = os.path.basename(os.path.normpath(folder))
+        image = os.path.join(folder, slug + ".png")
+        if os.path.exists(image):
+            meta = json.loads(read_file(os.path.join(folder, "meta.json")))
+            research = read_file(os.path.join(folder, "research.md"))
+            _, vpkg = _p6b(config, folder, image, meta, research, package=True)
     print("\n" + "=" * 70)
     print("FOLLOW-UP WRITTEN")
     print("=" * 70)
     print("  followup.md  <- companion card + Touch 1-3 + reception nudge + fact check")
+    if vpkg:
+        print(f"  qc_package.md <- 6B package pass; verdict: {vpkg}")
     print("\n" + reply)
     _print_usage("followup")
 
@@ -2484,9 +2557,11 @@ def cmd_calibration(args):
         print(f"  {hit}  {d:38} 6B: {v:38} actual: {res}")
     if rows:
         got = sum(1 for _, _, res in rows if res in positive)
+        responded = sum(1 for _, _, res in rows if res not in ("no_response", "bounced"))
         print("-" * 70)
-        print(f"  {len(rows)} outcome(s) recorded, {got} positive "
-              f"({100 * got // len(rows)}% response rate)")
+        print(f"  {len(rows)} outcome(s) recorded: {responded} responded "
+              f"({100 * responded // len(rows)}% response rate), {got} positive "
+              f"({100 * got // len(rows)}%)")
         print("  When ~30 outcomes exist, feed the misses back into prompt6b as "
               "calibration examples.")
     if pending:
@@ -2830,6 +2905,13 @@ def _lint_probes():
         ("lint-litigation-warn", "newspaper",
          {"followup.md": "**TOUCH 1 EMAIL**\nSubject: x\n\nThe lawsuit changes the maths.\n"},
          "warn", "litigation"),
+        # The blind-spot class itself: a rendered text field the copy-text
+        # builder does not include must be caught, not shipped ungated.
+        ("lint-ungated-field", "crossword",
+         {"data.json": json.dumps({"title": "TEST CROSSWORD", "subtitle": "A test line",
+                                   "candidates": [],
+                                   "promo_line": "Printed in Milton Keynes since 1962"})},
+         "hold", "invisible to the grounding gate"),
     ]
     results = []
     for name, fmt, files, kind, needle in cases:

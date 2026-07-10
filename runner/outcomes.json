@@ -70,5 +70,93 @@
     "result": "bounced",
     "date": "2026-07",
     "notes": "Cosmic campaign 1. Undelivered (only failed delivery of the 20)."
+  },
+  "victoria-kennard-plural": {
+    "recipient": "Victoria Kennard",
+    "company": "Plural",
+    "format": "newspaper",
+    "result": "no_response",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Delivered, no response."
+  },
+  "avalon-lee-bacon-dawn-capital": {
+    "recipient": "Avalon Lee-Bacon",
+    "company": "Dawn Capital",
+    "format": "newspaper",
+    "result": "no_response",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Delivered, no response."
+  },
+  "leah-sutton-balderton": {
+    "recipient": "Leah Sutton",
+    "company": "Balderton",
+    "format": "newspaper",
+    "result": "no_response",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Delivered, no response."
+  },
+  "mads-jensen-superseed": {
+    "recipient": "Mads Jensen",
+    "company": "SuperSeed",
+    "format": "newspaper",
+    "result": "no_response",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Delivered, no response."
+  },
+  "ophelia-brown-blossom-capital": {
+    "recipient": "Ophelia Brown",
+    "company": "Blossom Capital",
+    "format": "newspaper",
+    "result": "no_response",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Delivered, no response."
+  },
+  "holly-bennett-accel": {
+    "recipient": "Holly Bennett",
+    "company": "Accel",
+    "format": "newspaper",
+    "result": "no_response",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Delivered, no response."
+  },
+  "sandra-schwarzer-index-ventures": {
+    "recipient": "Sandra Schwarzer",
+    "company": "Index Ventures",
+    "format": "newspaper",
+    "result": "no_response",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Delivered, no response."
+  },
+  "ben-wright-crane-venture-partners": {
+    "recipient": "Ben Wright",
+    "company": "Crane Venture Partners",
+    "format": "newspaper",
+    "result": "no_response",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Delivered, no response."
+  },
+  "george-henry-localglobe": {
+    "recipient": "George Henry",
+    "company": "LocalGlobe",
+    "format": "newspaper",
+    "result": "no_response",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Delivered, no response."
+  },
+  "harry-stebbings-20vc": {
+    "recipient": "Harry Stebbings",
+    "company": "20VC",
+    "format": "newspaper",
+    "result": "no_response",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Delivered, no response."
+  },
+  "oli-hammond-fuel-ventures": {
+    "recipient": "Oli Hammond",
+    "company": "Fuel Ventures",
+    "format": "newspaper",
+    "result": "no_response",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Delivered, no response."
   }
 }
