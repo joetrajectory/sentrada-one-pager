@@ -1862,6 +1862,28 @@ def _followup_body(text):
     return "\n".join(l for l in body.splitlines() if not l.strip().startswith("Flag:"))
 
 
+def crossword_subtitle_words(folder):
+    """Normalised subtitle word set for the batch near-duplicate check, minus
+    the company's own tokens (the company name legitimately recurs). Returns
+    None for non-crossword pieces (only crossword data.json has candidates)."""
+    path = os.path.join(folder, "data.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        data = json.loads(read_file(path))
+    except Exception:
+        return None
+    if "candidates" not in data:
+        return None
+    sub = str(data.get("subtitle", "") or "")
+    if not sub:
+        return None
+    company = re.sub(r"[^a-z0-9 ]", "", str(data.get("company_name", "")).lower()).split()
+    skip = set(company) | {c + "s" for c in company}   # covers possessives
+    words = set(re.sub(r"[^a-z0-9 ]", "", sub.lower()).split()) - skip
+    return words or None
+
+
 def touch2_opener(folder):
     """First line of Touch 2, normalised, for the batch duplicate check."""
     path = os.path.join(folder, "followup.md")
@@ -2067,6 +2089,23 @@ def cmd_ship_check(args):
                     g["holds"].append(f"lint: Touch 2 opener duplicated across batch "
                                       f"({names}) — each needs its own opening line")
                     g["shippable"] = False
+
+        # Same failure mode on the piece itself: two crossword subtitles built
+        # from the same construction ("Built entirely from X's own vocabulary")
+        # read as a template the moment two recipients compare pieces.
+        subs = [(s, w) for f, s in zip(folders, statuses)
+                for w in [crossword_subtitle_words(f)] if w]
+        for i in range(len(subs)):
+            for j in range(i + 1, len(subs)):
+                a, wa = subs[i]
+                b, wb = subs[j]
+                if len(wa & wb) / min(len(wa), len(wb)) >= 0.5:
+                    for g in (a, b):
+                        g["holds"].append(
+                            f"lint: crossword subtitle near-duplicate across batch "
+                            f"({a['slug']}, {b['slug']}) — same construction on two "
+                            f"pieces kills the one-of-one claim")
+                        g["shippable"] = False
 
     print("\n" + "=" * 70)
     print("SHIP CHECK — print-readiness gate")
