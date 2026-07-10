@@ -941,8 +941,7 @@ Part 2: Step out of character and assess as a ruthless campaign strategist
 
 Rules: No flattery. You may not conclude the piece works without naming what would
 stop this specific person responding. A piece can pass QC and still fail to earn a
-meeting. Your job is to catch that gap. The piece earns attention and the follow-up
-converts it, so judge accordingly.
+meeting. Your job is to catch that gap. {{stage_note}}
 
 After Parts 1 and 2, end your reply with a single fenced ```json code block (the
 LAST thing in your output) capturing Part 2 in this exact shape, for the pipeline
