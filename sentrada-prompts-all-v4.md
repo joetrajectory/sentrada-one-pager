@@ -1005,7 +1005,7 @@ Write them together, governed by the same 6B read. They share a strategic frame 
 
 Division of labour:
 
-- **The card** is read first, in the box, with the piece in hand. The piece carries no sender presence by design, so the card is where the sender is revealed. Its job is to reveal who sent this, make the bespoke nature explicit, and set the frame per 6B. It hands off to the follow-up rather than carrying the hardest ask.
+- **The card** is read first, in the box, with the piece in hand. The piece carries no sender presence by design, so the card is where the sender is revealed. Its job is to reveal who sent this, make the bespoke nature explicit, set the frame per 6B, and carry the first direct ask while the recipient is at peak attention: a card that only promises a future email routes the close into the exact channel most pieces argue is broken, and leaves the reader holding the object with nothing to do. The follow-up reinforces and escalates the ask; it never introduces it.
 - **The follow-up** arrives 24 to 48 hours later. It re-triggers the memory of the piece and advances the conversation, leading with the specific 6B craft hook and carrying the primary CTA.
 
 ---
@@ -1137,7 +1137,7 @@ Otherwise, structure:
 2. Reference the piece and the question it raises ("The [format] in this box was built around one question: [core problem as a question]").
 3. One sentence making the bespoke nature explicit, so the recipient understands it was researched and built only for them and could not have been sent to anyone else (Customisation Communication Test).
 4. The frame, set per the 6B reframe. Position the sender as 6B's highest-leverage change dictates. For enterprise targets, connect the opening question to a stated strategic priority or active initiative the recipient already cares about and has budget for, not just the generic problem. One credibility signal or single most-relevant proof point only, never a list.
-5. A soft close that hands off to the follow-up rather than carrying the hardest ask, reframed per the CTA rule where the recipient is an influencer not a buyer. Signal that a follow-up will come ("I'll follow up by email later this week in case this is easier to action from your inbox").
+5. A direct, low-friction ask, made while they are holding the piece. One sentence naming one specific action they can take right now through the contact block the card engine prints at the foot of the card (reply, call or message the number, or the booking link): "Worth 20 minutes? My email and number are below." The moment of maximum attention is the wrong moment to ask for nothing (the recorded failure of the first generated-card batch: "the object asked for nothing, so there was no action to take"). Reframe per the CTA rule where the recipient is an influencer, not a buyer. The ask commits the sender to nothing beyond the conversation. After the ask, the follow-up may be signalled as the backup path ("If easier, I'll follow up by email this week"), never as the plan.
 6. Sign off with the sender's full name. The recipient must know exactly who sent this.
 
 The card does not lead on the same hook the follow-up will use. It sets the frame and reveals the sender. The follow-up deploys the specific 6B craft hook.
@@ -1157,7 +1157,7 @@ The card does not lead on the same hook the follow-up will use. It sets the fram
 >
 > I will follow up by email in the next couple of days.
 
-Note the shape: what the piece is made from, in their world; the bespoke line ("Nobody else could solve it"); the channel pivot naming their real buyer titles; the follow-up signal. Short sentences throughout, no stacked clauses, no proof padding, 86 words. The sign-off block (name, company, email, phone) is added by the card engine, so end the copy at the follow-up signal.
+Note the shape: what the piece is made from, in their world; the bespoke line ("Nobody else could solve it"); the channel pivot naming their real buyer titles. Short sentences throughout, no stacked clauses, no proof padding, 86 words. One update since this card shipped: its close ("I will follow up by email") predates the card-ask rule above; written today, the close would be a direct ask first ("Worth 20 minutes? My email and number are below.") with the email signalled as backup. The sign-off block (name, company, email, phone) is added by the card engine, so end the copy at the ask and backup line.
 
 ### Touch 1: Follow-up email (24-48h after confirmed delivery)
 
