@@ -83,7 +83,10 @@ python runner/sentrada_runner.py batch-build --manifest research/<batch>.json
 5. RENDER: deterministic layout engine at 360 DPI (text guaranteed legible);
    each render is stamped with the engine build (engine_stamp.json)
 6. REVIEW (Prompt 6, vision): craft QC; FAIL halts the chain
-6b. RECIPIENT SIM (Prompt 6B, vision): predicted response; WOULD BIN halts
+6b. RECIPIENT SIM (Prompt 6B piece stage, vision): predicted response to the
+   artefact ALONE (it knows a card follows, so leverage advice is aimed at what
+   the card and Touch 1 must supply, not at the absent sender); WOULD BIN halts.
+   This is the verdict P7 builds the card and follow-up from
 7. FOLLOW-UP (Prompt 7): companion card copy + 3-touch sequence, generated now,
    held until delivery confirmation. Card copy skipped when the sender writes
    their own (config sender "custom_card": true). Output passes the same Prompt
@@ -91,11 +94,18 @@ python runner/sentrada_runner.py batch-build --manifest research/<batch>.json
 8b. CARD: card/card.py renders the card copy to a print-ready A6 PNG at
    runner/pieces/{slug}/{slug}-card.png. Skipped if sender provided custom copy.
    Overflow past the 150-word cap is refused, not squeezed.
+8c. PACKAGE QC (Prompt 6B package stage, vision): piece + companion card judged
+   together as the full send (qc_package.md). Runs automatically after 8b for
+   generated cards; custom-card senders run it once their copy exists:
+   `package-qc --folder <piece> --card-file <copy.txt>` (imports the copy as
+   {slug}-card.json). Ship-check and calibration prefer the package verdict
 9. SHIP-CHECK: print-readiness gate (QC freshness, engine staleness, P6 FAIL,
-   6B WOULD BIN, follow-up freshness vs data.json and the 6B verdict, plus a
-   deterministic copy lint: em dashes, banned stock lines, missing Touch 1
-   subject, connection-note length, grid-number refs, litigation keywords,
-   duplicate Touch 2 openers across the batch) before anything is staged
+   6B WOULD BIN, package-pass freshness vs render and card copy plus package
+   WOULD BIN, follow-up freshness vs data.json and the 6B verdict, plus a
+   deterministic copy lint: em dashes, bracket citations, banned stock lines,
+   missing Touch 1 subject, connection-note length, grid-number refs, litigation
+   keywords, duplicate Touch 2 openers and near-duplicate crossword subtitles
+   across the batch) before anything is staged
 10. DELIVERABLES: PNGs pushed to the deliverables branch; birch-csv generates the
    shipping CSV (never committed)
 11. PRINT & SHIP: Birch prints and ships; tracking CSV comes back from Birch
@@ -108,8 +118,8 @@ python runner/sentrada_runner.py batch-build --manifest research/<batch>.json
    against reality with `calibration`
 
 Data flows via files in runner/pieces/<slug>/: research.md, gate.json, brief.json,
-data.json, the render PNG, qc_review.md, qc_recipient.md, followup.md,
-followup_gate.json, <slug>-card.png, outcome.json. Prompt 7 derives the piece
+data.json, the render PNG, qc_review.md, qc_recipient.md, qc_package.md,
+followup.md, followup_gate.json, <slug>-card.png, outcome.json. Prompt 7 derives the piece
 reference and sender block at run time (from data.json and live config), never
 from the build-time meta.json snapshot: post-build copy revisions and proof
 updates must reach the follow-up. Cross-cutting copy rules live once in
@@ -229,7 +239,11 @@ python runner/sentrada_runner.py ...
   generate      one piece: gate -> brief checkpoint -> copy -> gates -> render -> QC -> P7 -> card
   batch-brief   phase 1 over a manifest: research gate + brief per recipient, review sheet + approvals file
   batch-build   phase 2: build every APPROVEd piece (isolated subprocess per piece)
-  qc            re-run Prompts 6 + 6B against a final image
+  qc            re-run Prompts 6 + 6B against a final image (also refreshes the
+                package pass when a card exists)
+  package-qc    run the 6B package pass: piece + companion card judged as the
+                full send; --card-file imports custom card copy (plain text,
+                blank-line paragraphs) as {slug}-card.json first
   followup      re-run Prompt 7 for a piece
   ship-check    print-readiness gate; run before staging anything for print
   gate-probe    regression-test the copy gates: plants known violations in a

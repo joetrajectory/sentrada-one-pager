@@ -1024,7 +1024,7 @@ def _generate_card(config, folder, reply):
     body = _card_copy_from_p7(reply, first, sender)
     if not body:
         print("[card] step 8b skipped: no auto card (sender-provided or suppressed).")
-        return
+        return None
     slug = os.path.basename(os.path.normpath(folder))
     data_path = os.path.join(folder, f"{slug}-card.json")
     card_png = os.path.join(folder, f"{slug}-card.png")
@@ -1034,12 +1034,13 @@ def _generate_card(config, folder, reply):
     if rc != 0:
         print("[card] WITHHELD: copy overflows A6 even at the compact tier. Trim the "
               "card under 150 words and re-run. Engine output:\n" + out.strip())
-        return
+        return None
     rc, out = run_card_engine(config, engine, data_path, card_png)
     if rc != 0:
         print("[card] render failed:\n" + out.strip())
-        return
+        return None
     print(f"[card] rendered: {os.path.relpath(card_png, REPO_ROOT)}")
+    return card_png
 
 
 def run_chain_after_render(config, folder, image_path, delivery_date):
@@ -1076,7 +1077,13 @@ def run_chain_after_render(config, folder, image_path, delivery_date):
         return
 
     reply = _p7(config, folder, delivery_date)
-    _generate_card(config, folder, reply)        # step 8b: companion card
+    card_png = _generate_card(config, folder, reply)   # step 8b: companion card
+    if card_png:
+        # Step 8c: the package pass. The piece-stage 6B above judged the artefact
+        # alone (the verdict P7 built the card from); now the card exists, judge
+        # the full send. Custom-card senders run this later via `package-qc`.
+        _, vpkg = _p6b(config, folder, image_path, meta, research, package=True)
+        print(f"[6B package] verdict: {vpkg or '(see qc_package.md)'}")
     _print_package(image_path, review, v6, sixb, v6b, reply)
 
 
@@ -1591,34 +1598,59 @@ def _p6(config, folder, image_path, meta, brief, research):
     return review, extract_p6_verdict(review)
 
 
-def _p6b(config, folder, image_path, meta, research):
-    # The card sits on top of the piece in the box and is read first, so the
-    # simulation should see it when it exists (it shapes the verdict P7 builds on).
+_P6B_STAGE_PIECE = (
+    "You are judging the artefact alone. A companion card carrying the sender's "
+    "message and a three-touch follow-up ship with every piece but are not shown "
+    "here: the piece earns attention, the card and follow-up convert it. Judge the "
+    "artefact on the jobs only it can do (survive the first five seconds, earn the "
+    "desk, get shown to a colleague) and do not name the absent sender or absent "
+    "ask as the weakest element: they arrive with the card. Aim the highest-leverage "
+    "change at what the companion card and the first follow-up touch must supply to "
+    "convert the attention this piece earns.")
+
+_P6B_STAGE_PACKAGE = (
+    "You have seen the full package exactly as it lands: the artefact plus the "
+    "companion card read first. Judge the send as a whole: does the card's message "
+    "convert the attention the piece earns, does the ask land for this specific "
+    "person, and what would still stop them responding before the first follow-up "
+    "touch arrives.")
+
+
+def _p6b(config, folder, image_path, meta, research, package=False):
+    """Recipient simulation, two stages. Piece stage (default): the box holds the
+    artefact alone, judged on what the artefact alone must do; this is the verdict
+    P7 and the card copy build on, written to qc_recipient.md. Package stage: the
+    box holds artefact + companion card (read from <slug>-card.json, generated or
+    imported), judged as the full send; runs once the card exists and writes
+    qc_package.md. Ship-check and calibration prefer the package verdict."""
     slug = os.path.basename(os.path.normpath(folder))
     card_context = ""
-    card_path = os.path.join(folder, slug + "-card.json")
-    if os.path.exists(card_path):
-        try:
-            card = json.loads(read_file(card_path))
-            lines = [card.get("salutation", "").rstrip(",") + ","] + list(card.get("body", []))
-            card_text = "\n".join(x for x in lines if x.strip())
-            if card_text.strip():
-                card_context = ("\nOn top of the piece sat an A6 companion card, which you "
-                                "read first. It says:\n\n" + card_text + "\n")
-        except (ValueError, OSError):
-            pass
+    if package:
+        card_path = os.path.join(folder, slug + "-card.json")
+        if not os.path.exists(card_path):
+            die(f"package QC needs the card copy at {slug}-card.json — render the "
+                f"card (step 8b) or import custom copy with `package-qc --card-file`.")
+        card = json.loads(read_file(card_path))
+        lines = [card.get("salutation", "").rstrip(",") + ","] + list(card.get("body", []))
+        card_text = "\n".join(x for x in lines if x.strip())
+        if not card_text.strip():
+            die(f"{slug}-card.json has no card text to show the simulation.")
+        card_context = ("\nOn top of the piece sat an A6 companion card, which you "
+                        "read first. It says:\n\n" + card_text + "\n")
     sender = (config.get("sender") or meta.get("sender") or {})
     values = {
         "recipient_name": meta["recipient_name"], "recipient_title": meta["recipient_title"],
         "recipient_company": meta["recipient_company"], "research": research,
         "card_context": card_context,
+        "stage_note": _P6B_STAGE_PACKAGE if package else _P6B_STAGE_PIECE,
         "sender_company": sender.get("company", "unknown"),
         "sender_what": sender.get("what_they_sell", ""),
     }
-    print(f"[prompt 6B] simulating the recipient ({model_for(config, 'p6b')}, vision)...")
+    label = "prompt 6B package" if package else "prompt 6B"
+    print(f"[{label}] simulating the recipient ({model_for(config, 'p6b')}, vision)...")
     sixb = vision_call(config, fill(load_template("prompt6b_recipient.md"), values),
                        model_for(config, "p6b"), image_path)
-    write_file(os.path.join(folder, "qc_recipient.md"), sixb)
+    write_file(os.path.join(folder, "qc_package.md" if package else "qc_recipient.md"), sixb)
     return sixb, extract_6b_verdict(sixb)
 
 
@@ -1811,14 +1843,70 @@ def cmd_qc(args):
         _print_usage("qc")
         return
     sixb, v6b = _p6b(config, folder, args.image, meta, research)
+    # Refresh the package pass alongside: a re-QC that left qc_package.md built
+    # against the previous render would trip ship-check's staleness hold.
+    slug = os.path.basename(os.path.normpath(folder))
+    vpkg = None
+    if os.path.exists(os.path.join(folder, slug + "-card.json")):
+        _, vpkg = _p6b(config, folder, args.image, meta, research, package=True)
     print("\n" + "=" * 70)
     print("QC COMPLETE")
     print("=" * 70)
     print("  qc_review.md     <- Prompt 6 craft review")
-    print("  qc_recipient.md  <- Prompt 6B recipient simulation")
+    print("  qc_recipient.md  <- Prompt 6B recipient simulation (piece alone)")
+    if vpkg:
+        print("  qc_package.md    <- Prompt 6B package pass (piece + companion card)")
     print(f"\nPrompt 6 verdict:  {v6 or '(see qc_review.md)'}")
     print(f"Prompt 6B verdict: {v6b or '(see qc_recipient.md)'}")
+    if vpkg:
+        print(f"6B package verdict: {vpkg}")
     _print_usage("qc")
+
+
+def cmd_package_qc(args):
+    """The package pass on demand: judge piece + companion card as the full send.
+    For generated cards the chain runs this automatically after step 8b; this
+    command serves custom-card senders (import the card copy with --card-file)
+    and re-runs after a card revision."""
+    _usage_reset()
+    config = load_config(args.config)
+    folder = args.folder
+    slug = os.path.basename(os.path.normpath(folder))
+    meta = json.loads(read_file(os.path.join(folder, "meta.json")))
+    research = read_file(os.path.join(folder, "research.md"))
+    card_path = os.path.join(folder, slug + "-card.json")
+
+    if args.card_file:
+        text = read_file(args.card_file).strip()
+        if not text:
+            die(f"{args.card_file} is empty.")
+        paras = [re.sub(r"\s*\n\s*", " ", p).strip()
+                 for p in re.split(r"\n\s*\n", text) if p.strip()]
+        first = (meta.get("recipient_name", "").split() or [""])[0]
+        salutation = first
+        # A short first paragraph naming the recipient is the salutation line.
+        if len(paras) > 1 and len(paras[0].split()) <= 3 and first.lower() in paras[0].lower():
+            salutation = paras.pop(0).rstrip(",")
+        if os.path.exists(card_path):
+            print(f"[package-qc] replacing existing {slug}-card.json with the imported copy.")
+        write_file(card_path, json.dumps(
+            {"custom": True, "salutation": salutation, "body": paras}, indent=2))
+        print(f"[package-qc] imported card copy ({len(paras)} paragraph(s)) "
+              f"-> {os.path.relpath(card_path, REPO_ROOT)}")
+
+    image = args.image or os.path.join(folder, slug + ".png")
+    if not os.path.exists(image):
+        die(f"no render found at {image} — pass --image explicitly.")
+    _, vpkg = _p6b(config, folder, image, meta, research, package=True)
+    print("\n" + "=" * 70)
+    print("PACKAGE QC COMPLETE")
+    print("=" * 70)
+    print("  qc_package.md  <- Prompt 6B package pass (piece + companion card)")
+    print(f"\n6B package verdict: {vpkg or '(see qc_package.md)'}")
+    if vpkg == "WOULD BIN":
+        print("The simulation predicts the full send fails this recipient. "
+              "Ship-check will hold the piece; revise the card copy and re-run.")
+    _print_usage("package-qc")
 
 
 # --- ship-check: print-readiness gate --------------------------------------
@@ -1986,15 +2074,16 @@ def _ship_status(folder):
     # Claymation is text-only (no render, no vision QC); nothing to print-check.
     if fmt == "claymation":
         return {"slug": slug, "format": fmt, "shippable": None, "p6": None, "p6b": None,
-                "holds": [], "warns": ["claymation is prompt-only; nothing to print-check"]}
+                "pkg": None, "holds": [],
+                "warns": ["claymation is prompt-only; nothing to print-check"]}
 
     holds, warns, p6, p6b = [], [], None, None
     if not os.path.exists(folder):
         return {"slug": slug, "format": fmt, "shippable": False, "p6": None, "p6b": None,
-                "holds": ["piece folder not found (build it first)"], "warns": []}
+                "pkg": None, "holds": ["piece folder not found (build it first)"], "warns": []}
     if not os.path.exists(render):
         return {"slug": slug, "format": fmt, "shippable": False, "p6": None, "p6b": None,
-                "holds": [f"no render found ({slug}.png)"], "warns": []}
+                "pkg": None, "holds": [f"no render found ({slug}.png)"], "warns": []}
 
     png_m = os.path.getmtime(render)
     if not os.path.exists(review):
@@ -2018,6 +2107,28 @@ def _ship_status(folder):
                          "(P6B has not seen the delivered file)")
         if p6b == "WOULD BIN":
             holds.append("P6B verdict is WOULD BIN — do not print")
+
+    # Package pass (piece + companion card judged together). Optional: pieces
+    # without one ship on the piece verdict alone. When it exists it is the
+    # closer prediction of the send, so it must be fresh against both the render
+    # and the card copy, and its WOULD BIN holds like the piece verdict's.
+    pkg = None
+    package = os.path.join(folder, "qc_package.md")
+    card_json = os.path.join(folder, slug + "-card.json")
+    if os.path.exists(package):
+        pkg = extract_6b_verdict(read_file(package))
+        if os.path.getmtime(package) < png_m:
+            holds.append("render is NEWER than qc_package.md — re-run `package-qc` "
+                         "(the package pass has not seen the delivered file)")
+        if os.path.exists(card_json) and \
+                os.path.getmtime(card_json) > os.path.getmtime(package):
+            holds.append("card copy changed after the package pass — re-run `package-qc`")
+        if pkg == "WOULD BIN":
+            holds.append("6B package verdict is WOULD BIN — the full send fails; "
+                         "revise the card copy and re-run `package-qc`")
+    elif os.path.exists(card_json):
+        warns.append("card copy exists but no qc_package.md — run `package-qc` "
+                     "to judge the full send")
 
     # Follow-up freshness: the sequence is built from the rendered copy and the
     # 6B verdict, so it goes stale the moment either changes (a live failure:
@@ -2055,7 +2166,7 @@ def _ship_status(folder):
             pass
 
     return {"slug": slug, "format": fmt, "shippable": not holds,
-            "holds": holds, "warns": warns, "p6": p6, "p6b": p6b}
+            "holds": holds, "warns": warns, "p6": p6, "p6b": p6b, "pkg": pkg}
 
 
 def cmd_ship_check(args):
@@ -2116,7 +2227,8 @@ def cmd_ship_check(args):
         if s["shippable"] is False:
             held += 1
         verds = [v for v in (f"P6 {s['p6']}" if s["p6"] else "",
-                             f"6B {s['p6b']}" if s["p6b"] else "") if v]
+                             f"6B {s['p6b']}" if s["p6b"] else "",
+                             f"pkg {s['pkg']}" if s.get("pkg") else "") if v]
         tail = ("  [" + ", ".join(verds) + "]") if verds else ""
         print(f"  {mark}  {s['slug']}{tail}")
         for h in s["holds"]:
@@ -2316,6 +2428,13 @@ def cmd_outcome(args):
         v = extract_6b_verdict(read_file(sixb_path))
         if v:
             rec["verdict_6b"] = v
+    # The package pass saw the piece plus the card, i.e. what was actually sent,
+    # so calibration prefers it over the piece-only verdict when both exist.
+    pkg_path = os.path.join(folder, "qc_package.md")
+    if os.path.exists(pkg_path):
+        v = extract_6b_verdict(read_file(pkg_path))
+        if v:
+            rec["verdict_package"] = v
     rec["result"] = args.result
     if args.date:
         rec["date"] = args.date
@@ -2323,8 +2442,9 @@ def cmd_outcome(args):
         rec["notes"] = args.notes
     ledger[args.slug] = rec
     write_file(OUTCOMES_PATH, json.dumps(ledger, indent=2))
+    predicted = rec.get("verdict_package") or rec.get("verdict_6b")
     print(f"[outcome] {args.slug}: {args.result}"
-          + (f"  (6B predicted: {rec.get('verdict_6b')})" if rec.get("verdict_6b") else ""))
+          + (f"  (6B predicted: {predicted})" if predicted else ""))
     print(f"[outcome] ledger updated: {os.path.relpath(OUTCOMES_PATH, REPO_ROOT)} "
           "— commit and push it so the record survives this container")
 
@@ -2332,15 +2452,21 @@ def cmd_outcome(args):
 def cmd_calibration(args):
     positive = {"replied", "meeting", "opportunity"}
     ledger = json.loads(read_file(OUTCOMES_PATH)) if os.path.exists(OUTCOMES_PATH) else {}
-    rows = [(slug, rec.get("verdict_6b", "?"), rec.get("result", "?"))
+    # Prefer the package verdict (piece + card, what was actually sent) over the
+    # piece-only one wherever both exist; older records carry only verdict_6b.
+    rows = [(slug, rec.get("verdict_package") or rec.get("verdict_6b", "?"),
+             rec.get("result", "?"))
             for slug, rec in sorted(ledger.items()) if rec.get("result")]
     pending = []
     if os.path.isdir(PIECES_DIR):
         for d in sorted(os.listdir(PIECES_DIR)):
             if d.startswith("_") or d in ledger:
                 continue
+            pkg_path = os.path.join(PIECES_DIR, d, "qc_package.md")
             sixb_path = os.path.join(PIECES_DIR, d, "qc_recipient.md")
-            if os.path.exists(sixb_path):
+            if os.path.exists(pkg_path):
+                pending.append((d, extract_6b_verdict(read_file(pkg_path)) or "?"))
+            elif os.path.exists(sixb_path):
                 pending.append((d, extract_6b_verdict(read_file(sixb_path)) or "?"))
 
     print("\n" + "=" * 70)
@@ -2826,6 +2952,19 @@ def main():
     q.add_argument("--image", required=True, help="the final image file (PNG or JPG)")
     q.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     q.set_defaults(func=cmd_qc)
+
+    pq = sub.add_parser("package-qc",
+                        help="run the 6B package pass: piece + companion card judged "
+                             "as the full send. Use --card-file to import custom card "
+                             "copy (plain text, blank-line paragraphs) first.")
+    pq.add_argument("--folder", required=True, help="the piece folder")
+    pq.add_argument("--image", default="",
+                    help="the final image file (defaults to <slug>.png in the folder)")
+    pq.add_argument("--card-file", default="",
+                    help="plain-text card copy to import as <slug>-card.json "
+                         "(custom-card senders); omit to reuse the existing card")
+    pq.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    pq.set_defaults(func=cmd_package_qc)
 
     gp = sub.add_parser("gate-probe",
                         help="regression-test the copy gates by planting known "
