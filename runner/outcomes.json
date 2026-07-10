@@ -1,0 +1,74 @@
+{
+  "edward-keelan-octopus-ventures": {
+    "recipient": "Edward Keelan",
+    "company": "Octopus Ventures",
+    "format": "newspaper",
+    "result": "replied",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. LinkedIn DM: 'Thanks for the poster.' Warm, brief. Meeting ask sent, went quiet; routing question (People/Talent side) awaiting response."
+  },
+  "hussein-kanji-hoxton-ventures": {
+    "recipient": "Hussein Kanji",
+    "company": "Hoxton Ventures",
+    "format": "newspaper",
+    "result": "replied",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Email: 'Received the newsprint art today. It is pretty cool. Going up on our walls.' Meeting ask went quiet; wall-photo ask sent. Anonymised quote cleared for external use."
+  },
+  "simon-menashy-mmc-ventures": {
+    "recipient": "Simon Menashy",
+    "company": "MMC Ventures",
+    "format": "newspaper",
+    "result": "replied",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. 'Eye-catching campaign, very clever' + explicit route-in: get a portfolio company to recommend. Shane (existing client at MMC portfolio co) recommendation in motion. Quote cleared. Shaped campaign 2 strategy."
+  },
+  "hector-mason-episode-1-ventures": {
+    "recipient": "Hector Mason",
+    "company": "Episode 1 Ventures",
+    "format": "newspaper",
+    "result": "replied",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Engaged but flagged environmental concern about the board (thought plastic; it is paper-faced foam core). Materials feedback logged; plastic-free alternatives being explored with Birch. Routing question (Paul Fifield) awaiting response."
+  },
+  "chris-smith-playfair-capital": {
+    "recipient": "Chris Smith",
+    "company": "Playfair Capital",
+    "format": "newspaper",
+    "result": "opportunity",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Strongest buying signal: 'Have you placed anybody within the Playfair portfolio yet?' Named live roles at Protex AI and Nory; Matthew contacting both directly, keeping Chris posted. His question is the brief for campaign 2."
+  },
+  "brent-hoberman-firstminute-capital": {
+    "recipient": "Brent Hoberman",
+    "company": "firstminute capital",
+    "format": "newspaper",
+    "result": "opportunity",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Piece forwarded Brent -> Min (COO) -> Harri (EA), who asked for more info: active inbound, hottest lead. 15 minutes with Min proposed. The internal forwarding chain is exactly what physical outreach is designed to create."
+  },
+  "james-wright-seedcamp": {
+    "recipient": "James Wright",
+    "company": "Seedcamp",
+    "format": "newspaper",
+    "result": "declined",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Polite decline with structural feedback: Seedcamp is pre-recruiter stage; larger portfolio cos handled by later-stage investors. Useful targeting signal. Closed."
+  },
+  "stephen-millard-notion-capital": {
+    "recipient": "Stephen Millard",
+    "company": "Notion Capital",
+    "format": "newspaper",
+    "result": "declined",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. 'No thank you.' Flat. Closed."
+  },
+  "andrew-scott-7percent-ventures": {
+    "recipient": "Andrew Scott",
+    "company": "7percent Ventures",
+    "format": "newspaper",
+    "result": "bounced",
+    "date": "2026-07",
+    "notes": "Cosmic campaign 1. Undelivered (only failed delivery of the 20)."
+  }
+}

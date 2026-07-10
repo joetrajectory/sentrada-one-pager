@@ -2477,7 +2477,10 @@ def cmd_calibration(args):
         print("  python runner/sentrada_runner.py outcome --slug <slug> "
               "--result replied|meeting|opportunity|no_response|bounced")
     for d, v, res in rows:
-        hit = "✓" if ((res in positive) == ("WOULD" in v and "BIN" not in v and "IGNORE" not in v)) else "✗"
+        if "WOULD" not in v:      # no surviving prediction: outcome-only record
+            hit = "·"
+        else:
+            hit = "✓" if ((res in positive) == ("BIN" not in v and "IGNORE" not in v)) else "✗"
         print(f"  {hit}  {d:38} 6B: {v:38} actual: {res}")
     if rows:
         got = sum(1 for _, _, res in rows if res in positive)
