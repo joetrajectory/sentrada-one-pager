@@ -781,7 +781,18 @@ def cmd_generate(args):
         bp = os.path.join(folder, "brief.json")
         if not os.path.exists(bp):
             die(f"--resume needs an approved brief at {bp}. Run --brief-only first.")
-        research = read_file(os.path.join(folder, "research.md"))
+        rp = os.path.join(folder, "research.md")
+        # The brief is a snapshot of the research it was written from. If the
+        # research has been edited since, resuming feeds P4 a brief that may
+        # carry facts the research no longer supports, and the grounding gate
+        # (which checks against the CURRENT research) then fails every attempt.
+        # A live piece looped through five failed builds exactly this way.
+        if os.path.exists(rp) and os.path.getmtime(rp) > os.path.getmtime(bp):
+            die("research.md has been edited since brief.json was written. The "
+                "brief may carry facts the research no longer supports, which "
+                "makes the grounding gate unwinnable. Re-run --brief-only to "
+                "regenerate the brief from the current research, then --resume.")
+        research = read_file(rp)
         brief = json.loads(read_file(bp))
         base_values = _build_base_values(args, sender, research, fmt)
         print(f"[resume] {os.path.relpath(folder, REPO_ROOT)} (brief already approved)")
