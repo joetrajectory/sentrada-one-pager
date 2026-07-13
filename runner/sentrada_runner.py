@@ -2352,9 +2352,12 @@ def cmd_ship_check(args):
 # DELIVERY_NOTES — never scraped from prose. Status drives behaviour: CONFIRMED
 # uses the address; CONFIRM_FIRST keeps it but flags "confirm before shipping";
 # BLOCKED leaves it blank. A manifest entry may carry a "delivery" block to
-# OVERRIDE the research (a human correction):
+# OVERRIDE the research (a human correction). Any of status/address/notes may
+# be overridden independently; omitted fields fall back to the research. The
+# manifest is committed, so put addresses here only when correcting one (the
+# usual place for addresses is the gitignored research file):
 #   {"name": "...", "company": "...", "format": "...",
-#    "delivery": {"address": "Full address on one line", "notes": ""}}
+#    "delivery": {"status": "CONFIRMED", "address": "", "notes": ""}}
 
 _HONOURS = {"CBE", "OBE", "MBE", "KBE", "DBE", "PHD", "QC", "KC", "FRSA",
             "JR", "SR", "II", "III"}
@@ -2413,7 +2416,11 @@ def cmd_birch_csv(args):
         # block overrides it (a human correction).
         res = _delivery_from_research(slug)
         override = entry.get("delivery") or {}
-        status = (res.get("status") or "").upper()
+        # Status may also be overridden (e.g. a switchboard call upgrades
+        # CONFIRM_FIRST to CONFIRMED, or a remote worker downgrades to BLOCKED).
+        # The manifest is committed, so overrides carry status/notes only;
+        # addresses stay in the gitignored research files unless corrected.
+        status = (override.get("status") or res.get("status") or "").upper()
         address = (override.get("address") or res.get("address") or "").strip()
         notes = (override.get("notes") or res.get("notes") or "").strip()
         flagged = False

@@ -1,0 +1,80 @@
+[
+  {
+    "name": "Adam Woozeer",
+    "title": "Director of Demand Generation & ABM",
+    "company": "Quantexa",
+    "format": "crossword",
+    "research": "adam-woozeer-quantexa.md"
+  },
+  {
+    "name": "Veronica Kopec",
+    "title": "Global ABM Senior Manager",
+    "company": "HireRight",
+    "format": "crossword",
+    "research": "veronica-kopec-hireright.md",
+    "delivery": {
+      "status": "CONFIRMED",
+      "notes": "Address confirmed with HireRight Westferry switchboard, 10 Jul 2026"
+    }
+  },
+  {
+    "name": "Amanda Sehmar",
+    "title": "Head of Marketing, EMEA",
+    "company": "Digital Realty",
+    "format": "newspaper",
+    "research": "amanda-sehmar-digital-realty.md"
+  },
+  {
+    "name": "Lauren Berkemeyer",
+    "title": "Chief Marketing Officer",
+    "company": "YuLife",
+    "format": "newspaper",
+    "research": "lauren-berkemeyer-yulife.md"
+  },
+  {
+    "name": "Katie Skene",
+    "title": "Head of ABM, EMEA",
+    "company": "Snowflake",
+    "format": "crossword",
+    "research": "katie-skene-snowflake.md"
+  },
+  {
+    "name": "Hope Onderdonck-Young",
+    "title": "Regional Marketing Leader",
+    "company": "Ping Identity",
+    "format": "crossword",
+    "research": "hope-onderdonck-young-ping-identity.md"
+  },
+  {
+    "name": "Kelly O'Connor",
+    "title": "Head of Enterprise Marketing, UK",
+    "company": "Trustpilot",
+    "format": "newspaper",
+    "research": "kelly-o-connor-trustpilot.md"
+  },
+  {
+    "name": "Annelie Kniep",
+    "title": "Senior Marketing Manager, CxO & Strategic Programs, EMEA",
+    "company": "Splunk",
+    "format": "newspaper",
+    "research": "annelie-kniep-splunk.md"
+  },
+  {
+    "name": "Christian Trounce",
+    "title": "Senior Director, Global Field Marketing",
+    "company": "HackerOne",
+    "format": "crossword",
+    "research": "christian-trounce-hackerone.md",
+    "delivery": {
+      "status": "BLOCKED",
+      "notes": "Remote worker (LinkedIn: London, remote); Joe contacting him directly for a delivery address"
+    }
+  },
+  {
+    "name": "Lucy Waterer",
+    "title": "Head of Marketing",
+    "company": "The Access Group",
+    "format": "newspaper",
+    "research": "lucy-waterer-the-access-group.md"
+  }
+]
