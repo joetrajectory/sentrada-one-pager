@@ -2340,13 +2340,15 @@ def cmd_ship_check(args):
             subj = touch1_subject(f)
             if subj:
                 subjects.setdefault(subj, []).append(s)
+        # Batch similarity in subjects and card asks is a WARN, not a hold:
+        # the sender's call (10 Jul) is that some similar lines are fine in
+        # small batches. Identical Touch 2 openers remain a hold (older rule).
         for subj, group in subjects.items():
             if len(group) > 1:
                 names = ", ".join(g["slug"] for g in group)
                 for g in group:
-                    g["holds"].append(f"lint: Touch 1 subject duplicated across batch "
-                                      f"({names}) — differentiate (e.g. name the company)")
-                    g["shippable"] = False
+                    g["warns"].append(f"lint: Touch 1 subject duplicated across batch "
+                                      f"({names}) — consider differentiating")
 
         asks = {}
         for f, s in zip(folders, statuses):
@@ -2357,10 +2359,8 @@ def cmd_ship_check(args):
             if len(group) > 1:
                 names = ", ".join(g["slug"] for g in group)
                 for g in group:
-                    g["holds"].append(f"lint: card ask duplicated across batch ({names}) "
-                                      "— each card's ask must be written in its own "
-                                      "piece's vocabulary")
-                    g["shippable"] = False
+                    g["warns"].append(f"lint: card ask duplicated across batch ({names}) "
+                                      "— consider a piece-specific ask")
 
         # Same failure mode on the piece itself: two crossword subtitles built
         # from the same construction ("Built entirely from X's own vocabulary")

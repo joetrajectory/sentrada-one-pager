@@ -1005,7 +1005,7 @@ Write them together, governed by the same 6B read. They share a strategic frame 
 
 Division of labour:
 
-- **The card** is read first, in the box, with the piece in hand. The piece carries no sender presence by design, so the card is where the sender is revealed. Its job is to reveal who sent this, make the bespoke nature explicit, set the frame per 6B, and carry the first direct ask while the recipient is at peak attention: a card that only promises a future email routes the close into the exact channel most pieces argue is broken, and leaves the reader holding the object with nothing to do. The follow-up reinforces and escalates the ask; it never introduces it.
+- **The card** is read first, in the box, with the piece in hand. The piece carries no sender presence by design, so the card is where the sender is revealed. Its job is to reveal who sent this, make the bespoke nature explicit, set the frame per 6B, and carry the first direct ask while the recipient is at peak attention: a card that only promises a future email routes the close into the exact channel most pieces argue is broken, and leaves the reader holding the object with nothing to do. The follow-up reinforces and escalates the ask; it never introduces it, and Touch 1 advances the card's ask in fresh words rather than restating it.
 - **The follow-up** arrives 24 to 48 hours later. It re-triggers the memory of the piece and advances the conversation, leading with the specific 6B craft hook and carrying the primary CTA.
 
 ---
