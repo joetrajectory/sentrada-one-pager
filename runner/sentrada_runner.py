@@ -2119,6 +2119,36 @@ def _copy_lint(folder, fmt):
         if "TOUCH 1 EMAIL" in body and not re.search(r"^Subject:", body, re.M):
             holds.append("lint: Touch 1 has no subject line — it is the recipient's "
                          "first-ever email from the sender (re-run followup)")
+        # Within-sequence repetition: the same closing ask restated across
+        # touches reads as nagging (a live failure: one sequence closed on the
+        # same routing ask 3 times). Compare each core touch's closing line;
+        # a shared 4-word run or heavy word overlap holds the sequence. The
+        # connection-note and nudge variants are alternatives, not extra sends,
+        # so they are not compared.
+        closes = {}
+        for label, pat in (("Touch 1", r"TOUCH 1 EMAIL"),
+                           ("Touch 2", r"TOUCH 2 LINKEDIN"),
+                           ("Touch 3", r"TOUCH 3 BUMP")):
+            sect = re.search(pat + r"[^\n]*\n(.*?)(?=\n\*\*|\Z)", body, re.DOTALL)
+            if sect:
+                lines = [l.strip() for l in sect.group(1).splitlines()
+                         if l.strip() and not re.fullmatch(r"[-*_]{3,}", l.strip())]
+                if lines:
+                    words = re.sub(r"[^a-z0-9 ]", "", lines[-1].lower()).split()
+                    closes[label] = (set(words),
+                                     {tuple(words[i:i + 4]) for i in range(len(words) - 3)})
+        labels = list(closes)
+        for i in range(len(labels)):
+            for j in range(i + 1, len(labels)):
+                (wa, sa), (wb, sb) = closes[labels[i]], closes[labels[j]]
+                if not (wa and wb):
+                    continue
+                overlap = len(wa & wb) / min(len(wa), len(wb))
+                if (sa & sb) or overlap >= 0.6:
+                    holds.append(f"lint: {labels[i]} and {labels[j]} close on "
+                                 "near-identical asks — each touch must advance "
+                                 "the angle, not restate it (re-run followup)")
+
         if "CONNECTION NOTE VARIANT" not in body:
             warns.append("lint: no Touch 2 connection-note variant — follow-up predates "
                          "the current P7 template (re-run followup)")
@@ -2949,6 +2979,13 @@ def _lint_probes():
         ("lint-litigation-warn", "newspaper",
          {"followup.md": "**TOUCH 1 EMAIL**\nSubject: x\n\nThe lawsuit changes the maths.\n"},
          "warn", "litigation"),
+        ("lint-restated-ask", "newspaper",
+         {"followup.md": "**TOUCH 1 EMAIL**\nSubject: x\n\nJane,\n\nBody one.\n\n"
+                         "Happy to pick this up with whoever runs ABM on your side.\n\n"
+                         "**TOUCH 2 LINKEDIN**\n\nJane,\n\n"
+                         "Happy to pick this up with whoever owns the programme.\n\n"
+                         "**TOUCH 3 BUMP EMAIL**\n\nJane,\n\nFresh detail here.\n"},
+         "hold", "advance the angle"),
         # The blind-spot class itself: a rendered text field the copy-text
         # builder does not include must be caught, not shipped ungated.
         ("lint-ungated-field", "crossword",
