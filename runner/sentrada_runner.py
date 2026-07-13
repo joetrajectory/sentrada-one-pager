@@ -1883,6 +1883,18 @@ def _cold_review_one(config, folder):
     if not os.path.exists(image):
         print(f"[cold-review] {slug}: no render, skipped.")
         return None
+    # Resume-friendly: a piece whose reviews are both fresher than its render is
+    # done; a session-limit halt mid-batch can be re-run without redoing them.
+    cold_path = os.path.join(folder, "qc_cold.md")
+    facts_path = os.path.join(folder, "qc_render_factcheck.md")
+    if all(os.path.exists(p) and os.path.getmtime(p) > os.path.getmtime(image)
+           for p in (cold_path, facts_path)):
+        print(f"[cold-review] {slug}: reviews already fresh, skipped.")
+        strat = read_file(cold_path)
+        m = re.search(r"COLD REVIEW:\s*(PRINT AS IS|PRINT AFTER TWEAKS|DO NOT PRINT)", strat)
+        fc = extract_6b_structured(read_file(facts_path)) or {}
+        return {"slug": slug, "cold": m.group(1) if m else None,
+                "facts": fc.get("verdict"), "fc_detail": fc}
     meta = json.loads(read_file(os.path.join(folder, "meta.json")))
     research = read_file(os.path.join(folder, "research.md"))
     model = model_for(config, "p6b")
