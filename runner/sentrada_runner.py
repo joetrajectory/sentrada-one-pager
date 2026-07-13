@@ -1993,6 +1993,31 @@ def touch2_opener(folder):
     return line[:60] or None
 
 
+_CARD_FIXTURES = ("my email and number are below",
+                  "if easier ill follow up by email this week")
+
+
+def card_ask(folder):
+    """The card's closing ask, normalised, minus the sanctioned fixture
+    sentences (the contact-block pointer and the backup-email signal), for the
+    batch duplicate check. An example ask copied verbatim from the template
+    shipped on 3 cards in one batch."""
+    slug = os.path.basename(os.path.normpath(folder))
+    path = os.path.join(folder, slug + "-card.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        body = json.loads(read_file(path)).get("body") or []
+    except (ValueError, OSError):
+        return None
+    if not body:
+        return None
+    sentences = [s.strip() for s in re.split(r"(?<=[.?!])\s+", str(body[-1])) if s.strip()]
+    kept = [s for s in sentences
+            if re.sub(r"[^a-z0-9 ]", "", s.lower()).strip() not in _CARD_FIXTURES]
+    return re.sub(r"[^a-z0-9 ]", "", " ".join(kept).lower()).strip() or None
+
+
 def touch1_subject(folder):
     """Touch 1 subject line, normalised, for the batch duplicate check (the
     object-first subject rule pulls same-format pieces toward identical
@@ -2321,6 +2346,20 @@ def cmd_ship_check(args):
                 for g in group:
                     g["holds"].append(f"lint: Touch 1 subject duplicated across batch "
                                       f"({names}) — differentiate (e.g. name the company)")
+                    g["shippable"] = False
+
+        asks = {}
+        for f, s in zip(folders, statuses):
+            a = card_ask(f)
+            if a:
+                asks.setdefault(a, []).append(s)
+        for a, group in asks.items():
+            if len(group) > 1:
+                names = ", ".join(g["slug"] for g in group)
+                for g in group:
+                    g["holds"].append(f"lint: card ask duplicated across batch ({names}) "
+                                      "— each card's ask must be written in its own "
+                                      "piece's vocabulary")
                     g["shippable"] = False
 
         # Same failure mode on the piece itself: two crossword subtitles built
