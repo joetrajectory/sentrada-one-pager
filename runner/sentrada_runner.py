@@ -3043,6 +3043,16 @@ _GATE_PROBES = {
                                    "three FTSE 100 chief executives.")),
         ("misattributed-quote", "memo",
          lambda d: d.__setitem__("pull_quote_attribution", "Company internal memo, 2026")),
+        # The world-plausible industry commonplace (P4b violation 6): the model
+        # believes these rather than knows them; two reached print files.
+        ("industry-commonplace", "one per cent",
+         lambda d: d.__setitem__("lead_article", d.get("lead_article", "")
+                                 + " Reply rates to cold email at this seniority have, "
+                                   "on most estimates, fallen below one per cent.")),
+        ("elapsed-time-arithmetic", "eighteen months",
+         lambda d: d.__setitem__("lead_article", d.get("lead_article", "")
+                                 + " Eighteen months on from the 2019 launch, the "
+                                   "programme is still the company's clearest bet.")),
     ],
     "email": [
         ("fabricated-postscript", "initech",

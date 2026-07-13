@@ -530,6 +530,19 @@ output format (the offending phrase in "claim", the category and reason in "issu
    "148,000 colleagues" — flag it; the copy needs "around 148,000" or "more than
    148,000". Check every bare number in the copy against the research's wording
    for that same quantity. Flag the phrase and name the research's qualifier.
+6. UNSOURCED INDUSTRY COMMONPLACE: a world-plausible industry statistic, timeframe
+   or trend stated as fact with no research source. This is the model's favourite
+   fabrication: it BELIEVES these rather than knows them, and hedging ("on most
+   estimates", "by every measure the industry publishes") makes it worse, not
+   better — the hedge admits there is no source. Live exemplars, each of which
+   reached a print file before this rule existed: "reply rates ... have, on most
+   estimates, fallen below one per cent"; "cold email to buyers of that seniority
+   now clears well under 1% reply"; "account-based marketing has spent a decade
+   targeting buying committees". Flag EVERY quantified or time-bounded industry
+   claim with no research line behind it, however familiar it sounds. Also check
+   elapsed-time arithmetic against the piece's date: an event the research dates
+   plus the copy's elapsed-time phrase ("eighteen months on") must land on the
+   piece's date, not years short of it.
 
 Source research (facts about the RECIPIENT and their company):
 {{research}}
