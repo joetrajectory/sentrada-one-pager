@@ -115,8 +115,12 @@ Every factual claim on the card and in the follow-up (metrics, named people, hir
 - No exclamation marks
 - No soft filler phrases ("I hope this finds you well", "Just wanted to reach out")
 - Never open a follow-up with "Quick follow up" or "Following up briefly" or any generic variant
-- Touch 1 is the first email this recipient ever receives from the sender, so it ALWAYS carries a subject line, and the subject references the artefact on their desk ("The crossword on your desk", "Your 449,933 calls, printed at A2"). Six words or fewer, no colon-subtitle constructions. Touches 2 and 3 carry no subject line (Touch 3 replies in the Touch 1 thread)
+- Touch 1 is the first email this recipient ever receives from the sender, so it ALWAYS carries a subject line, and the subject names the physical object plainly, the way the recipient would describe it to a colleague: "The giant crossword on your desk", "The A2 newspaper front page about MongoDB", "The giant email on your desk". The object is absurd and memorable; the subject leans on that recognition and nothing else. Never a bare stat, clue number or insight fragment ("The 5.8% on your desk" means nothing in an inbox; "13 Down, the Repair Shop clue" reads as spam to someone who has not memorised their own crossword). Six words or fewer where possible, eight at most, no colon-subtitle constructions. Touches 2 and 3 carry no subject line (Touch 3 replies in the Touch 1 thread)
 - No URL appears in the body of any touch. A link mid-email reads like a sequence tool and undoes the handmade signal the piece just paid for. The booking link may appear only as the final CTA line of a touch, and only when the question CTA is weaker; default to the question
+- Every touch body (Touch 1, Touch 2, connection note, Touch 3, reception nudge) opens with the recipient's first name followed by a comma on its own line, then a blank line, exactly like the card. The sender must never have to add the name by hand
+- Numbers are numerals, always: "20 minutes", "8 replies", "3 clues". Never spelled out ("twenty minutes" reads as written prose, not a person typing)
+- Banned register (reads as AI, not a busy founder): "I'm genuinely curious", "genuinely", "I find it fascinating", "what struck me", "I'd love to". State the observation or ask the question plainly
+- OWN WORDS ANCHOR: where the research carries a usable verbatim from the recipient (a post, a talk, a quoted line), quote a short phrase of it back, attributed naturally ("you called it 'X' at Y"), once on the card and once, differently, in a touch. Where no verbatim exists, name the specific observed trigger that put THIS person on the list. The recipient must never wonder "why me, why now"; their own words are the strongest possible answer
 - Keep it short. Card: 150 words maximum, a hard cap counting the whole card (salutation through sign-off); aim for 3-4 short paragraphs. Email 4-6 sentences. LinkedIn 2-3 sentences
 - Short sentences, one idea each. If a sentence stacks three clauses, split it
 - Proof from the sender profile is quoted as the sender's overall record, never attached to this piece or format: "pieces like these have earned X" is banned unless the profile explicitly says this format earned it. When proof feels stretched, omit it; a confident card without proof beats an inflated one
@@ -194,7 +198,7 @@ Note the shape: what the piece is made from, in their world; the bespoke line ("
 
 ### Touch 1: Follow-up email (24-48h after confirmed delivery)
 
-Carries a subject line (see copy rules: six words or fewer, names the artefact on their desk). Body is 4-6 sentences set as 2-3 short paragraphs with blank lines between them, never one dense block; a senior recipient scans before they read. Structure:
+Carries a subject line (see copy rules: names the physical object plainly, never a stat fragment). Body opens with the first name on its own line, then 4-6 sentences set as 2-3 short paragraphs with blank lines between them, never one dense block; a senior recipient scans before they read. Structure:
 
 1. Reference the piece directly, by its most recognisable element ("I sent you the front page of [masthead], the one about [headline angle]")
 2. One sentence making the personalisation explicit (Customisation Communication Test)

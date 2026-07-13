@@ -2457,7 +2457,10 @@ def cmd_followup(args):
     # Mirror the chain's conversion tail: render the card (skipped for
     # custom-card senders) and, when one exists, refresh the package pass so
     # the regenerated card copy never ships judged only in its previous form.
-    card_png = _generate_card(config, folder, reply)
+    # --no-card protects ALREADY-SHIPPED pieces: their card is physically in
+    # the box, so regenerating touches must not overwrite the record of it.
+    card_png = None if getattr(args, "no_card", False) \
+        else _generate_card(config, folder, reply)
     vpkg = None
     if card_png:
         slug = os.path.basename(os.path.normpath(folder))
@@ -3111,6 +3114,9 @@ def main():
     f = sub.add_parser("followup", help="run Prompt 7 to write the follow-up sequence")
     f.add_argument("--folder", required=True, help="the piece folder")
     f.add_argument("--delivery-date", required=True, help="delivery date, e.g. '16 June 2026'")
+    f.add_argument("--no-card", action="store_true",
+                   help="do not regenerate the card or package pass (use for pieces "
+                        "whose card has already shipped; touches only)")
     f.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     f.set_defaults(func=cmd_followup)
 
