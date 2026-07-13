@@ -1993,6 +1993,19 @@ def touch2_opener(folder):
     return line[:60] or None
 
 
+def touch1_subject(folder):
+    """Touch 1 subject line, normalised, for the batch duplicate check (the
+    object-first subject rule pulls same-format pieces toward identical
+    subjects; three shipped that way in one batch)."""
+    path = os.path.join(folder, "followup.md")
+    if not os.path.exists(path):
+        return None
+    m = re.search(r"^Subject:\s*(.+)$", read_file(path), re.M)
+    if not m:
+        return None
+    return re.sub(r"[^a-z0-9 ]", "", m.group(1).strip().lower()) or None
+
+
 # Gate field-of-vision coverage: the copy-text builders define what P4b sees,
 # so any data.json text zone they omit is ungated by construction (the class
 # that shipped a fabricated edition-line city). This check makes the rule
@@ -2265,6 +2278,19 @@ def cmd_ship_check(args):
                 for g in group:
                     g["holds"].append(f"lint: Touch 2 opener duplicated across batch "
                                       f"({names}) — each needs its own opening line")
+                    g["shippable"] = False
+
+        subjects = {}
+        for f, s in zip(folders, statuses):
+            subj = touch1_subject(f)
+            if subj:
+                subjects.setdefault(subj, []).append(s)
+        for subj, group in subjects.items():
+            if len(group) > 1:
+                names = ", ".join(g["slug"] for g in group)
+                for g in group:
+                    g["holds"].append(f"lint: Touch 1 subject duplicated across batch "
+                                      f"({names}) — differentiate (e.g. name the company)")
                     g["shippable"] = False
 
         # Same failure mode on the piece itself: two crossword subtitles built
