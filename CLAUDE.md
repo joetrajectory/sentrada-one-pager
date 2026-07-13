@@ -246,6 +246,11 @@ python runner/sentrada_runner.py ...
   package-qc    run the 6B package pass: piece + companion card judged as the
                 full send; --card-file imports custom card copy (plain text,
                 blank-line paragraphs) as {slug}-card.json first
+  cold-review   advisory pre-print review (gates nothing): a blind cold-eyes
+                read of the render in a fresh context (the one look the gated
+                chain never takes), a strategist pass that reveals the target
+                only after the blind read, and a render fact-check against the
+                research (6C/6D). Writes qc_cold.md + qc_render_factcheck.md
   followup      re-run Prompt 7 for a piece
   ship-check    print-readiness gate; run before staging anything for print
   gate-probe    regression-test the copy gates: plants known violations in a

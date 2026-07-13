@@ -961,6 +961,124 @@ must match what you wrote above:
 
 ---
 
+## PROMPT 6C: COLD REVIEW (PART 1, BLIND READ)
+
+*(template: `runner/templates/prompt6c_cold_eyes.md`)*
+
+<!-- Prompt 6C part 1: the cold-eyes read. Deliberately context-free: every other
+vision pass in the chain (P6, 6B, package) runs with the research in context, so
+this is the one look the pipeline otherwise never gets - a stranger walking past
+the desk. Do NOT add recipient or research inputs to this prompt; blindness is
+the point. Part 2 (prompt6c_strategist.md) reveals the target afterwards. -->
+
+You are looking at a photograph of a physical printed piece, A2 size, that
+arrived in a box on someone's desk. You have been told nothing about it, who it
+is for, or why it exists.
+
+1. What is this? Describe what you are looking at as you would to a colleague.
+2. First 10 seconds: what draws the eye, in order?
+3. Now read it properly. What works, what jars, what confuses?
+4. Is anything illegible, garbled, misaligned, clipped or visually off? Look
+   hard at small text, numbers and edges.
+5. If this landed on YOUR desk with no explanation: bin it, keep it, or show
+   someone? Pick one and say why.
+
+Be blunt. You are not being asked to be nice, and "it's fine" is not a read.
+
+
+---
+
+## PROMPT 6C: COLD REVIEW (PART 2, STRATEGIST)
+
+*(template: `runner/templates/prompt6c_strategist.md`)*
+
+<!-- Prompt 6C part 2: the strategist pass. Runs as a second, separate call with
+the SAME image; receives part 1's blind read as input, then the target. -->
+
+The piece in the attached image was made for exactly one person:
+{{recipient_name}}, {{recipient_title}} at {{recipient_company}}. It is a
+one-of-one: researched, designed and printed for them alone, and delivered to
+their desk in a box with a companion card from the sender. It is about to go to
+print.
+
+A reviewer who knew none of that just gave this context-free read of the same
+image:
+
+---
+{{cold_read}}
+---
+
+Now critique as a campaign strategist:
+
+1. Did the piece stand alone, or does it need the context you now have? Where
+   exactly did the cold read miss the piece's intent, and does that matter for
+   a recipient who also starts cold?
+2. The 3 highest-leverage improvements to THIS piece before it prints. Concrete
+   and specific to what is on the page, not generic craft advice.
+3. Anything that could embarrass the sender or the recipient: tone, taste, a
+   claim that could read wrong, anything a colleague glancing at the desk
+   might snigger at.
+
+Constraints: never suggest the sender spend money, give anything away, or make
+offers; the sender's rules forbid it. Judge the piece that exists.
+
+End with exactly one line, on its own:
+COLD REVIEW: PRINT AS IS | PRINT AFTER TWEAKS | DO NOT PRINT
+
+
+---
+
+## PROMPT 6D: RENDER FACT-CHECK
+
+*(template: `runner/templates/prompt6d_render_factcheck.md`)*
+
+<!-- Prompt 6D: render fact-check. The P4b gate checks the COPY TEXT against the
+research before render; this pass checks the RENDERED IMAGE, so it catches
+anything that reached the print file by another route. It automates the pass a
+human would otherwise do by pasting the image back into the research chat. It
+assists the human fact-check sign-off; it does not replace it. -->
+
+You are the final fact-checker for a printed piece, shown in the attached
+image, built for {{recipient_name}}, {{recipient_title}} at
+{{recipient_company}}. The research it was built from is below.
+
+THE RESEARCH IS THE ONLY SOURCE OF TRUTH. A claim that is true in the world but
+absent from the research still fails: nothing may reach print that the research
+cannot support.
+
+---
+{{research}}
+---
+
+Go through every piece of printed text on the image, top to bottom, including
+small furniture (edition lines, sources, attributions, clue text). For each
+factual claim (numbers, names, dates, titles, quotes, locations, events),
+classify it:
+
+- VERIFIED: exact support in the research. Cite the supporting line briefly.
+- STRETCHED: supported but altered. A dropped qualifier ("over", "+", "around"),
+  a changed timeframe, a reframed metric, a quote trimmed in a way that shifts
+  meaning.
+- UNSUPPORTED: no basis in the research at all.
+
+Also flag, separately:
+- any personal detail that fails the self-published test (facts gathered for
+  delivery, family, home town) appearing in printed content
+- any litigation, legal dispute, regulatory action, redundancy or executive
+  departure used as content
+
+List every claim with its classification. Then end with a single fenced json
+block (the LAST thing in your output):
+
+```json
+{"verified": 0, "stretched": 0, "unsupported": 0, "flags": 0, "verdict": "CLEAN | ISSUES"}
+```
+
+"verdict" is ISSUES if anything is STRETCHED, UNSUPPORTED or flagged; otherwise CLEAN.
+
+
+---
+
 ## PROMPT 7: FOLLOWUP AGENT
 
 *(template: `runner/templates/prompt7_followup.md`)*

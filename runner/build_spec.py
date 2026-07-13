@@ -26,6 +26,9 @@ SECTIONS = [
     ("layer_c.md", "LAYER C: VARIATION VARIABLES"),
     ("prompt6_review.md", "PROMPT 6: REVIEW AGENT"),
     ("prompt6b_recipient.md", "PROMPT 6B: RECIPIENT AGENT"),
+    ("prompt6c_cold_eyes.md", "PROMPT 6C: COLD REVIEW (PART 1, BLIND READ)"),
+    ("prompt6c_strategist.md", "PROMPT 6C: COLD REVIEW (PART 2, STRATEGIST)"),
+    ("prompt6d_render_factcheck.md", "PROMPT 6D: RENDER FACT-CHECK"),
     ("prompt7_followup.md", "PROMPT 7: FOLLOWUP AGENT"),
 ]
 

@@ -1871,6 +1871,68 @@ def cmd_qc(args):
     _print_usage("qc")
 
 
+def _cold_review_one(config, folder):
+    """The automated two-chat review for one piece: a genuinely blind read of
+    the render (fresh context, no research - the one look the gated chain never
+    takes), a strategist pass that reveals the target only after the blind read
+    is captured, and a render fact-check against the research (the pass a human
+    would do by pasting the image back into the research chat). Advisory: writes
+    qc_cold.md and qc_render_factcheck.md, gates nothing."""
+    slug = os.path.basename(os.path.normpath(folder))
+    image = os.path.join(folder, slug + ".png")
+    if not os.path.exists(image):
+        print(f"[cold-review] {slug}: no render, skipped.")
+        return None
+    meta = json.loads(read_file(os.path.join(folder, "meta.json")))
+    research = read_file(os.path.join(folder, "research.md"))
+    model = model_for(config, "p6b")
+    values = {"recipient_name": meta["recipient_name"],
+              "recipient_title": meta["recipient_title"],
+              "recipient_company": meta["recipient_company"]}
+
+    print(f"[cold review] {slug}: blind read ({model}, vision)...")
+    cold = vision_call(config, load_template("prompt6c_cold_eyes.md"), model, image)
+    print(f"[cold review] {slug}: strategist pass ({model}, vision)...")
+    strat = vision_call(config, fill(load_template("prompt6c_strategist.md"),
+                                     dict(values, cold_read=cold)), model, image)
+    write_file(os.path.join(folder, "qc_cold.md"),
+               "# Cold-eyes read (no context)\n\n" + cold +
+               "\n\n# Strategist pass (target revealed)\n\n" + strat)
+    m = re.search(r"COLD REVIEW:\s*(PRINT AS IS|PRINT AFTER TWEAKS|DO NOT PRINT)", strat)
+    cold_verdict = m.group(1) if m else None
+
+    print(f"[cold review] {slug}: render fact-check ({model}, vision)...")
+    facts = vision_call(config, fill(load_template("prompt6d_render_factcheck.md"),
+                                     dict(values, research=research)), model, image)
+    write_file(os.path.join(folder, "qc_render_factcheck.md"), facts)
+    fc = extract_6b_structured(facts) or {}
+    return {"slug": slug, "cold": cold_verdict,
+            "facts": fc.get("verdict"), "fc_detail": fc}
+
+
+def cmd_cold_review(args):
+    _usage_reset()
+    config = load_config(args.config)
+    if args.manifest:
+        entries, _ = _load_manifest(args.manifest)
+        folders = [os.path.join(PIECES_DIR, _piece_slug(e)) for e in entries]
+    else:
+        folders = [args.folder]
+    results = [r for f in folders for r in [_cold_review_one(config, f)] if r]
+    print("\n" + "=" * 70)
+    print("COLD REVIEW — advisory, does not gate")
+    print("=" * 70)
+    for r in results:
+        fc = r["fc_detail"]
+        counts = (f"({fc.get('verified', '?')} verified, {fc.get('stretched', '?')} "
+                  f"stretched, {fc.get('unsupported', '?')} unsupported)") if fc else ""
+        print(f"  {r['slug']}")
+        print(f"      cold eyes:  {r['cold'] or '(see qc_cold.md)'}")
+        print(f"      fact-check: {r['facts'] or '(see qc_render_factcheck.md)'} {counts}")
+    print("\nFull reads: qc_cold.md and qc_render_factcheck.md in each piece folder.")
+    _print_usage("cold-review")
+
+
 def cmd_package_qc(args):
     """The package pass on demand: judge piece + companion card as the full send.
     For generated cards the chain runs this automatically after step 8b; this
@@ -3157,6 +3219,17 @@ def main():
     q.add_argument("--image", required=True, help="the final image file (PNG or JPG)")
     q.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     q.set_defaults(func=cmd_qc)
+
+    cr = sub.add_parser("cold-review",
+                        help="advisory pre-print review: blind cold-eyes read of the "
+                             "render (fresh context), strategist pass, and a render "
+                             "fact-check against the research. Writes qc_cold.md and "
+                             "qc_render_factcheck.md; gates nothing.")
+    crg = cr.add_mutually_exclusive_group(required=True)
+    crg.add_argument("--folder", help="review a single piece folder")
+    crg.add_argument("--manifest", help="review every piece in a batch manifest")
+    cr.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    cr.set_defaults(func=cmd_cold_review)
 
     pq = sub.add_parser("package-qc",
                         help="run the 6B package pass: piece + companion card judged "
