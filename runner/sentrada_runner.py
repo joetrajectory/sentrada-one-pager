@@ -2749,6 +2749,25 @@ def cmd_calibration(args):
         print(f"  {len(rows)} outcome(s) recorded: {responded} responded "
               f"({100 * responded // len(rows)}% response rate), {got} positive "
               f"({100 * got // len(rows)}%)")
+        # Running response rate per format. Same convention as the campaign's
+        # own reporting: denominator is everything sent (bounces included),
+        # responded is any reply including declines, positive excludes them.
+        by_fmt = {}
+        for slug, rec in sorted(ledger.items()):
+            if not rec.get("result"):
+                continue
+            t = by_fmt.setdefault(rec.get("format") or "(unknown)",
+                                  {"sent": 0, "responded": 0, "positive": 0})
+            t["sent"] += 1
+            if rec["result"] not in ("no_response", "bounced"):
+                t["responded"] += 1
+            if rec["result"] in positive:
+                t["positive"] += 1
+        print("\n  Response rate by format:")
+        for f, t in sorted(by_fmt.items()):
+            print(f"     {f:12} {t['responded']}/{t['sent']} responded "
+                  f"({100 * t['responded'] // t['sent']}%), "
+                  f"{t['positive']} positive ({100 * t['positive'] // t['sent']}%)")
         print("  When ~30 outcomes exist, feed the misses back into prompt6b as "
               "calibration examples.")
     if pending:
