@@ -1,0 +1,8 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "FABRICATED EDITION-LINE CITY",
+  "offending_detail": "Dublin in the edition line; the research supports London, Coventry and Milton Keynes only.",
+  "match_terms": [
+    "dublin"
+  ]
+}

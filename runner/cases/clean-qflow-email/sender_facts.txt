@@ -1,0 +1,7 @@
+- Qualisflow (Qflow): construction data capture and verification platform.
+- What it sells: automated capture and verification of site delivery and waste
+  data, creating an as-built truth layer for construction projects.
+- Proof points: deployed with Tier-1 contractors including Bouygues on complex
+  projects to improve financial performance; industry studies the company
+  publishes show 5-11% of a project's materials budget is typically lost to
+  waste, rework and unverified deliveries.

@@ -1,0 +1,8 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "WRONG DATE",
+  "offending_detail": "Clue says founded 2012; the research says founded 2015.",
+  "match_terms": [
+    "2012"
+  ]
+}

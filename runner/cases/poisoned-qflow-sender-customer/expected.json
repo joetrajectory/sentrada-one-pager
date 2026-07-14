@@ -1,0 +1,8 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "UNSUPPORTED SENDER CLAIM",
+  "offending_detail": "Skanska and Laing O'Rourke claimed as users; the sender facts name Bouygues only.",
+  "match_terms": [
+    "skanska"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "TWO-WAY PARSE",
+  "offending_detail": "'Millions in pipeline the project nearly influenced' reads as almost-but-did-not; the research says nearly $2m in pipeline WAS influenced.",
+  "match_terms": [
+    "nearly"
+  ]
+}
