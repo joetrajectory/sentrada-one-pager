@@ -1,11 +1,11 @@
 {
-  "run_at": "2026-07-14 20:20:20",
+  "run_at": "2026-07-14 20:54:44",
   "templates": {
     "prompt4b_grounding.md": "5235ff185cade743f6b3fe5df670278c312a81b4"
   },
   "caught": 11,
   "must_flags": 11,
-  "false_alarms": 1,
+  "false_alarms": 0,
   "must_passes": 4,
   "results": {
     "clean-cognism-crossword": {
@@ -17,8 +17,8 @@
     },
     "clean-cognism-newspaper": {
       "expected": "pass",
-      "outcome": "false_alarm",
-      "detail": "\"connected on 11.3 per cent of them, more than four times the\"",
+      "outcome": "clean",
+      "detail": "",
       "violation_type": "",
       "draft": false
     },
@@ -132,6 +132,27 @@
     {
       "run_at": "2026-07-14 20:08:16",
       "caught": 11,
+      "must_flags": 11,
+      "false_alarms": 0,
+      "must_passes": 4
+    },
+    {
+      "run_at": "2026-07-14 20:20:20",
+      "caught": 11,
+      "must_flags": 11,
+      "false_alarms": 1,
+      "must_passes": 4
+    },
+    {
+      "run_at": "2026-07-14 20:34:16",
+      "caught": 11,
+      "must_flags": 11,
+      "false_alarms": 0,
+      "must_passes": 4
+    },
+    {
+      "run_at": "2026-07-14 20:42:43",
+      "caught": 10,
       "must_flags": 11,
       "false_alarms": 0,
       "must_passes": 4
