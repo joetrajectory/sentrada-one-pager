@@ -1,6 +1,8 @@
+DATE: June 2026
+
 EDITION LINE: Venture Capital and SaaS Leadership / London, New York, San Francisco, Berlin
 
-HEADLINE: $1bn Raised, 53 SaaS Companies, One Recurring Question: Who Runs Sales?
+HEADLINE: Over $1bn Raised, 53 SaaS Companies, One Recurring Question: Who Runs Sales?
 
 STAT: 447 Open roles across the MMC Ventures portfolio | Source: jobs.mmc.vc, June 2026
 
@@ -16,7 +18,7 @@ MMC has acknowledged the gap more directly than most funds. The firm's CONNECT p
 
 Oliver Richards, General Partner at MMC and a board member at Peak AI, YuLife and Copper, has written that portfolio companies 'don't have to hyper-scale the team to deliver rapid commercial growth' and that 'remarkable growth' can come from 'maintaining a relatively small team.' The argument is not for more salespeople. It is for the right one, placed at the right moment, with the sector expertise and stage-appropriate playbook that the founder cannot assess alone.
 
-For a firm that has built a $1bn platform on the conviction that it can identify exceptional founders, the question of who leads sales for those founders is no longer an operational detail. It is a portfolio-level variable. The funds that solve it systematically, ensuring the right commercial leader is in place before the post-funding clock starts, will compound across every investment. The rest will keep learning the hard way.
+For a firm that has built a $1bn-plus platform on the conviction that it can identify exceptional founders, the question of who leads sales for those founders is no longer an operational detail. It is a portfolio-level variable. The funds that solve it systematically, ensuring the right commercial leader is in place before the post-funding clock starts, will compound across every investment. The rest will keep learning the hard way.
 
 PULL QUOTE: MMC helped shape our commercial strategy and team, from KPIs and hiring to recommending a sales leader. -- David Benigson, CEO, Signal AI
 
@@ -24,4 +26,4 @@ SIDEBAR 1: Snowplow Names SVP Global Sales in Enterprise Push | Snowplow, the be
 
 SIDEBAR 2: Synthesia Closes $200m Series E at $4bn Valuation | Synthesia, the AI video platform backed by MMC Ventures, closed a $200 million Series E in January 2026 led by Google Ventures. The round funds global enterprise expansion for a company that now counts among Europe's most valuable AI startups. Mina Samaan, General Partner at MMC, led the firm's original investment.
 
-SIDEBAR 3: MMC's State of AI Report Reaches Tenth Edition | The firm's annual State of AI research, first published in 2016, surveyed more than 30 agentic AI startup founders for its latest edition. The report has become a reference point for European AI investment, cited by founders, LPs and policymakers across the ecosystem.
+SIDEBAR 3: MMC's State of AI Report Reaches Tenth Edition | The firm's annual State of AI research, first published in 2016, has become a reference point for European AI investment, cited by founders, LPs and policymakers across the ecosystem. Its newest companion, the State of Agentic AI: Founder's Edition, surveyed more than 30 agentic AI startup founders.

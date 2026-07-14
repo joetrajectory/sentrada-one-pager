@@ -45,7 +45,8 @@ Format: newspaper
   commercial operations (announcement, November 2023).
 - Synthesia (AI video platform, MMC-backed) closed a $200 million Series E in
   January 2026 led by Google Ventures, at a $4bn valuation, among Europe's most
-  valuable AI startups. Mina Samaan, General Partner at MMC, led the firm's
+  valuable AI startups. The round funds the company's global enterprise
+  expansion (announcement, January 2026). Mina Samaan, General Partner at MMC, led the firm's
   original investment (announcement, January 2026).
 
 ## Platform and talent support

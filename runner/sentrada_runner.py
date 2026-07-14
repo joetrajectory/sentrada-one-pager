@@ -595,6 +595,12 @@ def run_email_engine(engine_path, data_path, output_path=None, check=False):
 
 def newspaper_copy_text(data):
     parts = [
+        # The printed dateline anchors violation 6's elapsed-time arithmetic;
+        # without it the gate assumes today's date and a true "nine months in
+        # post" on a June piece gets flagged as ten in July (found by the
+        # harness's first baseline run). Same blind-spot class as the edition
+        # line below.
+        "DATE: " + data.get("date", ""),
         # The edition line's city list reads as the company's real locations, so
         # the grounding gate must see it (a fabricated city once shipped inside
         # the "fictional furniture" blind spot). The masthead stays out: it is

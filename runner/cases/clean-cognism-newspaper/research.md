@@ -17,8 +17,9 @@ Format: newspaper
 
 - Dominic Allon joined as Chief Executive in September 2025, from the chief
   executive role at Pipedrive (appointment announcement, September 2025).
-- Chris Evans appointed Chief Revenue Officer alongside Allon, September 2025;
-  nine months in post as of June 2026. Previously Deputy CEO at Mapal Group,
+- Chris Evans was appointed Chief Revenue Officer in September 2025, alongside
+  Allon's arrival. As of June 2026 (this research's date) Evans is nine months
+  into his tenure as Chief Revenue Officer. Previously Deputy CEO at Mapal Group,
   and VP and Country Manager for Intuit UK, where he led the business through
   Making Tax Digital and Open Banking (LinkedIn profile; press coverage).
 - Allon, LinkedIn post, April 2026: "AI without quality data scales the very
@@ -66,6 +67,10 @@ Format: newspaper
 - Separate study of more than 600 revenue leaders: 74.5 per cent cite data
   quality as their biggest challenge with sales intelligence tools (company
   research, 2025).
+- Industry context, from the company's own published commentary: the outbound
+  channels that built B2B pipeline over the past decade (phone, email,
+  LinkedIn) are producing diminishing returns, and better data alone is not
+  reversing the trend (State of Outbound commentary, 2026).
 - Data decay research: CRO-level contact records decay at 34 per cent annually,
   second only to CMOs at 35 per cent, the two fastest-decaying senior titles
   (company data-quality research). One-in-three-contacts-outdated-within-a-year
