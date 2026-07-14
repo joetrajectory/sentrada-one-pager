@@ -10,7 +10,7 @@ Format: newspaper
   Cockell; June 2026 marks twenty-five years from founding (firm history page).
 - In early 2022 the firm promoted three members of its investment team and
   simultaneously confirmed it had raised over $1bn in cumulative funding across
-  its vehicles (firm announcement, 2022). Note the qualifier: over $1bn.
+  its vehicles (firm announcement, 2022).
 - Portfolio of 144 companies, of which 53 are SaaS companies (portfolio page,
   June 2026).
 - Investment activity and portfolio concentrate in technology hubs: London

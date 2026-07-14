@@ -17,10 +17,7 @@ Format: crossword
 
 - Project Pinata: trumpet's Q1 2026 outbound gifting experiment. The company
   reported it generated nearly $2 million in influenced pipeline (company
-  blog, March 2026). Note the construction: the pipeline figure is "nearly $2
-  million"; the pipeline WAS influenced. Any copy whose word order lets
-  "nearly" attach to "influenced" (almost influenced, but did not) inverts the
-  fact.
+  blog, March 2026).
 
 ## Recipient
 

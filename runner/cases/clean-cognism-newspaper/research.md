@@ -60,6 +60,8 @@ Format: newspaper
   connect rate (State of Cold Calling 2026, company report). The industry-wide
   success rate is 2.7 per cent, up from 2.3 per cent the prior year, compiled
   from more than 200,000 calls (same report).
+- The 11.3 per cent connect rate is more than four times the 2.7 per cent
+  industry average (State of Cold Calling 2026).
 - Company email reply rate: 8.98 per cent, approximately six times the
   benchmark (State of Outbound report).
 - State of Outbound: phone calls drive 57 per cent of meetings booked, LinkedIn

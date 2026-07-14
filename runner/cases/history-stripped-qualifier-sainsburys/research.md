@@ -9,16 +9,13 @@ Format: newspaper
   centres in Coventry and Milton Keynes (careers site, 2026). No offices or
   operations in Ireland: the group sold its Northern Ireland business in the
   1990s and operates in the UK only (annual report).
-- Employs 148,000+ colleagues across the group (careers site, 2026). Note the
-  qualifier: the company's own figure is "148,000+", a floor, not an exact
-  count.
+- Employs 148,000+ colleagues across the group (careers site, 2026).
 
 ## Strategy
 
 - "Next Level Sainsbury's" strategy launched February 2024 (strategy update).
 - Cost saving programme of over £1.6bn by March 2027 (strategy update; FY
-  results statement). Note the qualifier: the company states "over £1.6bn",
-  never a bare £1.6bn.
+  results statement).
 - Food volume growth ahead of the market for consecutive quarters (results
   statements, 2025-2026; Kantar data).
 - Argos integration and the shift of general merchandise into food stores is a
