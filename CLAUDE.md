@@ -291,6 +291,12 @@ CLAUDE.md          # This file
 
 ## Git tracking
 
+THE CANONICAL BRANCH IS `main` (consolidated 13 July 2026): runner, templates,
+all four engines and the site live here, and every new build session starts
+from it and merges back into it. `newspaper-layout-engine` is the frozen
+pre-consolidation history; engine build branches (card-layout-engine etc.) are
+superseded; `deliverables` stays separate on purpose (print files for Birch).
+
 Committed (core IP):
   runner/ (sentrada_runner.py, templates/, config.json — keep it secret-free —
   and outcomes.json, the cross-session outcome ledger)
