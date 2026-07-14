@@ -1,0 +1,7 @@
+{
+  "channel": "email",
+  "format": "crossword",
+  "recipient": "Alex Example",
+  "company": "Acme Analytics",
+  "notes": "Synthetic example case. Real campaign cases contain third-party personal data and live outside this public repo; copy this folder's shape to build them locally."
+}
