@@ -51,6 +51,8 @@ Sender facts (the sender may assert these about itself, nothing beyond them):
 ## Reply rules (these govern every draft)
 
 - British English. No em dashes. No exclamation marks. No soft filler phrases.
+- Email replies open with the person's first name and a comma on its own line (the name of whoever wrote the latest message, which on a referral is the new person, not the piece recipient). LinkedIn replies skip the salutation.
+- Sign off with the sender's first name alone on its own line (email only).
 - No subject line. Replies never carry one.
 - Never a generic follow-up opener ("Thanks for getting back to me", "Great to hear from you", "Just following up"). Open with substance specific to what they wrote.
 - The body must connect back to the tension the piece named. Craft talk alone is a dead end; the tension is why the piece exists.
