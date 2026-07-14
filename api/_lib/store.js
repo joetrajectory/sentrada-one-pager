@@ -61,6 +61,32 @@ function publicState(record) {
   return { state: "active", first_name: record.first_name };
 }
 
+// Hard safety net on top of the delete-on-delivery promise: every store key
+// self-deletes after SAFETY_TTL_DAYS even if `delivered` is never run, so no
+// address (or stale token) can outlive the flow by more than 90 days.
+const SAFETY_TTL_DAYS = 90;
+
+async function expireKeys(token, pieceId, days = SAFETY_TTL_DAYS) {
+  const seconds = days * 86400;
+  await redis("EXPIRE", `tok:${token}`, seconds);
+  if (pieceId) await redis("EXPIRE", `piece:${pieceId}`, seconds);
+}
+
+// Small fixed-window rate limit per IP per route. Fail-open: if the store
+// call itself fails the request proceeds and fails on the store anyway.
+async function withinRateLimit(req, route, limit) {
+  try {
+    const ip = String(req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || "")
+      .split(",")[0].trim() || "unknown";
+    const key = `rl:${route}:${ip}:${Math.floor(Date.now() / 60000)}`;
+    const count = await redis("INCR", key);
+    if (count === 1) await redis("EXPIRE", key, 60);
+    return count <= limit;
+  } catch {
+    return true;
+  }
+}
+
 function noindex(res) {
   res.setHeader("X-Robots-Tag", "noindex, nofollow");
   res.setHeader("Cache-Control", "no-store");
@@ -73,4 +99,5 @@ function clean(value, max = 200) {
     .slice(0, max);
 }
 
-module.exports = { redis, getRecord, setRecord, TOKEN_RE, isExpired, publicState, noindex, clean };
+module.exports = { redis, getRecord, setRecord, TOKEN_RE, isExpired, publicState,
+  noindex, clean, expireKeys, withinRateLimit, SAFETY_TTL_DAYS };

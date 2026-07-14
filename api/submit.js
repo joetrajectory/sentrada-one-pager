@@ -8,7 +8,8 @@
 
 "use strict";
 
-const { getRecord, setRecord, TOKEN_RE, isExpired, noindex, clean } = require("./_lib/store.js");
+const { getRecord, setRecord, TOKEN_RE, isExpired, noindex, clean,
+  expireKeys, withinRateLimit } = require("./_lib/store.js");
 
 // Same-day notification via Resend (https://resend.com). Optional: if the key
 // is missing or the send fails, the submission still lands in the store and
@@ -58,6 +59,9 @@ module.exports = async (req, res) => {
   }
 
   try {
+    if (!(await withinRateLimit(req, "submit", 10))) {
+      return res.status(429).json({ error: "slow down" });
+    }
     const record = await getRecord(token);
     if (!record || isExpired(record)) return res.status(400).json({ error: "expired" });
     if (record.state === "submitted") return res.status(200).json({ ok: true });
@@ -67,6 +71,9 @@ module.exports = async (req, res) => {
     record.address_type = addressType;
     record.address = address;
     await setRecord(token, record);
+    // Restart the self-delete clock: the address lives at most SAFETY_TTL_DAYS
+    // from submission even if `delivered` is never run.
+    await expireKeys(token, record.piece_id);
 
     let notified = "failed";
     try {

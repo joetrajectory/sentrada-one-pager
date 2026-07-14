@@ -239,6 +239,18 @@ survives ephemeral containers. It holds statuses, dates, channel, variant and
 token hashes; it never holds addresses or raw tokens. Commit it after every
 capture command.
 
+Guarantees, and the probe that enforces them: the notification email never
+contains the address; a re-tease can never orphan a submitted address (409);
+`delivered` leaves the store empty; every store key self-deletes after 90 days
+as a backstop; token pages are noindexed and rate-limited. After any edit to
+`api/` or the capture commands, re-run the regression probe (it spins up
+`tools/capture-harness.js`, the real functions over a mock store, and needs
+only node):
+
+```bash
+python runner/sentrada_runner.py capture-probe
+```
+
 ## Where the prompts live
 
 **`runner/templates/*.md` is the single source of truth — these are what the

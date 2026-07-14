@@ -27,6 +27,9 @@ Required for MCP connections:
 NOTION_MCP_TOKEN=         # Notion integration token (campaign log, research outputs)
 APOLLO_API_KEY=           # Apollo.io API key (contact data, company signals)
 
+Required for address capture (tease/capture/address/delivered):
+SENTRADA_RUNNER_SECRET=   # must match RUNNER_SECRET on the Vercel deployment
+
 Future (not required yet):
 PRINT_SUPPLIER_API_KEY=   # Print-on-demand supplier API
 SHIPPING_API_KEY=         # Shipping/tracking API
@@ -269,6 +272,8 @@ python runner/sentrada_runner.py ...
   delivered     mark delivered and delete the address from the capture store
   capture       capture status: sync submissions, nudge-due/swap-recommended flags,
                 share rate by variant
+  capture-probe regression-test the capture flow end to end (real api/ functions,
+                mock store); run after any edit to api/ or the capture commands
 
 Human-run prompts (not runner-invoked): Prompt 0 (sender onboarding, produces the
 config.json sender block), Prompt 1 (research, in the Sentrada Claude Project).
@@ -353,13 +358,25 @@ Where things live, and why:
 - The notification email on submission carries the piece id only, never the
   address. If the email fails or is missed, `capture` syncs submissions from
   the store, so nothing escapes deletion's reach.
+- Safety nets on top of the promise: every store key self-deletes 90 days
+  after registration (refreshed to 90 days from submission), so an address
+  cannot outlive a forgotten `delivered`; a re-tease over a submitted address
+  is refused (409) so rotating a token can never orphan an address; and the
+  page endpoints are rate-limited per IP.
+- `capture-probe` regression-tests all of this end to end against
+  tools/capture-harness.js (the REAL api/ functions over a mock store and a
+  mock Resend). Run it after any edit to api/ or the capture commands, exactly
+  as gate-probe is run after copy-gate edits.
 
 Site side (deployed with the site on Vercel): for.html is the token page
 (mobile-first, noindexed, exact copy fixed), api/token.js, api/submit.js and
 api/runner.js are the serverless functions. Deployment env vars:
 KV_REST_API_URL + KV_REST_API_TOKEN (Upstash via the Vercel marketplace),
 RUNNER_SECRET (bearer auth for api/runner.js), RESEND_API_KEY + NOTIFY_EMAIL
-(submission notification; optional, the capture poll is the fallback).
+(submission notification; optional, the capture poll is the fallback). Resend
+note: the unverified onboarding@resend.dev sender only reliably delivers to
+the email on the Resend account itself; verify a sending domain in Resend and
+set NOTIFY_FROM to use anything else.
 Runner side: SENTRADA_RUNNER_SECRET in env or .env must match RUNNER_SECRET;
 config "capture_api" is the deployed base URL (SENTRADA_CAPTURE_API overrides
 it, used by the local validation harness).

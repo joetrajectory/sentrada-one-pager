@@ -17,7 +17,7 @@
 "use strict";
 
 const crypto = require("crypto");
-const { redis, getRecord, setRecord, TOKEN_RE, noindex, clean } = require("./_lib/store.js");
+const { redis, getRecord, setRecord, TOKEN_RE, noindex, clean, expireKeys } = require("./_lib/store.js");
 
 function authorised(req) {
   const secret = process.env.RUNNER_SECRET || "";
@@ -47,7 +47,18 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: "register needs token, piece_id, first_name" });
       }
       const previous = await tokenForPiece(pieceId);
-      if (previous) await redis("DEL", `tok:${previous}`);
+      if (previous) {
+        // Never let a re-tease silently destroy an address that arrived on the
+        // old token and has not been shipped yet. Pull it and mark the piece
+        // delivered (which purges), then tease again.
+        const prevRecord = await getRecord(previous);
+        if (prevRecord && prevRecord.state === "submitted") {
+          return res.status(409).json({
+            error: "an address is on file for this piece; run `address` to pull "
+              + "it and `delivered` to purge it before re-teasing" });
+        }
+        await redis("DEL", `tok:${previous}`);
+      }
       const ttlDays = Math.min(Math.max(parseInt(body.ttl_days, 10) || 30, 1), 90);
       const now = new Date();
       await setRecord(token, {
@@ -58,19 +69,28 @@ module.exports = async (req, res) => {
         expires_at: new Date(now.getTime() + ttlDays * 86400000).toISOString(),
       });
       await redis("SET", `piece:${pieceId}`, token);
+      await expireKeys(token, pieceId);
       return res.status(200).json({ ok: true, replaced: Boolean(previous) });
     }
 
     if (body.action === "list") {
-      const keys = (await redis("KEYS", "piece:*")) || [];
-      const records = [];
-      for (const key of keys) {
-        const token = await redis("GET", key);
-        const record = token ? await getRecord(token) : null;
-        if (!record) continue;
-        const { address, ...safe } = record;
-        records.push(safe);
-      }
+      // SCAN + two MGETs rather than KEYS + a GET per piece: constant round
+      // trips however many pieces are live.
+      let cursor = "0";
+      const keys = [];
+      do {
+        const [next, batch] = await redis("SCAN", cursor, "MATCH", "piece:*", "COUNT", 200);
+        cursor = String(next);
+        keys.push(...batch);
+      } while (cursor !== "0");
+      if (!keys.length) return res.status(200).json({ records: [] });
+      const tokens = ((await redis("MGET", ...keys)) || []).filter(Boolean);
+      if (!tokens.length) return res.status(200).json({ records: [] });
+      const raws = ((await redis("MGET", ...tokens.map((t) => `tok:${t}`))) || []).filter(Boolean);
+      const records = raws.map((raw) => {
+        const { address, ...safe } = JSON.parse(raw);
+        return safe;
+      });
       return res.status(200).json({ records });
     }
 

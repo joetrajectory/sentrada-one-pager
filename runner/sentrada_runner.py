@@ -2805,7 +2805,10 @@ def cmd_calibration(args):
 # .env; never committed). The API base is config "capture_api", overridable
 # with SENTRADA_CAPTURE_API (used by the local validation harness).
 
-CAPTURE_PATH = os.path.join(RUNNER_DIR, "capture.json")
+# SENTRADA_CAPTURE_LEDGER override exists for capture-probe, which must never
+# touch the real committed ledger.
+CAPTURE_PATH = (os.environ.get("SENTRADA_CAPTURE_LEDGER")
+                or os.path.join(RUNNER_DIR, "capture.json"))
 CAPTURE_TTL_DAYS = 30
 NUDGE_DUE_DAYS = 5
 SWAP_RECOMMEND_DAYS = 7
@@ -2913,6 +2916,10 @@ def cmd_tease(args):
         die(f"{args.piece} is not marked printed. The tease says one copy exists; "
             f"print it first, then:\n"
             f"  python runner/sentrada_runner.py printed --piece {args.piece}")
+    if entry.get("status") == "address-received":
+        die(f"{args.piece} already has an address on file. Pull it (`address`) "
+            f"and mark it `delivered` (which deletes it) before re-teasing; "
+            f"a new token would orphan the submitted address.")
     if entry.get("status") == "tease-sent" and not args.again:
         die(f"{args.piece} already has a live tease ({entry.get('tease_date')}, "
             f"{entry.get('tease_channel')}). Re-run with --again to rotate the "
@@ -3134,6 +3141,233 @@ def cmd_capture(args):
                       f"({100 * len(vr) // len(vt)}%)")
     else:
         print("  Share rate: no teases sent yet.")
+
+
+def cmd_capture_probe(args):
+    """Regression-test the address-capture flow end to end, gate-probe style.
+
+    Spawns tools/capture-harness.js (the REAL api/ functions over a mock store
+    and a mock Resend), then drives the real runner commands against it and
+    asserts the privacy-critical properties: the notification never contains
+    the address, a re-tease can never orphan a submitted address, `delivered`
+    leaves the store empty, unknown tokens read as expired, the TTL safety net
+    is armed, and the rate limit bites. Uses a throwaway ledger; never touches
+    runner/capture.json. Run it after any edit to api/ or the capture commands.
+    """
+    import contextlib
+    import io
+    import time
+    import urllib.parse
+
+    global CAPTURE_PATH
+    if not shutil.which("node"):
+        die("capture-probe needs node (the harness runs the real api/ functions)")
+
+    app_port, redis_port, resend_port = 18788, 18790, 18791
+    base = f"http://127.0.0.1:{app_port}"
+    secret = secrets.token_urlsafe(16)
+    slug = "probe-fake-recipient"
+
+    harness = subprocess.Popen(
+        ["node", os.path.join(REPO_ROOT, "tools", "capture-harness.js")],
+        env=dict(os.environ, APP_PORT=str(app_port), REDIS_PORT=str(redis_port),
+                 RESEND_PORT=str(resend_port), CAPTURE_HARNESS_SECRET=secret),
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    def http_json(url, payload=None, headers=None, method=None):
+        req = urllib.request.Request(
+            url, data=(json.dumps(payload).encode() if payload is not None else None),
+            headers={"Content-Type": "application/json", **(headers or {})},
+            method=method or ("POST" if payload is not None else "GET"))
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return resp.status, json.loads(resp.read().decode() or "{}"), dict(resp.headers)
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read().decode() or "{}"), dict(e.headers)
+
+    def run_cmd(fn, expect_halt=False, **kw):
+        """Run a runner command in-process, capturing output; returns
+        (halted, output)."""
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+                fn(argparse.Namespace(**kw))
+            halted = False
+        except SystemExit:
+            halted = True
+        if halted != expect_halt:
+            print(out.getvalue())
+        return halted, out.getvalue()
+
+    results = []
+
+    def check(label, ok):
+        results.append((label, ok))
+        print(("  PASS  " if ok else "  FAIL  ") + label)
+
+    ledger_fd, ledger_path = tempfile.mkstemp(suffix=".json", prefix="capture-probe-")
+    os.close(ledger_fd)
+    os.unlink(ledger_path)
+    saved_path = CAPTURE_PATH
+    saved_env = {k: os.environ.get(k) for k in
+                 ("SENTRADA_CAPTURE_API", "SENTRADA_RUNNER_SECRET")}
+    CAPTURE_PATH = ledger_path
+    os.environ["SENTRADA_CAPTURE_API"] = base
+    os.environ["SENTRADA_RUNNER_SECRET"] = secret
+
+    print("\n" + "=" * 70)
+    print("CAPTURE PROBE — the real api/ functions over a mock store")
+    print("=" * 70)
+    try:
+        deadline = time.time() + 15
+        ready = False
+        while time.time() < deadline:
+            try:
+                status, _, _ = http_json(f"{base}/api/token?t=x")
+                ready = status == 200
+                break
+            except (urllib.error.URLError, ConnectionError, OSError):
+                time.sleep(0.3)
+        if not ready:
+            die("harness did not come up on " + base)
+
+        cfg_path = args.config if os.path.exists(args.config) else None
+        cfg = {"capture_api": base}
+        if cfg_path:
+            cfg = dict(load_config(cfg_path))
+        probe_cfg_fd, probe_cfg = tempfile.mkstemp(suffix=".json", prefix="capture-probe-cfg-")
+        with os.fdopen(probe_cfg_fd, "w") as fh:
+            json.dump(cfg, fh)
+
+        # 1. Auth: a wrong secret is rejected before anything else.
+        status, _, _ = http_json(f"{base}/api/runner", {"action": "list"},
+                                 {"Authorization": "Bearer wrong-" + secret})
+        check("runner API rejects a wrong secret (401)", status == 401)
+
+        # 2. tease refuses before printed.
+        halted, _ = run_cmd(cmd_tease, expect_halt=True, piece=slug,
+                            channel="linkedin", variant="mystery", again=False,
+                            config=probe_cfg)
+        check("tease refuses an unprinted piece", halted)
+
+        # 3. printed, then tease issues a link and the ledger holds only a hash.
+        run_cmd(cmd_printed, piece=slug, name="Proba Fakerson")
+        halted, out = run_cmd(cmd_tease, piece=slug, channel="linkedin",
+                              variant="mystery", again=False, config=probe_cfg)
+        m = re.search(r"/for/([A-Za-z0-9_-]{16,64})", out)
+        token = m.group(1) if m else ""
+        check("tease issues a link for a printed piece", not halted and bool(token))
+        ledger = json.loads(read_file(CAPTURE_PATH))
+        check("ledger stores a token hash, never the raw token",
+              token not in json.dumps(ledger)
+              and ledger[slug]["token_sha256"] == hashlib.sha256(token.encode()).hexdigest())
+
+        # 4. The page and its states.
+        status, data, headers = http_json(f"{base}/api/token?t={token}")
+        check("token lookup: active, greets by first name",
+              status == 200 and data == {"state": "active", "first_name": "Proba"})
+        status, data, headers = http_json(f"{base}/api/token?t=AAAAAAAAAAAAAAAAAAAAAA")
+        check("unknown token reads as expired", data.get("state") == "expired")
+        req = urllib.request.Request(f"{base}/for/{token}")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            page = resp.read().decode()
+            check("/for/<token> serves the page with a noindex header",
+                  "noindex" in resp.headers.get("X-Robots-Tag", "") and "One copy" in page)
+
+        # 5. Submission: validation, storage, and an address-free notification.
+        status, data, _ = http_json(f"{base}/api/submit",
+                                    {"token": token, "address_type": "office",
+                                     "line1": "1 Probe Street"})
+        check("submit rejects missing fields (400)", status == 400)
+        address = {"token": token, "address_type": "office",
+                   "line1": "1 Probe Street", "line2": "Floor 2",
+                   "city": "Lisbon", "postcode": "1100-001", "country": "Portugal"}
+        status, data, _ = http_json(f"{base}/api/submit", address)
+        check("submit stores a complete address", status == 200 and data.get("ok"))
+        _, mails, _ = http_json(f"http://127.0.0.1:{resend_port}/_emails")
+        mail_text = json.dumps(mails)
+        check("notification sent, carries the piece id",
+              len(mails) == 1 and slug in mail_text)
+        check("notification contains no fragment of the address",
+              not any(v in mail_text for v in
+                      ("1 Probe Street", "Floor 2", "Lisbon", "1100-001", "Portugal")))
+
+        # 6. A submitted address can never be orphaned by a re-tease.
+        halted, out = run_cmd(cmd_tease, expect_halt=True, piece=slug,
+                              channel="email", variant="teaser", again=True,
+                              config=probe_cfg)
+        check("re-tease over a submitted address is refused by the API (409)",
+              halted and "address is on file" in out)
+
+        # 7. capture syncs the submission; the client-side guard now refuses too.
+        halted, out = run_cmd(cmd_capture, piece=None, offline=False, config=probe_cfg)
+        ledger = json.loads(read_file(CAPTURE_PATH))
+        check("capture syncs the submission to address-received",
+              not halted and ledger[slug]["status"] == "address-received"
+              and "1/1" in out)
+        halted, out = run_cmd(cmd_tease, expect_halt=True, piece=slug,
+                              channel="email", variant="teaser", again=False,
+                              config=probe_cfg)
+        check("tease refuses locally once address-received",
+              halted and "address on file" in out.replace("an address", "address"))
+
+        # 8. address prints it; delivered purges everything, verified raw.
+        halted, out = run_cmd(cmd_address, piece=slug, config=probe_cfg)
+        check("address prints the submitted address",
+              not halted and "1 Probe Street" in out and "Lisbon" in out)
+        _, dump, _ = http_json(f"http://127.0.0.1:{redis_port}/_dump")
+        check("TTL safety net armed on the store keys",
+              any(k.startswith("tok:") for k in dump.get("ttl_keys", [])))
+        halted, _ = run_cmd(cmd_delivered, piece=slug, config=probe_cfg)
+        _, dump, _ = http_json(f"http://127.0.0.1:{redis_port}/_dump")
+        leftovers = [k for k in dump.get("keys", [])
+                     if k.startswith("tok:") or k.startswith("piece:")]
+        check("delivered leaves no token or address key in the store",
+              not halted and not leftovers)
+        halted, _ = run_cmd(cmd_address, expect_halt=True, piece=slug, config=probe_cfg)
+        check("pull after purge finds nothing (404)", halted)
+
+        # 9. An expired record reads as expired (injected with a past date).
+        expired_rec = json.dumps({"piece_id": "old", "first_name": "Olda",
+                                  "state": "active",
+                                  "created_at": "2026-01-01T00:00:00Z",
+                                  "expires_at": "2026-02-01T00:00:00Z"})
+        http_json(f"http://127.0.0.1:{redis_port}",
+                  ["SET", "tok:ExpiredExpiredExpired1", expired_rec])
+        status, data, _ = http_json(f"{base}/api/token?t=ExpiredExpiredExpired1")
+        check("expired token reads as expired, no name leaked",
+              data == {"state": "expired"})
+
+        # 10. The rate limit bites (last: it saturates the token route).
+        limited = False
+        for _ in range(140):
+            status, _, _ = http_json(f"{base}/api/token?t={'B' * 22}")
+            if status == 429:
+                limited = True
+                break
+        check("token lookups rate-limited within 140 rapid requests", limited)
+
+        os.unlink(probe_cfg)
+    finally:
+        CAPTURE_PATH = saved_path
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        harness.terminate()
+        try:
+            harness.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            harness.kill()
+        if os.path.exists(ledger_path):
+            os.unlink(ledger_path)
+
+    failed = [label for label, ok in results if not ok]
+    print("-" * 70)
+    print(f"{len(results) - len(failed)}/{len(results)} probes passed.")
+    if failed:
+        die("capture-probe failures: " + "; ".join(failed))
 
 
 # --- Batch processing -------------------------------------------------------
@@ -3751,6 +3985,14 @@ def main():
                     help="skip the store poll; show the committed ledger only")
     cp.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     cp.set_defaults(func=cmd_capture)
+
+    cpr = sub.add_parser("capture-probe",
+                         help="regression-test the address-capture flow end to end "
+                              "against a local harness running the real api/ "
+                              "functions; run after any edit to api/ or the "
+                              "capture commands")
+    cpr.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    cpr.set_defaults(func=cmd_capture_probe)
 
     bc = sub.add_parser("birch-csv",
                         help="emit the print supplier's shipping CSV (code, recipient, "

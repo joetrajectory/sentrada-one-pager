@@ -5,7 +5,7 @@
 
 "use strict";
 
-const { getRecord, TOKEN_RE, publicState, noindex } = require("./_lib/store.js");
+const { getRecord, TOKEN_RE, publicState, noindex, withinRateLimit } = require("./_lib/store.js");
 
 module.exports = async (req, res) => {
   noindex(res);
@@ -13,6 +13,9 @@ module.exports = async (req, res) => {
   const token = String(req.query.t || "");
   if (!TOKEN_RE.test(token)) return res.status(200).json({ state: "expired" });
   try {
+    if (!(await withinRateLimit(req, "token", 60))) {
+      return res.status(429).json({ error: "slow down" });
+    }
     const record = await getRecord(token);
     return res.status(200).json(publicState(record));
   } catch (err) {
