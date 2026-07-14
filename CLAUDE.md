@@ -260,6 +260,15 @@ python runner/sentrada_runner.py ...
   birch-csv     shipping CSV for the print supplier (holds addresses; never commit)
   outcome       record what happened to a sent piece (replied/meeting/no_response/...)
   calibration   compare 6B predictions against recorded outcomes
+  printed       mark a piece printed in the capture ledger (tease refuses without it)
+  tease         generate the one-off sentrada.io/for/<token> link, mark tease-sent
+  teaser        crop a corner of the render as a small inline jpg (teaser variant)
+  nudge         record the day-5 nudge as sent
+  swap          mark a silent piece swapped-after-silence (sender's decision)
+  address       pull a submitted delivery address (terminal only, never written to disk)
+  delivered     mark delivered and delete the address from the capture store
+  capture       capture status: sync submissions, nudge-due/swap-recommended flags,
+                share rate by variant
 
 Human-run prompts (not runner-invoked): Prompt 0 (sender onboarding, produces the
 config.json sender block), Prompt 1 (research, in the Sentrada Claude Project).
@@ -279,6 +288,8 @@ crossword/         # Crossword engine + grid generator + upscaled template
 email/             # The Email engine (procedural Gmail chrome)
 card/              # Companion-card engine (A6) + bundled fonts and wordmark
 research/          # Per-recipient research + batch manifests + Birch CSVs [GITIGNORED]
+api/               # Address-capture serverless functions (token, submit, runner)
+for.html           # The tokenised address-capture page (sentrada.io/for/<token>)
 .claude/
   agents/          # Subagents (image-gen pipeline; parked formats)
   commands/        # Slash commands (image-gen pipeline; parked formats)
@@ -299,7 +310,9 @@ superseded; `deliverables` stays separate on purpose (print files for Birch).
 
 Committed (core IP):
   runner/ (sentrada_runner.py, templates/, config.json — keep it secret-free —
-  and outcomes.json, the cross-session outcome ledger)
+  outcomes.json, the cross-session outcome ledger, and capture.json, the
+  address-capture ledger: statuses and token hashes, never addresses)
+  for.html, api/ (the address-capture page and its serverless functions)
   newspaper/, crossword/, email/, card/ (the layout engines + their templates/assets)
   .claude/ (agents, commands, skills, hooks, settings)
   .mcp.json
@@ -314,6 +327,42 @@ Gitignored (generated/secrets):
   .env (API keys and secrets)
   node_modules/
   deliverables/ (local staging area for print files; never committed to code branches)
+
+## Address capture (sentrada.io/for/<token>)
+
+The tease flow for remote-likely targets: the piece is printed first, the
+recipient gets a one-off unguessable link by LinkedIn DM or email, the page
+collects a delivery address, the runner pulls it for shipping and deletes it
+on delivery. Cadence: tease day 0, nudge flagged at day 5, swap recommended 7
+days after the nudge. The runner only ever flags; the sender decides.
+
+Statuses (runner/capture.json): printed > tease-sent > address-received;
+swapped-after-silence when the sender swaps a silent target. Tokens expire
+after 30 days.
+
+Where things live, and why:
+- The address exists ONLY in the capture store (Upstash Redis behind the
+  site's /api functions) between submission and delivery. `address` prints it
+  for the Birch CSV or a manifest delivery override (both gitignored);
+  `delivered` purges the store record entirely. That is the page's promise:
+  "Used once, for this delivery. Deleted once it's signed for."
+- runner/capture.json is a COMMITTED ledger (same reasoning as outcomes.json:
+  containers are ephemeral). It never holds addresses or raw tokens, only a
+  sha256 of the token, dates, channel, variant and statuses. Commit it after
+  every capture command.
+- The notification email on submission carries the piece id only, never the
+  address. If the email fails or is missed, `capture` syncs submissions from
+  the store, so nothing escapes deletion's reach.
+
+Site side (deployed with the site on Vercel): for.html is the token page
+(mobile-first, noindexed, exact copy fixed), api/token.js, api/submit.js and
+api/runner.js are the serverless functions. Deployment env vars:
+KV_REST_API_URL + KV_REST_API_TOKEN (Upstash via the Vercel marketplace),
+RUNNER_SECRET (bearer auth for api/runner.js), RESEND_API_KEY + NOTIFY_EMAIL
+(submission notification; optional, the capture poll is the fallback).
+Runner side: SENTRADA_RUNNER_SECRET in env or .env must match RUNNER_SECRET;
+config "capture_api" is the deployed base URL (SENTRADA_CAPTURE_API overrides
+it, used by the local validation harness).
 
 ## Print-ready deliverables (the `deliverables` branch)
 

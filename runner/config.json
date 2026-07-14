@@ -37,5 +37,6 @@
   "email_unread_count": 1284,
   "email_postscript": "Yes, I printed an email at A2 and had it delivered to your desk.",
   "card_engine": "card/card.py",
-  "crossword_open_loop_seed_retries": 5
+  "crossword_open_loop_seed_retries": 5,
+  "capture_api": "https://sentrada.io"
 }

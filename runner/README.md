@@ -198,6 +198,47 @@ qc_recipient.md      Prompt 6B simulation
 followup.md          Prompt 7 card + follow-up
 ```
 
+## Address capture (the tease flow)
+
+For remote-likely targets whose desk address you do not have: print the piece,
+tease its existence, and let the recipient hand you the address on a one-off
+page at sentrada.io/for/<token>. One-time setup: `SENTRADA_RUNNER_SECRET=...`
+in `.env` (matching the deployment's `RUNNER_SECRET`); the API base comes from
+config `capture_api`.
+
+```bash
+# 1. The tease claims one copy exists, so that must be true first.
+python runner/sentrada_runner.py printed --piece jane-doe-acme
+
+# 2. Generate the link (refuses if not marked printed). Prints the URL once;
+#    the ledger keeps only a hash. Tokens expire after 30 days.
+python runner/sentrada_runner.py tease --piece jane-doe-acme --channel linkedin --variant mystery
+
+# 2b. Teaser-image variant: crop a corner of the render for inline embedding.
+python runner/sentrada_runner.py teaser --piece jane-doe-acme            # --corner tr/bl/br to reframe
+
+# 3. Day to day: sync submissions, see statuses, flags and the share rate.
+#    Flags: NUDGE-DUE 5 days after the tease, SWAP-RECOMMENDED 7 days after
+#    the nudge. Advisory only; you decide.
+python runner/sentrada_runner.py capture
+
+# 4. Record the nudge when you send it; swap when you decide to.
+python runner/sentrada_runner.py nudge --piece jane-doe-acme
+python runner/sentrada_runner.py swap --piece jane-doe-acme
+
+# 5. An address arrived (email notification or capture sync): print it for the
+#    Birch CSV or a manifest delivery override. Terminal only, never a file.
+python runner/sentrada_runner.py address --piece jane-doe-acme
+
+# 6. Signed for: delete the address from the store, everywhere, for good.
+python runner/sentrada_runner.py delivered --piece jane-doe-acme
+```
+
+State lives in `runner/capture.json`, committed like `outcomes.json` so it
+survives ephemeral containers. It holds statuses, dates, channel, variant and
+token hashes; it never holds addresses or raw tokens. Commit it after every
+capture command.
+
 ## Where the prompts live
 
 **`runner/templates/*.md` is the single source of truth — these are what the

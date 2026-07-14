@@ -36,15 +36,19 @@ Usage:
 import argparse
 import base64
 import csv
+import datetime
 import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
 
 import tempfile
+import urllib.error
+import urllib.request
 
 # --- Paths -----------------------------------------------------------------
 
@@ -2776,6 +2780,362 @@ def cmd_calibration(args):
             print(f"     {d:38} 6B: {v}")
 
 
+# --- Address capture (sentrada.io/for/<token>) ------------------------------
+# The tease flow for remote-likely targets: a piece is printed, the recipient
+# gets a one-off unguessable link, the page collects a delivery address, the
+# runner pulls it when staging the shipment and deletes it on delivery.
+#
+# Split of responsibilities, chosen so the page's privacy promise ("Used once,
+# for this delivery. Deleted once it's signed for.") is genuinely enforceable:
+#   - The address lives ONLY in the capture store (the site's backend) between
+#     submission and delivery. `address` prints it to the terminal for the
+#     Birch CSV / manifest override; it is never written to a committed file.
+#   - This ledger (runner/capture.json, COMMITTED like outcomes.json so it
+#     survives ephemeral containers) holds everything EXCEPT the address and
+#     the raw token: a sha256 of the token, dates, channel, variant, statuses.
+#   - `delivered` purges the store record entirely; the ledger keeps only the
+#     address type and the fact one was provided.
+#
+# Statuses: printed -> tease-sent -> address-received; swapped-after-silence
+# when the sender decides to swap the recipient. `capture` computes the two
+# advisory flags (never acted on automatically): NUDGE-DUE 5 days after the
+# tease with nothing back, SWAP-RECOMMENDED 7 days after the nudge.
+#
+# Auth to the backend is a bearer secret in SENTRADA_RUNNER_SECRET (env or
+# .env; never committed). The API base is config "capture_api", overridable
+# with SENTRADA_CAPTURE_API (used by the local validation harness).
+
+CAPTURE_PATH = os.path.join(RUNNER_DIR, "capture.json")
+CAPTURE_TTL_DAYS = 30
+NUDGE_DUE_DAYS = 5
+SWAP_RECOMMEND_DAYS = 7
+TEASE_CHANNELS = ("linkedin", "email")
+TEASE_VARIANTS = ("mystery", "teaser")
+
+
+def _capture_ledger():
+    return json.loads(read_file(CAPTURE_PATH)) if os.path.exists(CAPTURE_PATH) else {}
+
+
+def _capture_save(ledger):
+    write_file(CAPTURE_PATH, json.dumps(ledger, indent=2))
+    print(f"[capture] ledger updated: {os.path.relpath(CAPTURE_PATH, REPO_ROOT)} "
+          "— commit and push it so the record survives this container")
+
+
+def _capture_api_base(config):
+    base = os.environ.get("SENTRADA_CAPTURE_API") or config.get("capture_api", "")
+    if not base:
+        die("no capture API configured: set \"capture_api\" in config.json "
+            "(the deployed site base, e.g. https://sentrada.io)")
+    return base.rstrip("/")
+
+
+def _capture_secret(required=True):
+    # Environment first, then a plain SENTRADA_RUNNER_SECRET=... line in .env
+    # (gitignored). The secret must match RUNNER_SECRET on the deployment.
+    val = os.environ.get("SENTRADA_RUNNER_SECRET", "")
+    env_path = os.path.join(REPO_ROOT, ".env")
+    if not val and os.path.exists(env_path):
+        for line in read_file(env_path).splitlines():
+            if line.strip().startswith("SENTRADA_RUNNER_SECRET="):
+                val = line.split("=", 1)[1].strip().strip('"').strip("'")
+    if not val and required:
+        die("SENTRADA_RUNNER_SECRET is not set (env or .env). It must match "
+            "the RUNNER_SECRET configured on the site deployment.")
+    return val
+
+
+def _capture_call(config, payload):
+    req = urllib.request.Request(
+        _capture_api_base(config) + "/api/runner",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {_capture_secret()}"},
+        method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        die(f"capture API {payload.get('action')} failed ({e.code}): "
+            f"{e.read().decode('utf-8', 'replace')[:300]}")
+    except urllib.error.URLError as e:
+        die(f"capture API unreachable at {_capture_api_base(config)}: {e.reason}")
+
+
+def _capture_today():
+    return datetime.date.today().isoformat()
+
+
+def _days_since(iso_date):
+    try:
+        return (datetime.date.today() - datetime.date.fromisoformat(iso_date[:10])).days
+    except ValueError:
+        return None
+
+
+def _capture_entry(ledger, slug):
+    if slug not in ledger:
+        die(f"{slug} is not in the capture ledger. Mark it printed first:\n"
+            f"  python runner/sentrada_runner.py printed --piece {slug}")
+    return ledger[slug]
+
+
+def cmd_printed(args):
+    ledger = _capture_ledger()
+    entry = ledger.get(args.piece, {})
+    name = args.name
+    meta_path = os.path.join(PIECES_DIR, args.piece, "meta.json")
+    if not name and os.path.exists(meta_path):
+        name = json.loads(read_file(meta_path)).get("recipient_name", "")
+    if not name:
+        name = entry.get("recipient", "")
+    if not name:
+        die("no recipient name found (no piece folder in this container): "
+            "pass --name \"First Last\"")
+    entry.update({"recipient": name, "first_name": name.split()[0],
+                  "printed": _capture_today()})
+    entry.setdefault("status", "printed")
+    ledger[args.piece] = entry
+    _capture_save(ledger)
+    print(f"[capture] {args.piece}: marked printed ({name}). "
+          f"Tease it with:\n  python runner/sentrada_runner.py tease --piece {args.piece} "
+          f"--channel linkedin --variant mystery")
+
+
+def cmd_tease(args):
+    config = load_config(args.config)
+    ledger = _capture_ledger()
+    entry = _capture_entry(ledger, args.piece)
+    # The tease claims one copy exists on a desk-ready board. That must be true
+    # before anything sends, so an unprinted piece refuses here.
+    if not entry.get("printed"):
+        die(f"{args.piece} is not marked printed. The tease says one copy exists; "
+            f"print it first, then:\n"
+            f"  python runner/sentrada_runner.py printed --piece {args.piece}")
+    if entry.get("status") == "tease-sent" and not args.again:
+        die(f"{args.piece} already has a live tease ({entry.get('tease_date')}, "
+            f"{entry.get('tease_channel')}). Re-run with --again to rotate the "
+            f"token (the old link stops working).")
+    token = secrets.token_urlsafe(24)
+    result = _capture_call(config, {
+        "action": "register", "token": token, "piece_id": args.piece,
+        "first_name": entry["first_name"], "ttl_days": CAPTURE_TTL_DAYS})
+    link = f"{_capture_api_base(config)}/for/{token}"
+    entry.update({
+        "status": "tease-sent",
+        "tease_date": _capture_today(),
+        "tease_channel": args.channel,
+        "tease_variant": args.variant,
+        "token_sha256": hashlib.sha256(token.encode()).hexdigest(),
+        "token_expires": (datetime.date.today()
+                          + datetime.timedelta(days=CAPTURE_TTL_DAYS)).isoformat(),
+    })
+    entry.pop("nudge_date", None)
+    _capture_save(ledger)
+    print(f"\n[capture] {args.piece}: tease registered "
+          f"({args.channel}, {args.variant} variant"
+          + (", previous token invalidated" if result.get("replaced") else "") + ").")
+    print(f"[capture] link expires {entry['token_expires']}. Drop this into your message:\n")
+    print(f"  {link}\n")
+    print("[capture] the raw token is shown once and not stored here; "
+          "the ledger keeps only its hash.")
+
+
+def cmd_teaser(args):
+    try:
+        from PIL import Image
+    except ImportError:
+        die("the teaser crop needs Pillow: pip install Pillow")
+    image = args.image or os.path.join(PIECES_DIR, args.piece, f"{args.piece}.png")
+    if not os.path.exists(image):
+        die(f"no render at {image}. Pass --image with the piece's render "
+            f"(pieces folders are gitignored and containers are ephemeral).")
+    out = args.out or os.path.join(os.path.dirname(image), f"{args.piece}-teaser.jpg")
+    img = Image.open(image)
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    w, h = img.size
+    # A quarter of the page from the chosen corner. On the newspaper and email
+    # renders the masthead / name row is centred at the top, so a top corner
+    # slices it half visible, which is the point: enough to intrigue, not
+    # enough to read.
+    cw, ch = w // 2, h // 2
+    boxes = {"tl": (0, 0, cw, ch), "tr": (w - cw, 0, w, ch),
+             "bl": (0, h - ch, cw, h), "br": (w - cw, h - ch, w, h)}
+    crop = img.crop(boxes[args.corner])
+    # Small enough to sit inline in an email body or a LinkedIn DM.
+    crop.thumbnail((args.width, args.width), Image.LANCZOS)
+    crop.save(out, "JPEG", quality=82, optimize=True, progressive=True)
+    kb = os.path.getsize(out) // 1024
+    print(f"[capture] teaser crop ({args.corner}) written: {out} "
+          f"({crop.size[0]}x{crop.size[1]}, {kb} KB)")
+    print("[capture] embed it inline at the top of the body, never as an attachment. "
+          "If the crop shows too much or too little, try --corner tr/bl/br.")
+
+
+def cmd_nudge(args):
+    ledger = _capture_ledger()
+    entry = _capture_entry(ledger, args.piece)
+    if entry.get("status") != "tease-sent":
+        die(f"{args.piece} is '{entry.get('status')}', not tease-sent; "
+            f"the day-5 nudge only applies to a live tease.")
+    entry["nudge_date"] = _capture_today()
+    _capture_save(ledger)
+    reminder = ("include the corner image inline with the nudge"
+                if entry.get("tease_variant") == "mystery"
+                else "the tease already showed the corner, so the nudge stays text only")
+    print(f"[capture] {args.piece}: nudge recorded. Escalation rule: {reminder}.")
+
+
+def cmd_swap(args):
+    ledger = _capture_ledger()
+    entry = _capture_entry(ledger, args.piece)
+    entry["status"] = "swapped-after-silence"
+    entry["swap_date"] = _capture_today()
+    _capture_save(ledger)
+    print(f"[capture] {args.piece}: marked swapped-after-silence. "
+          f"The piece is free to re-target; run tease again once re-marked printed.")
+
+
+def cmd_address(args):
+    config = load_config(args.config)
+    result = _capture_call(config, {"action": "pull", "piece_id": args.piece})
+    record = result.get("record", {})
+    if record.get("state") != "submitted":
+        print(f"[capture] {args.piece}: no address yet "
+              f"(token state: {record.get('state', 'unknown')}).")
+        return
+    addr = record.get("address", {})
+    label = "My office" if record.get("address_type") == "office" else "Somewhere else"
+    print(f"\n[capture] {args.piece} — {record.get('first_name')} chose: {label}")
+    print(f"[capture] submitted {record.get('submitted_at', '')[:10]}\n")
+    for field in ("line1", "line2", "city", "postcode", "country"):
+        if addr.get(field):
+            print(f"  {addr[field]}")
+    print("\n[capture] this address goes into the Birch CSV or a manifest "
+          "delivery override ONLY (both gitignored). Never commit it. It is "
+          "deleted everywhere by:  delivered --piece " + args.piece)
+
+
+def cmd_delivered(args):
+    config = load_config(args.config)
+    ledger = _capture_ledger()
+    entry = _capture_entry(ledger, args.piece)
+    result = _capture_call(config, {"action": "purge", "piece_id": args.piece})
+    entry["delivered"] = _capture_today()
+    entry["address_provided"] = bool(result.get("had_address") or
+                                     entry.get("status") == "address-received")
+    _capture_save(ledger)
+    if result.get("purged"):
+        print(f"[capture] {args.piece}: delivered. The capture store record is "
+              f"deleted (address included); the ledger keeps only the address "
+              f"type and that one was provided.")
+    else:
+        print(f"[capture] {args.piece}: delivered recorded. No store record "
+              f"existed (already purged or never teased).")
+    print("[capture] if the address was pasted into a Birch CSV or staging "
+          "folder, delete those local copies now; they are gitignored but real.")
+
+
+def cmd_capture(args):
+    config = load_config(args.config)
+    ledger = _capture_ledger()
+
+    # Sync submissions from the store first, so a missed notification email can
+    # never hide an address that arrived. Metadata only; addresses stay remote.
+    records = []
+    if args.offline:
+        pass
+    elif not _capture_secret(required=False):
+        print("[capture] SENTRADA_RUNNER_SECRET not set; showing the ledger "
+              "only (no store poll, submissions may be missing).")
+    else:
+        records = _capture_call(config, {"action": "list"}).get("records", [])
+    if records:
+        changed = False
+        for rec in records:
+            slug = rec.get("piece_id", "")
+            entry = ledger.get(slug)
+            if not entry or entry.get("status") in ("swapped-after-silence",):
+                continue
+            if rec.get("state") == "submitted" and entry.get("status") != "address-received":
+                entry["status"] = "address-received"
+                entry["submission_date"] = str(rec.get("submitted_at", ""))[:10]
+                entry["address_type"] = rec.get("address_type", "")
+                changed = True
+                print(f"[capture] {slug}: address received "
+                      f"({entry['submission_date']}, {entry['address_type']}).")
+        if changed:
+            _capture_save(ledger)
+
+    if not ledger:
+        print("[capture] no pieces in the capture ledger yet. Start with:\n"
+              "  python runner/sentrada_runner.py printed --piece <slug>")
+        return
+
+    print("\n" + "=" * 78)
+    print("ADDRESS CAPTURE — status")
+    print("=" * 78)
+    flags = []
+    for slug, e in sorted(ledger.items()):
+        status = e.get("status", "?")
+        bits = []
+        if e.get("tease_date"):
+            bits.append(f"teased {e['tease_date']} ({e.get('tease_channel')}, "
+                        f"{e.get('tease_variant')})")
+        if e.get("nudge_date"):
+            bits.append(f"nudged {e['nudge_date']}")
+        if e.get("submission_date"):
+            bits.append(f"address {e['submission_date']} ({e.get('address_type')})")
+        if e.get("delivered"):
+            bits.append(f"delivered {e['delivered']}")
+        flag = ""
+        if status == "tease-sent":
+            since_tease = _days_since(e.get("tease_date", ""))
+            since_nudge = _days_since(e.get("nudge_date", "")) if e.get("nudge_date") else None
+            if e.get("nudge_date"):
+                if since_nudge is not None and since_nudge >= SWAP_RECOMMEND_DAYS:
+                    flag = "SWAP-RECOMMENDED"
+            elif since_tease is not None and since_tease >= NUDGE_DUE_DAYS:
+                flag = "NUDGE-DUE"
+            expires = e.get("token_expires", "")
+            if expires and expires < _capture_today():
+                flag = (flag + ", " if flag else "") + "token expired"
+        if flag:
+            flags.append((slug, flag))
+        print(f"  {slug:38} {status:22} {'; '.join(bits)}"
+              + (f"\n  {'':38} >> {flag}" if flag else ""))
+
+    if flags:
+        print("-" * 78)
+        print("  Flags (advisory; the swap decision is always yours):")
+        for slug, flag in flags:
+            if "NUDGE-DUE" in flag:
+                print(f"    {slug}: day-5 nudge is due. Send it, then record it:\n"
+                      f"      python runner/sentrada_runner.py nudge --piece {slug}")
+            if "SWAP-RECOMMENDED" in flag:
+                print(f"    {slug}: 7 days past the nudge with nothing back. "
+                      f"If you decide to swap:\n"
+                      f"      python runner/sentrada_runner.py swap --piece {slug}")
+
+    # Share rate, split by variant: the number this pilot exists to learn.
+    teased = [e for e in ledger.values() if e.get("tease_date")]
+    received = [e for e in teased if e.get("submission_date")]
+    print("-" * 78)
+    if teased:
+        print(f"  Share rate: {len(received)}/{len(teased)} "
+              f"({100 * len(received) // len(teased)}%) teases converted to an address")
+        for variant in TEASE_VARIANTS:
+            vt = [e for e in teased if e.get("tease_variant") == variant]
+            vr = [e for e in vt if e.get("submission_date")]
+            if vt:
+                print(f"    {variant:8} {len(vr)}/{len(vt)} "
+                      f"({100 * len(vr) // len(vt)}%)")
+    else:
+        print("  Share rate: no teases sent yet.")
+
+
 # --- Batch processing -------------------------------------------------------
 # Two phases over a JSON manifest of recipients, each shelling out to the
 # single-piece `generate` path as a subprocess so one piece failing never kills
@@ -3321,6 +3681,76 @@ def main():
     cal = sub.add_parser("calibration",
                          help="compare 6B predictions against recorded outcomes")
     cal.set_defaults(func=cmd_calibration)
+
+    pr = sub.add_parser("printed",
+                        help="mark a piece printed in the capture ledger "
+                             "(tease refuses to run without it)")
+    pr.add_argument("--piece", required=True, help="the piece slug, e.g. jane-doe-acme")
+    pr.add_argument("--name", default="",
+                    help="recipient full name (needed when the piece folder is "
+                         "not in this container)")
+    pr.set_defaults(func=cmd_printed)
+
+    te = sub.add_parser("tease",
+                        help="generate the one-off address-capture link for a printed "
+                             "piece and mark it tease-sent")
+    te.add_argument("--piece", required=True, help="the piece slug")
+    te.add_argument("--channel", required=True, choices=list(TEASE_CHANNELS),
+                    help="where the tease goes out")
+    te.add_argument("--variant", required=True, choices=list(TEASE_VARIANTS),
+                    help="mystery (text only) or teaser (with the corner image)")
+    te.add_argument("--again", action="store_true",
+                    help="rotate the token for a piece that already has a live tease")
+    te.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    te.set_defaults(func=cmd_tease)
+
+    tz = sub.add_parser("teaser",
+                        help="crop a corner of the piece's render as a small inline "
+                             "jpg for the teaser-image variant")
+    tz.add_argument("--piece", required=True, help="the piece slug")
+    tz.add_argument("--corner", default="tl", choices=["tl", "tr", "bl", "br"],
+                    help="which corner to crop (default tl; pick another if the "
+                         "default shows too much or too little)")
+    tz.add_argument("--image", default="",
+                    help="path to the render (default: the piece folder's <slug>.png)")
+    tz.add_argument("--width", type=int, default=1200,
+                    help="longest side of the output jpg in px (default 1200)")
+    tz.add_argument("--out", default="", help="output path (default: <slug>-teaser.jpg "
+                                              "beside the render)")
+    tz.set_defaults(func=cmd_teaser)
+
+    nu = sub.add_parser("nudge", help="record that the day-5 nudge was sent")
+    nu.add_argument("--piece", required=True, help="the piece slug")
+    nu.set_defaults(func=cmd_nudge)
+
+    sw = sub.add_parser("swap",
+                        help="mark a silent piece swapped-after-silence (your decision; "
+                             "the runner only ever recommends)")
+    sw.add_argument("--piece", required=True, help="the piece slug")
+    sw.set_defaults(func=cmd_swap)
+
+    ad = sub.add_parser("address",
+                        help="pull a submitted delivery address from the capture store "
+                             "and print it (terminal only; never written to disk)")
+    ad.add_argument("--piece", required=True, help="the piece slug")
+    ad.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    ad.set_defaults(func=cmd_address)
+
+    dl = sub.add_parser("delivered",
+                        help="mark a piece delivered and delete its address from the "
+                             "capture store (the deletion the page promises)")
+    dl.add_argument("--piece", required=True, help="the piece slug")
+    dl.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    dl.set_defaults(func=cmd_delivered)
+
+    cp = sub.add_parser("capture",
+                        help="address-capture status: sync submissions from the store, "
+                             "show per-piece statuses, nudge-due / swap-recommended "
+                             "flags, and the share rate by variant")
+    cp.add_argument("--offline", action="store_true",
+                    help="skip the store poll; show the committed ledger only")
+    cp.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    cp.set_defaults(func=cmd_capture)
 
     bc = sub.add_parser("birch-csv",
                         help="emit the print supplier's shipping CSV (code, recipient, "

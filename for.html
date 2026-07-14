@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Sentrada</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#1B1B1B" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --charcoal: #1B1B1B;
+      --clay: #C4724E;
+      --clay-deep: #A55E3D;
+      --stone: #F2E9E1;
+      --stone-dim: rgba(242, 233, 225, 0.62);
+      --stone-faint: rgba(242, 233, 225, 0.14);
+      --hairline: rgba(242, 233, 225, 0.12);
+      --display: "Fraunces", "Times New Roman", Georgia, serif;
+      --body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, input:focus-visible, a:focus-visible {
+      outline: 2px solid var(--clay); outline-offset: 2px;
+    }
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--charcoal); color: var(--stone);
+      font-family: var(--body); font-size: 17px; line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100%;
+    }
+    body { display: flex; flex-direction: column; min-height: 100svh; }
+    .top { padding: 20px clamp(20px, 6vw, 40px) 0; }
+    .top img { height: 26px; width: auto; display: block; mix-blend-mode: lighten; }
+    main {
+      flex: 1;
+      width: 100%; max-width: 460px; margin: 0 auto;
+      padding: clamp(36px, 10vh, 88px) clamp(20px, 6vw, 40px) 48px;
+    }
+    h1 {
+      font-family: var(--display); font-weight: 400;
+      font-size: clamp(44px, 12vw, 64px); line-height: 1.05;
+      letter-spacing: -0.01em; margin: 0 0 18px;
+    }
+    .lede { font-size: 17px; color: var(--stone-dim); margin: 0 0 34px; max-width: 38ch; }
+    .hidden { display: none !important; }
+
+    .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 26px; }
+    .choice {
+      appearance: none; font: inherit; font-size: 16px; font-weight: 500;
+      color: var(--stone); background: transparent;
+      border: 1px solid var(--hairline); border-radius: 10px;
+      padding: 16px 12px; cursor: pointer; text-align: center;
+      transition: border-color .25s var(--ease), background-color .25s var(--ease);
+    }
+    .choice:hover { border-color: var(--stone-dim); }
+    .choice[aria-pressed="true"] { border-color: var(--clay); background: rgba(196, 114, 78, 0.12); }
+
+    form { margin: 0; }
+    label { display: block; font-size: 13px; color: var(--stone-dim); margin: 0 0 6px; }
+    input {
+      width: 100%; font: inherit; font-size: 16px;
+      color: var(--stone); background: rgba(242, 233, 225, 0.05);
+      border: 1px solid var(--hairline); border-radius: 8px;
+      padding: 13px 14px; margin: 0 0 16px; outline: none;
+      transition: border-color .2s var(--ease);
+    }
+    input:focus { border-color: var(--clay); }
+    .send {
+      appearance: none; width: 100%; font: inherit; font-size: 16px; font-weight: 500;
+      color: var(--charcoal); background: var(--clay);
+      border: 0; border-radius: 10px; padding: 16px; cursor: pointer;
+      margin-top: 6px;
+      transition: background-color .2s var(--ease), opacity .2s var(--ease);
+    }
+    .send:hover { background: var(--clay-deep); }
+    .send:disabled { opacity: 0.55; cursor: default; }
+    .privacy { font-size: 13px; color: var(--stone-dim); margin: 18px 0 0; }
+    .form-error { font-size: 14px; color: var(--clay); margin: 14px 0 0; min-height: 1.4em; }
+
+    .statement { font-family: var(--display); font-weight: 400; font-size: clamp(28px, 7.5vw, 38px); line-height: 1.25; margin: 0; }
+    .statement .quiet { color: var(--stone-dim); }
+    .state-sub { color: var(--stone-dim); margin: 20px 0 0; }
+    .state-sub a { color: var(--clay); text-decoration: none; border-bottom: 1px solid rgba(196, 114, 78, 0.4); }
+
+    footer {
+      padding: 26px clamp(20px, 6vw, 40px) calc(26px + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--hairline);
+      font-size: 13px; color: var(--stone-dim);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="top">
+    <img src="/assets/logoonblack.webp" alt="Sentrada" width="600" height="200" />
+  </div>
+
+  <main>
+    <!-- Active: greet by first name, one decision, address fields -->
+    <section id="active" class="hidden" aria-label="Delivery address">
+      <h1 id="first-name"></h1>
+      <p class="lede">One copy of something exists with your name on it. Tell me where it should land.</p>
+
+      <div class="choices" role="group" aria-label="Where should it land">
+        <button type="button" class="choice" id="choice-office" aria-pressed="false">My office</button>
+        <button type="button" class="choice" id="choice-other" aria-pressed="false">Somewhere else</button>
+      </div>
+
+      <form id="address-form" class="hidden" novalidate>
+        <label for="line1">Line one</label>
+        <input id="line1" name="line1" autocomplete="address-line1" required />
+        <label for="line2">Line two</label>
+        <input id="line2" name="line2" autocomplete="address-line2" />
+        <label for="city">City</label>
+        <input id="city" name="city" autocomplete="address-level2" required />
+        <label for="postcode">Postcode</label>
+        <input id="postcode" name="postcode" autocomplete="postal-code" required />
+        <label for="country">Country</label>
+        <input id="country" name="country" autocomplete="country-name" required />
+        <button type="submit" class="send" id="send">Send it</button>
+        <p class="form-error" id="form-error" role="alert"></p>
+        <p class="privacy">Used once, for this delivery. Deleted once it's signed for. That's the whole policy.</p>
+      </form>
+    </section>
+
+    <!-- Confirmation -->
+    <section id="done" class="hidden" aria-label="Confirmation">
+      <p class="statement">Done. It's on its way shortly. <span class="quiet">You'll know it when you see it.</span></p>
+    </section>
+
+    <!-- Expired or unknown token -->
+    <section id="expired" class="hidden" aria-label="Expired">
+      <p class="statement">This one's expired.</p>
+      <p class="state-sub">Write to me instead: <a href="mailto:joe@sentrada.io">joe@sentrada.io</a></p>
+    </section>
+
+    <!-- Backend unreachable -->
+    <section id="error" class="hidden" aria-label="Error">
+      <p class="statement">That didn't load.</p>
+      <p class="state-sub">Refresh to try again, or write to me: <a href="mailto:joe@sentrada.io">joe@sentrada.io</a></p>
+    </section>
+  </main>
+
+  <footer>Joe Chapman, Sentrada</footer>
+
+  <script>
+    (function () {
+      var token = (location.pathname.match(/^\/for\/([A-Za-z0-9_-]{16,64})$/) || [])[1] || "";
+      var sections = ["active", "done", "expired", "error"];
+      function show(id) {
+        sections.forEach(function (s) {
+          document.getElementById(s).classList.toggle("hidden", s !== id);
+        });
+      }
+
+      var addressType = "";
+      var officeBtn = document.getElementById("choice-office");
+      var otherBtn = document.getElementById("choice-other");
+      var form = document.getElementById("address-form");
+
+      function choose(type) {
+        addressType = type;
+        officeBtn.setAttribute("aria-pressed", String(type === "office"));
+        otherBtn.setAttribute("aria-pressed", String(type === "other"));
+        form.classList.remove("hidden");
+        document.getElementById("line1").focus();
+      }
+      officeBtn.addEventListener("click", function () { choose("office"); });
+      otherBtn.addEventListener("click", function () { choose("other"); });
+
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var errorLine = document.getElementById("form-error");
+        errorLine.textContent = "";
+        var fields = {
+          line1: document.getElementById("line1").value.trim(),
+          line2: document.getElementById("line2").value.trim(),
+          city: document.getElementById("city").value.trim(),
+          postcode: document.getElementById("postcode").value.trim(),
+          country: document.getElementById("country").value.trim()
+        };
+        if (!fields.line1 || !fields.city || !fields.postcode || !fields.country) {
+          errorLine.textContent = "Line one, city, postcode and country are all it needs.";
+          return;
+        }
+        var send = document.getElementById("send");
+        send.disabled = true;
+        send.textContent = "Sending";
+        fetch("/api/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token: token,
+            address_type: addressType,
+            line1: fields.line1, line2: fields.line2,
+            city: fields.city, postcode: fields.postcode, country: fields.country
+          })
+        }).then(function (resp) {
+          if (resp.ok) { show("done"); return; }
+          return resp.json().then(function (data) {
+            if (data && data.error === "expired") { show("expired"); return; }
+            throw new Error("submit failed");
+          });
+        }).catch(function () {
+          send.disabled = false;
+          send.textContent = "Send it";
+          errorLine.textContent = "That didn't go through. Try again.";
+        });
+      });
+
+      if (!token) { show("expired"); return; }
+      fetch("/api/token?t=" + encodeURIComponent(token))
+        .then(function (resp) {
+          if (!resp.ok) throw new Error("lookup failed");
+          return resp.json();
+        })
+        .then(function (data) {
+          if (data.state === "active") {
+            document.getElementById("first-name").textContent = data.first_name + ".";
+            show("active");
+          } else if (data.state === "submitted") {
+            show("done");
+          } else {
+            show("expired");
+          }
+        })
+        .catch(function () { show("error"); });
+    })();
+  </script>
+</body>
+</html>
