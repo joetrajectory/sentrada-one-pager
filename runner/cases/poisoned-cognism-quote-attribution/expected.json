@@ -1,0 +1,9 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "MISATTRIBUTED QUOTE",
+  "offending_detail": "The pull quote is Dominic Allon's April 2026 line, attributed to Chris Evans.",
+  "match_terms": [
+    "scales the very problems",
+    "allon"
+  ]
+}

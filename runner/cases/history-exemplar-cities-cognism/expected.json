@@ -1,0 +1,9 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "FABRICATED EDITION-LINE CITY",
+  "offending_detail": "San Francisco and Stockholm carried over from the template's own example city list; research supports London, New York, Boston, Berlin.",
+  "match_terms": [
+    "stockholm",
+    "san francisco"
+  ]
+}

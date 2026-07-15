@@ -45,6 +45,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import time
 
 import tempfile
 import urllib.error
@@ -598,6 +599,12 @@ def run_email_engine(engine_path, data_path, output_path=None, check=False):
 
 def newspaper_copy_text(data):
     parts = [
+        # The printed dateline anchors violation 6's elapsed-time arithmetic;
+        # without it the gate assumes today's date and a true "nine months in
+        # post" on a June piece gets flagged as ten in July (found by the
+        # harness's first baseline run). Same blind-spot class as the edition
+        # line below.
+        "DATE: " + data.get("date", ""),
         # The edition line's city list reads as the company's real locations, so
         # the grounding gate must see it (a fabricated city once shipped inside
         # the "fictional furniture" blind spot). The masthead stays out: it is
@@ -2675,6 +2682,15 @@ OUTCOME_CHOICES = ("replied", "meeting", "opportunity", "declined", "no_response
                    "bounced")  # declined = a reply, but a "no thank you"
 OUTCOMES_PATH = os.path.join(RUNNER_DIR, "outcomes.json")
 
+# Doctrine-cut fields on every ledger record. reply_language uses P7b's
+# classification vocabulary (gift / problem / mixed / none). angle_type and
+# source_signal are free strings, but the monthly review cuts by exact value,
+# so keep to the starter vocabularies unless a new value earns its place:
+#   angle_type:    problem-tension | achievement-gap | open-loop | other
+#   source_signal: live-need-signal | job-change | funding-or-announcement |
+#                  referral-or-community | cold-list | other
+REPLY_LANGUAGES = ("gift", "problem", "mixed", "none")
+
 
 def cmd_outcome(args):
     ledger = json.loads(read_file(OUTCOMES_PATH)) if os.path.exists(OUTCOMES_PATH) else {}
@@ -2687,6 +2703,11 @@ def cmd_outcome(args):
         rec.setdefault("recipient", meta.get("recipient_name", ""))
         rec.setdefault("company", meta.get("recipient_company", ""))
         rec.setdefault("format", meta.get("format", ""))
+        # The P7b reply handler stamps these into meta.json when the first
+        # reply is processed; harvest rather than re-asking.
+        for key in ("first_reply_date", "reply_language"):
+            if meta.get(key):
+                rec.setdefault(key, meta[key])
     sixb_path = os.path.join(folder, "qc_recipient.md")
     if os.path.exists(sixb_path):
         v = extract_6b_verdict(read_file(sixb_path))
@@ -2699,18 +2720,110 @@ def cmd_outcome(args):
         v = extract_6b_verdict(read_file(pkg_path))
         if v:
             rec["verdict_package"] = v
-    rec["result"] = args.result
+    if args.result:
+        rec["result"] = args.result
+    elif not rec.get("result"):
+        rec["result"] = "no_response"  # the default until a reply changes it
     if args.date:
         rec["date"] = args.date
     if args.notes:
         rec["notes"] = args.notes
+    for key, val in (("format", args.format), ("angle_type", args.angle),
+                     ("source_signal", args.signal),
+                     ("delivered_date", args.delivered),
+                     ("first_reply_date", args.first_reply),
+                     ("reply_language", args.reply_language)):
+        if val:
+            rec[key] = val
     ledger[args.slug] = rec
     write_file(OUTCOMES_PATH, json.dumps(ledger, indent=2))
     predicted = rec.get("verdict_package") or rec.get("verdict_6b")
-    print(f"[outcome] {args.slug}: {args.result}"
+    print(f"[outcome] {args.slug}: {rec['result']}"
           + (f"  (6B predicted: {predicted})" if predicted else ""))
+    missing = [k for k in ("format", "angle_type", "source_signal",
+                           "delivered_date") if not rec.get(k)]
+    if missing:
+        print("[outcome] doctrine fields still unset: " + ", ".join(missing)
+              + " (set them with --format/--angle/--signal/--delivered)")
     print(f"[outcome] ledger updated: {os.path.relpath(OUTCOMES_PATH, REPO_ROOT)} "
           "— commit and push it so the record survives this container")
+
+
+# --- monthly-review: the ledger becomes doctrine proposals -------------------
+
+REVIEWS_DIR = os.path.join(RUNNER_DIR, "reviews")
+REVIEW_CUTS = (("format", "format"), ("angle type", "angle_type"),
+               ("source signal", "source_signal"),
+               ("reply language", "reply_language"))
+DIRECTIONAL_N = 20  # below this, a cut's numbers are directional, not doctrine
+
+
+def _review_cut_table(ledger, key):
+    positive = {"replied", "meeting", "opportunity"}
+    cut = {}
+    for rec in ledger.values():
+        t = cut.setdefault(str(rec.get(key) or "(unset)"),
+                           {"sent": 0, "responded": 0, "positive": 0})
+        t["sent"] += 1
+        if rec.get("result") not in ("no_response", "bounced", None):
+            t["responded"] += 1
+        if rec.get("result") in positive:
+            t["positive"] += 1
+    lines = ["| value | sent | responded | positive | basis |",
+             "| --- | --- | --- | --- | --- |"]
+    for val, t in sorted(cut.items()):
+        basis = "DIRECTIONAL" if t["sent"] < DIRECTIONAL_N else "doctrine-grade"
+        lines.append(f"| {val} | {t['sent']} | {t['responded']} "
+                     f"({100 * t['responded'] // t['sent']}%) | {t['positive']} "
+                     f"({100 * t['positive'] // t['sent']}%) | {basis} |")
+    return "\n".join(lines)
+
+
+def cmd_monthly_review(args):
+    _usage_reset()
+    config = load_config(args.config)
+    ledger = json.loads(read_file(OUTCOMES_PATH)) if os.path.exists(OUTCOMES_PATH) else {}
+    if not ledger:
+        die("no outcomes recorded yet (runner/outcomes.json is empty). Record "
+            "some with the `outcome` command first.")
+    month = args.month or time.strftime("%Y-%m")
+
+    doc = [f"# Sentrada monthly review — {month}", "",
+           f"All {len(ledger)} piece records in the ledger, compiled "
+           f"{time.strftime('%Y-%m-%d')}. Cuts with fewer than {DIRECTIONAL_N} "
+           "pieces are labelled DIRECTIONAL: read them as hints, never as "
+           "doctrine.", ""]
+    for label, key in REVIEW_CUTS:
+        doc += [f"## By {label}", "", _review_cut_table(ledger, key), ""]
+    doc += ["## Every piece", ""]
+    for slug, rec in sorted(ledger.items()):
+        bits = [rec.get("format") or "?", rec.get("angle_type") or "angle unset",
+                rec.get("source_signal") or "signal unset",
+                "delivered " + (rec.get("delivered_date") or "?"),
+                "first reply " + (rec.get("first_reply_date") or "-"),
+                "language " + (rec.get("reply_language") or "-"),
+                rec.get("result", "?")]
+        doc.append(f"- **{slug}** — " + " | ".join(bits))
+        if rec.get("notes"):
+            doc.append(f"  - {rec['notes']}")
+    compiled = "\n".join(doc)
+
+    print(f"[monthly-review] compiling {len(ledger)} piece record(s); asking "
+          f"for doctrine observations ({model_for(config, 'p2')})...")
+    observations = cli_text(fill(load_template("monthly_review.md"),
+                                 {"month": month, "compiled": compiled,
+                                  "directional_n": DIRECTIONAL_N}),
+                            model_for(config, "p2"))
+    compiled += ("\n\n## Doctrine observations (proposals only — nothing "
+                 "changes automatically)\n\n" + observations + "\n")
+
+    os.makedirs(REVIEWS_DIR, exist_ok=True)
+    out_path = os.path.join(REVIEWS_DIR, f"{month}.md")
+    write_file(out_path, compiled)
+    print(f"\n[monthly-review] written to {os.path.relpath(out_path, REPO_ROOT)}")
+    print("Nothing has been changed anywhere: every observation is a proposal "
+          "for you to act on or ignore.")
+    _print_usage("monthly-review")
 
 
 def cmd_calibration(args):
@@ -3556,6 +3669,19 @@ def _read_batch_approvals(manifest_path):
 
 def cmd_batch_build(args):
     entries, _ = _load_manifest(args.manifest)
+    # The staleness guard: a gate template edited since the last harness run is
+    # an unmeasured gate, and a real batch is the wrong place to find out what
+    # it now misses. Warn and require an explicit yes; never silently proceed.
+    warn = gate_staleness_warning()
+    if warn and not args.ignore_stale_gates:
+        print("\n" + "!" * 70)
+        print(f"[guard] {warn}.")
+        print("[guard] The grounding gate is unmeasured against the exam. Run\n"
+              "        `python runner/sentrada_runner.py harness` first.")
+        print("!" * 70)
+        ans = input("Type 'yes' to build this batch anyway: ").strip()
+        if ans.lower() != "yes":
+            die("batch stopped. Run the harness, then re-run batch-build.")
     by_slug = {_piece_slug(e): e for e in entries}
     approvals = _read_batch_approvals(args.manifest)
     results = []
@@ -3824,6 +3950,441 @@ def _finish_gate_probe(failures):
     _print_usage("gate-probe")
 
 
+# --- harness: the grounding-gate exam ----------------------------------------
+# A committed library of real cases (research + gate-visible copy + expected
+# verdict) that the CURRENT 4b template is run over, one grounding call per
+# case, nothing else in the chain. Where gate-probe plants synthetic violations
+# into one clean piece to find copy-text-builder blind spots, the harness holds
+# the durable exam: every incident that ever shipped (or nearly shipped) becomes
+# a named case, so a template edit that quietly un-learns an old lesson shows up
+# as a named regression. Scope is factual and credibility errors only.
+#
+# Case folder: runner/cases/<case-id>/ containing research.md, copy.txt,
+# expected.json, and (email cases only) sender_facts.txt. expected.json is
+# either {"verdict": "pass"} or {"verdict": "must_flag", "violation_type": ...,
+# "offending_detail": ..., "match_terms": [...]}. A must-flag case counts as
+# CAUGHT only when the gate flags it AND one of the match_terms appears in the
+# gate's issues; flagged-for-a-different-claim counts as a MISS (listed as
+# such), because the real error still ships. Cases created by `flag` carry
+# "draft": true until `retro` confirms them.
+
+CASES_DIR = os.path.join(RUNNER_DIR, "cases")
+SCORECARD_PATH = os.path.join(CASES_DIR, "scorecard.json")
+RETRO_LOG_PATH = os.path.join(CASES_DIR, "retro_log.md")
+GROUNDING_TEMPLATE = "prompt4b_grounding.md"
+
+
+def gate_template_files():
+    """Every template file the grounding gate loads at call time. The 4b
+    template is standalone today; if it ever gains the {{house_rules}} include,
+    the guard automatically starts watching house_rules.md too."""
+    files = [GROUNDING_TEMPLATE]
+    text = read_file(os.path.join(TEMPLATE_DIR, GROUNDING_TEMPLATE))
+    if "{{house_rules}}" in text:
+        files.append("house_rules.md")
+    return files
+
+
+def gate_templates_state():
+    return {name: _engine_file_sha1(os.path.join(TEMPLATE_DIR, name))
+            for name in gate_template_files()}
+
+
+def gate_staleness_warning():
+    """None when the last saved harness run exercised the current gate
+    templates; otherwise a one-line explanation for the batch guard."""
+    if not os.path.exists(SCORECARD_PATH):
+        return "no harness run is recorded (runner/cases/scorecard.json missing)"
+    sc = json.loads(read_file(SCORECARD_PATH))
+    stale = [name for name, sha in gate_templates_state().items()
+             if sc.get("templates", {}).get(name) != sha]
+    if stale:
+        return (", ".join(stale) + " changed since the last harness run"
+                + (f" ({sc.get('run_at')})" if sc.get("run_at") else ""))
+    return None
+
+
+def _load_cases(only=None):
+    if not os.path.isdir(CASES_DIR):
+        die(f"no cases folder at {os.path.relpath(CASES_DIR, REPO_ROOT)}.")
+    cases, skipped = [], []
+    for d in sorted(os.listdir(CASES_DIR)):
+        path = os.path.join(CASES_DIR, d)
+        if not os.path.isdir(path):
+            continue
+        if only and d not in only:
+            continue
+        needed = [os.path.join(path, f) for f in ("research.md", "copy.txt",
+                                                  "expected.json")]
+        if not all(os.path.exists(p) for p in needed):
+            skipped.append(d)
+            continue
+        expected = json.loads(read_file(needed[2]))
+        if expected.get("verdict") not in ("pass", "must_flag"):
+            skipped.append(d)
+            continue
+        sf_path = os.path.join(path, "sender_facts.txt")
+        cases.append({
+            "id": d,
+            "research": read_file(needed[0]),
+            "copy_text": read_file(needed[1]),
+            "sender_facts": read_file(sf_path) if os.path.exists(sf_path) else "",
+            "expected": expected,
+        })
+    for d in skipped:
+        print(f"[warn] case '{d}' is malformed (missing files or bad verdict); skipped.")
+    return cases
+
+
+def _judge_case(case, grounded, issues):
+    """Score one gate result against the case's expected verdict. Returns
+    (ok: bool, outcome: str, detail: str)."""
+    exp = case["expected"]
+    if exp["verdict"] == "pass":
+        if grounded:
+            return True, "clean", ""
+        flagged = "; ".join(f"\"{i.get('claim', '')[:60]}\"" for i in issues)
+        return False, "false_alarm", flagged
+    blob = json.dumps(issues).lower()
+    terms = [str(t).lower() for t in (exp.get("match_terms") or []) if str(t).strip()]
+    if grounded:
+        return False, "missed", "(gate passed it)"
+    if not terms:
+        # A fresh flag with no confirmed terms yet: any flag counts, noted as such.
+        return True, "caught", "(no match terms yet; any flag counted)"
+    if any(t in blob for t in terms):
+        return True, "caught", ""
+    return False, "missed", ("(flagged, but no issue mentions "
+                             + " or ".join(f"'{t}'" for t in terms) + ")")
+
+
+def run_harness(config, only=None):
+    """Run the grounding gate over the case library and print the scorecard.
+    Returns the results dict. Saves the scorecard (and compares against the
+    previous one) only on full runs; a --only subset is a spot check."""
+    cases = _load_cases(only=only)
+    if not cases:
+        die("no valid cases found in runner/cases/.")
+    must_flags = [c for c in cases if c["expected"]["verdict"] == "must_flag"]
+    must_passes = [c for c in cases if c["expected"]["verdict"] == "pass"]
+
+    print("\n" + "=" * 70)
+    print("HARNESS — grounding-gate exam over runner/cases/")
+    print("=" * 70)
+    print(f"\n[cases] {len(cases)} loaded ({len(must_flags)} must-flag, "
+          f"{len(must_passes)} must-pass); one grounding call each "
+          f"({model_for(config, 'p4b')})...\n")
+
+    results = {}
+    for case in cases:
+        grounded, issues = grounding_check(config, case["research"],
+                                           case["copy_text"],
+                                           sender_facts=case["sender_facts"])
+        ok, outcome, detail = _judge_case(case, grounded, issues)
+        results[case["id"]] = {
+            "expected": case["expected"]["verdict"], "outcome": outcome,
+            "detail": detail,
+            "violation_type": case["expected"].get("violation_type", ""),
+            "draft": bool(case["expected"].get("draft")),
+        }
+        mark = {"caught": "CAUGHT", "clean": "CLEAN", "missed": "MISSED",
+                "false_alarm": "FALSE"}[outcome]
+        note = results[case["id"]]["violation_type"] or ""
+        if results[case["id"]]["draft"]:
+            note = (note + " (draft)").strip()
+        print(f"  {mark:7} {case['id']:36} {note}"
+              + (f"  {detail}" if detail and not ok else ""))
+
+    caught = [i for i, r in results.items()
+              if r["expected"] == "must_flag" and r["outcome"] == "caught"]
+    missed = [i for i, r in results.items() if r["outcome"] == "missed"]
+    false_alarms = [i for i, r in results.items() if r["outcome"] == "false_alarm"]
+
+    print("-" * 70)
+    print(f"Caught {len(caught)} of {len(must_flags)} must-flag(s)."
+          + ("" if not missed else " Misses:"))
+    for i in missed:
+        print(f"  - {i} {results[i]['detail']}")
+    print(f"Wrongly flagged {len(false_alarms)} of {len(must_passes)} "
+          "must-pass(es)." + ("" if not false_alarms else " False alarms:"))
+    for i in false_alarms:
+        print(f"  - {i}: {results[i]['detail']}")
+
+    if only:
+        print("\n[scorecard] subset run (--only); baseline not updated.")
+        _print_usage("harness (subset)")
+        return results
+
+    previous = (json.loads(read_file(SCORECARD_PATH))
+                if os.path.exists(SCORECARD_PATH) else None)
+    _compare_scorecards(previous, results)
+    history = (previous or {}).get("history", [])
+    if previous:
+        history = history + [{"run_at": previous.get("run_at"),
+                              "caught": previous.get("caught"),
+                              "must_flags": previous.get("must_flags"),
+                              "false_alarms": previous.get("false_alarms"),
+                              "must_passes": previous.get("must_passes")}]
+    write_file(SCORECARD_PATH, json.dumps({
+        "run_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "templates": gate_templates_state(),
+        "caught": len(caught), "must_flags": len(must_flags),
+        "false_alarms": len(false_alarms), "must_passes": len(must_passes),
+        "results": results,
+        "history": history[-50:],
+    }, indent=2))
+    print(f"[scorecard] saved to {os.path.relpath(SCORECARD_PATH, REPO_ROOT)}")
+    _print_usage("harness")
+    return results
+
+
+def _compare_scorecards(previous, results):
+    if not previous or not previous.get("results"):
+        print("\nvs last run: first saved run, nothing to compare against.")
+        return
+    old = previous["results"]
+    both = [i for i in results if i in old]
+    newly_caught = [i for i in both if results[i]["outcome"] == "caught"
+                    and old[i]["outcome"] == "missed"]
+    newly_missed = [i for i in both if results[i]["outcome"] == "missed"
+                    and old[i]["outcome"] == "caught"]
+    new_false = [i for i in both if results[i]["outcome"] == "false_alarm"
+                 and old[i]["outcome"] == "clean"]
+    cleared_false = [i for i in both if results[i]["outcome"] == "clean"
+                     and old[i]["outcome"] == "false_alarm"]
+    if newly_missed or new_false:
+        verdict = "WORSE"
+    elif newly_caught or cleared_false:
+        verdict = "BETTER"
+    else:
+        verdict = "SAME"
+    print(f"\nvs last run ({previous.get('run_at', '?')}): {verdict}")
+    for label, ids in (("newly caught", newly_caught),
+                       ("newly missed", newly_missed),
+                       ("new false alarms", new_false),
+                       ("false alarms cleared", cleared_false)):
+        if ids:
+            print(f"  {label}: " + ", ".join(ids))
+
+
+def cmd_harness(args):
+    _usage_reset()
+    config = load_config(args.config)
+    only = {c.strip() for c in (args.only or "").split(",") if c.strip()} or None
+    results = run_harness(config, only=only)
+    bad = sum(1 for r in results.values() if r["outcome"] in ("missed", "false_alarm"))
+    sys.exit(1 if bad else 0)
+
+
+# --- flag / retro: shipped failures become cases, cases become rules ---------
+# `flag` turns a piece I caught a factual problem in into a new must-flag case
+# in one step and logs it. `retro` gathers everything flagged since the last
+# retro, drafts a candidate rule + exemplar pair per flag for approval, applies
+# each approved rule to the 4b template, and immediately re-runs the harness so
+# a rule that regresses the gate is caught the moment it lands. Nothing edits a
+# template without an explicit per-rule approval inside retro.
+
+
+def _sender_facts_for(meta, config):
+    """The sender-facts block a piece was gated under (meta snapshot first,
+    live config as fallback), matching gate-probe's convention."""
+    sender = (meta or {}).get("sender") or config.get("sender", {})
+    return "\n".join(
+        f"- {x}" for x in (sender.get("company", ""), sender.get("what_they_sell", ""),
+                           sender.get("proof_points", "")) if str(x).strip())
+
+
+def _quoted_terms(note):
+    """Match terms drafted from the note: any \"quoted\" phrases in it."""
+    return [t.strip() for t in re.findall(r'"([^"]{3,60})"', note) if t.strip()]
+
+
+def cmd_flag(args):
+    config = load_config(args.config)
+    case_id = args.case_id or ("flagged-" + slugify(args.slug))
+    case_dir = os.path.join(CASES_DIR, case_id)
+    if os.path.exists(case_dir):
+        die(f"case '{case_id}' already exists. Pass --case-id to pick another name.")
+
+    folder = os.path.join(PIECES_DIR, args.slug)
+    sender_facts = ""
+    if os.path.isdir(folder):
+        research = read_file(os.path.join(folder, "research.md"))
+        meta_path = os.path.join(folder, "meta.json")
+        meta = json.loads(read_file(meta_path)) if os.path.exists(meta_path) else {}
+        fmt = meta.get("format", args.format)
+        data_path = os.path.join(folder, "data.json")
+        if os.path.exists(data_path) and fmt in _COPY_TEXT_BUILDERS:
+            copy_text = _COPY_TEXT_BUILDERS[fmt](json.loads(read_file(data_path)))
+        elif args.copy:
+            copy_text = read_file(args.copy)
+        else:
+            die(f"{args.slug} has no data.json a copy-text builder understands "
+                f"(format '{fmt}'). Pass the gate-visible copy with --copy.")
+        if fmt == "email":
+            sender_facts = _sender_facts_for(meta, config)
+    else:
+        # Piece folders are ephemeral; a flag must still be possible after the
+        # container that built the piece is gone.
+        if not (args.research and args.copy):
+            die(f"no piece folder at runner/pieces/{args.slug}. Pass --research "
+                "and --copy to archive the case from files.")
+        research = read_file(args.research)
+        copy_text = read_file(args.copy)
+        if args.format == "email":
+            sender_facts = _sender_facts_for({}, config)
+
+    os.makedirs(case_dir)
+    write_file(os.path.join(case_dir, "research.md"), research)
+    write_file(os.path.join(case_dir, "copy.txt"), copy_text)
+    if sender_facts:
+        write_file(os.path.join(case_dir, "sender_facts.txt"), sender_facts)
+    write_file(os.path.join(case_dir, "note.md"), args.note + "\n")
+    write_file(os.path.join(case_dir, "expected.json"), json.dumps({
+        "verdict": "must_flag",
+        "violation_type": args.violation or "UNCLASSIFIED",
+        "offending_detail": args.note,
+        "match_terms": _quoted_terms(args.note),
+        "draft": True,
+    }, indent=2))
+
+    stamp = time.strftime("%Y-%m-%d")
+    line = f"- {stamp} | {case_id} | {args.slug} | {args.note}\n"
+    header = ("# Retro log\n\nEvery `flag` appends here; every `retro` closes "
+              "the entries above it with a marker.\n\n")
+    existing = read_file(RETRO_LOG_PATH) if os.path.exists(RETRO_LOG_PATH) else header
+    write_file(RETRO_LOG_PATH, existing + line)
+    print(f"[flag] archived as {os.path.relpath(case_dir, REPO_ROOT)} "
+          "(must-flag, draft until the next retro)")
+    print(f"[flag] logged to {os.path.relpath(RETRO_LOG_PATH, REPO_ROOT)}")
+    if not _quoted_terms(args.note):
+        print("[flag] no \"quoted\" phrase in the note, so no match terms were "
+              "drafted; any gate flag will count until retro confirms terms.")
+    print("[flag] commit runner/cases/ so the case survives this container.")
+
+
+def _flags_since_last_retro():
+    if not os.path.exists(RETRO_LOG_PATH):
+        return []
+    entries = []
+    for line in read_file(RETRO_LOG_PATH).splitlines():
+        if line.startswith("## Retro"):
+            entries = []
+        elif line.startswith("- ") and line.count("|") >= 3:
+            date, case_id, slug, note = [p.strip() for p in
+                                         line[2:].split("|", 3)]
+            entries.append({"date": date, "case_id": case_id, "slug": slug,
+                            "note": note})
+    return entries
+
+
+def _append_retro_rule(rule_title, rule_text):
+    """Insert the approved rule as the next numbered content violation in the
+    4b template, before the inputs section. Returns the template's prior text
+    so the caller can revert."""
+    path = os.path.join(TEMPLATE_DIR, GROUNDING_TEMPLATE)
+    before = read_file(path)
+    anchor = "\nSource research (facts about the RECIPIENT"
+    if anchor not in before:
+        die("could not find the inputs section in the 4b template; apply the "
+            "rule by hand.")
+    next_num = max([int(n) for n in re.findall(r"(?m)^(\d+)\.\s+[A-Z]", before)]
+                   or [0]) + 1
+    block = f"{next_num}. {rule_title.strip().upper()}: {rule_text.strip()}\n"
+    write_file(path, before.replace(anchor, "\n" + block + anchor, 1))
+    return before
+
+
+def cmd_retro(args):
+    _usage_reset()
+    config = load_config(args.config)
+    entries = _flags_since_last_retro()
+    if not entries:
+        print("[retro] nothing flagged since the last retro. Flag pieces with:\n"
+              "  python runner/sentrada_runner.py flag --slug <slug> --note '...'")
+        return
+
+    template_path = os.path.join(TEMPLATE_DIR, GROUNDING_TEMPLATE)
+    decisions = []
+    for e in entries:
+        case_dir = os.path.join(CASES_DIR, e["case_id"])
+        if not os.path.isdir(case_dir):
+            print(f"[retro] case folder missing for {e['case_id']}; skipping.")
+            decisions.append((e, "missing", None))
+            continue
+        expected = json.loads(read_file(os.path.join(case_dir, "expected.json")))
+        print("\n" + "=" * 70)
+        print(f"RETRO — {e['case_id']} (flagged {e['date']})")
+        print("=" * 70)
+        print(f"Note: {e['note']}")
+
+        # Not fill(): the embedded gate template carries its own {{placeholders}}
+        # which fill() would substitute or strip. Insert it verbatim, last.
+        prompt = load_template("harness_retro.md")
+        for key, val in (("research", read_file(os.path.join(case_dir, "research.md"))),
+                         ("copy_text", read_file(os.path.join(case_dir, "copy.txt"))),
+                         ("note", e["note"]),
+                         ("offending_detail", expected.get("offending_detail", e["note"]))):
+            prompt = prompt.replace("{{" + key + "}}", val)
+        prompt = prompt.replace("{{gate_template}}", read_file(template_path))
+        print(f"\n[retro] drafting a candidate rule ({model_for(config, 'p4b')})...")
+        _, draft = cli_json(prompt, model_for(config, "p4b"))
+        title = str(draft.get("rule_title", "")).strip() or "UNCLASSIFIED"
+        rule_text = str(draft.get("rule_text", "")).strip()
+        terms = [str(t) for t in (draft.get("match_terms") or []) if str(t).strip()]
+        changelog = str(draft.get("changelog_line", "")).strip()
+        print(f"\nCandidate rule {title}:\n  {rule_text}")
+        print(f"Match terms for the case: {terms}")
+
+        ans = input("\nType 'approve' to apply this rule to the 4b template and "
+                    "re-run the harness, anything else to decline: ").strip()
+        if ans.lower() != "approve":
+            decisions.append((e, "declined", changelog))
+            continue
+
+        backup = _append_retro_rule(title, rule_text)
+        expected["violation_type"] = title
+        expected["match_terms"] = sorted(set((expected.get("match_terms") or [])
+                                             + terms))
+        expected.pop("draft", None)
+        write_file(os.path.join(case_dir, "expected.json"),
+                   json.dumps(expected, indent=2))
+        print("\n[retro] rule applied. Running the harness to confirm nothing "
+              "regressed...")
+        results = run_harness(config)
+        regressed = [i for i, r in results.items()
+                     if r["outcome"] in ("missed", "false_alarm")]
+        if regressed:
+            ans = input("\nThe scorecard is not clean after this rule. Type "
+                        "'revert' to remove the rule again, anything else to "
+                        "keep it: ").strip()
+            if ans.lower() == "revert":
+                write_file(template_path, backup)
+                decisions.append((e, "reverted", changelog))
+                print("[retro] rule reverted; the case stays confirmed so the "
+                      "miss remains visible.")
+                continue
+        decisions.append((e, "approved", changelog))
+
+    stamp = time.strftime("%Y-%m-%d")
+    lines = [f"\n## Retro {stamp}\n"]
+    for e, decision, changelog in decisions:
+        lines.append(f"- {e['case_id']}: {decision}")
+        if decision == "approved" and changelog:
+            lines.append(f"  - Notion changelog line: {changelog}")
+    write_file(RETRO_LOG_PATH, read_file(RETRO_LOG_PATH) + "\n".join(lines) + "\n")
+    print("\n" + "=" * 70)
+    print("RETRO DONE")
+    print("=" * 70)
+    for e, decision, changelog in decisions:
+        print(f"  {decision:9} {e['case_id']}")
+        if decision == "approved" and changelog:
+            print(f"            paste to the Notion 4b page: {changelog}")
+    print("\nCommit runner/templates/ and runner/cases/ so the rules and "
+          "scorecard survive this container.")
+    _print_usage("retro")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Sentrada chain runner")
     sub = ap.add_subparsers(dest="command", required=True)
@@ -3905,12 +4466,86 @@ def main():
     sc.set_defaults(func=cmd_ship_check)
 
     oc = sub.add_parser("outcome",
-                        help="record what happened to a sent piece (feeds 6B calibration)")
+                        help="record what happened to a sent piece (feeds 6B "
+                             "calibration and the monthly review)")
     oc.add_argument("--slug", required=True, help="the piece folder name, e.g. chris-evans-cognism")
-    oc.add_argument("--result", required=True, choices=list(OUTCOME_CHOICES))
+    oc.add_argument("--result", default="", choices=[""] + list(OUTCOME_CHOICES),
+                    help="what happened (defaults to no_response until a reply "
+                         "changes it)")
     oc.add_argument("--date", default="", help="when it happened, e.g. 2026-07-10")
     oc.add_argument("--notes", default="", help="optional context, e.g. 'replied to Touch 2'")
+    oc.add_argument("--format", default="", dest="format",
+                    help="piece format, when no piece folder remains to read it from")
+    oc.add_argument("--angle", default="",
+                    help="angle type: problem-tension | achievement-gap | "
+                         "open-loop | other")
+    oc.add_argument("--signal", default="",
+                    help="source signal: live-need-signal | job-change | "
+                         "funding-or-announcement | referral-or-community | "
+                         "cold-list | other")
+    oc.add_argument("--delivered", default="",
+                    help="delivery confirmed date, e.g. 2026-07-08")
+    oc.add_argument("--first-reply", default="", dest="first_reply",
+                    help="date the first reply arrived (P7b stamps this "
+                         "automatically when it processes a reply)")
+    oc.add_argument("--reply-language", default="", dest="reply_language",
+                    choices=[""] + list(REPLY_LANGUAGES),
+                    help="P7b classification: gift | problem | mixed | none")
     oc.set_defaults(func=cmd_outcome)
+
+    mr = sub.add_parser("monthly-review",
+                        help="compile every piece record and outcome into one "
+                             "document and draft doctrine observations "
+                             "(proposals only; nothing changes automatically)")
+    mr.add_argument("--month", default="",
+                    help="label for the review file, e.g. 2026-07 (default: "
+                         "the current month)")
+    mr.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    mr.set_defaults(func=cmd_monthly_review)
+
+    h = sub.add_parser("harness",
+                       help="run the current 4b template over every case in "
+                            "runner/cases/ and print the scorecard against the "
+                            "last saved run")
+    h.add_argument("--only", default="",
+                   help="comma-separated case ids to spot-check (does not "
+                        "update the saved scorecard)")
+    h.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    h.set_defaults(func=cmd_harness)
+
+    fl = sub.add_parser("flag",
+                        help="archive a piece's research + copy + your note as "
+                             "a new must-flag harness case and log it for the "
+                             "next retro")
+    fl.add_argument("--slug", required=True,
+                    help="the piece folder name (or, with --research/--copy, "
+                         "just the id to file the case under)")
+    fl.add_argument("--note", required=True,
+                    help="what shipped that should have been flagged; put the "
+                         "offending phrase in \"quotes\" to seed the match terms")
+    fl.add_argument("--violation", default="",
+                    help="violation type if you already know it, e.g. "
+                         "'STRIPPED QUALIFIER'")
+    fl.add_argument("--case-id", default="", dest="case_id",
+                    help="case folder name (default: flagged-<slug>)")
+    fl.add_argument("--research", default="",
+                    help="research file, when the piece folder no longer exists")
+    fl.add_argument("--copy", default="",
+                    help="gate-visible copy text file, when the piece folder "
+                         "no longer exists or has no data.json")
+    fl.add_argument("--format", default="", dest="format",
+                    help="piece format (needed with --research/--copy; 'email' "
+                         "attaches the sender facts)")
+    fl.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    fl.set_defaults(func=cmd_flag)
+
+    rt = sub.add_parser("retro",
+                        help="gather everything flagged since the last retro, "
+                             "draft a candidate rule + exemplar per flag for "
+                             "approval, apply approved rules to the 4b template "
+                             "and immediately re-run the harness")
+    rt.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    rt.set_defaults(func=cmd_retro)
 
     cal = sub.add_parser("calibration",
                          help="compare 6B predictions against recorded outcomes")
@@ -4025,6 +4660,10 @@ def main():
                         help="phase 2: build every APPROVEd piece from the manifest")
     bd.add_argument("--manifest", required=True, help="path to the JSON manifest")
     bd.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    bd.add_argument("--ignore-stale-gates", action="store_true",
+                    dest="ignore_stale_gates",
+                    help="skip the warning when a gate template is newer than "
+                         "the last harness run (non-interactive use)")
     bd.set_defaults(func=cmd_batch_build)
 
     args = ap.parse_args()

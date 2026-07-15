@@ -1,0 +1,8 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "UNSOURCED INDUSTRY COMMONPLACE",
+  "offending_detail": "'Reply rates ... on most estimates, fallen below one per cent' has no research source; the hedge makes it worse.",
+  "match_terms": [
+    "one per cent"
+  ]
+}

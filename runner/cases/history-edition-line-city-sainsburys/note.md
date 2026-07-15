@@ -1,0 +1,1 @@
+Reconstructs the 6 July 2026 retro: a fabricated city shipped inside the edition line, the gate's then blind spot. The runner now includes the edition line in the gate's copy text and the fictional-furniture exemption is narrowed to masthead + bylines.

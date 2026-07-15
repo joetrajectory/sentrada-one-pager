@@ -261,8 +261,25 @@ python runner/sentrada_runner.py ...
                 after any edit to prompt4b, house_rules or a copy-text builder
                 (--lint-only for the free deterministic subset)
   birch-csv     shipping CSV for the print supplier (holds addresses; never commit)
+  harness       the grounding-gate exam: run the CURRENT 4b template over every
+                case in runner/cases/ (research + copy + expected verdict, seeded
+                from every shipped/near-shipped incident), one Opus call per
+                case, scorecard vs the last saved run. batch-build warns when a
+                gate template changed after the last harness run
+  flag          archive a piece's research + copy + your note as a new must-flag
+                harness case and log it for the next retro (put the offending
+                phrase in "quotes" to seed the match terms)
+  retro         everything flagged since the last retro -> candidate rule +
+                exemplar pairs; each applied to prompt4b_grounding.md only on
+                your approval, with the harness re-run immediately after
   outcome       record what happened to a sent piece (replied/meeting/no_response/...)
+                plus the doctrine fields: --format/--angle/--signal/--delivered/
+                --first-reply/--reply-language (P7b stamps the last two into
+                meta.json when it processes a reply; outcome harvests them)
   calibration   compare 6B predictions against recorded outcomes
+  monthly-review compile the whole outcome ledger into runner/reviews/YYYY-MM.md
+                with cuts by format/angle/signal/reply-language + doctrine
+                observations (DIRECTIONAL below n=20). Proposals only
   printed       mark a piece printed in the capture ledger (tease refuses without it)
   tease         generate the one-off sentrada.io/for/<token> link, mark tease-sent
   teaser        crop a corner of the render as a small inline jpg (teaser variant)
@@ -287,7 +304,9 @@ runner/            # THE PRODUCTION PIPELINE: sentrada_runner.py, templates/
                    # (prompt templates mirrored from Notion), config.json (sender
                    # profile + engine paths; committed), sender.*.json (parked
                    # sender profiles for swapping between clients; committed so
-                   # they survive container resets), pieces/ [GITIGNORED]
+                   # they survive container resets), cases/ (the grounding-gate
+                   # exam: cases + scorecard.json + retro_log.md; committed),
+                   # reviews/ (monthly reviews; committed), pieces/ [GITIGNORED]
 newspaper/         # Newspaper layout engine (Pango/Cairo + upscaled template)
 crossword/         # Crossword engine + grid generator + upscaled template
 email/             # The Email engine (procedural Gmail chrome)

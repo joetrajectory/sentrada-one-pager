@@ -5,7 +5,11 @@
     "format": "newspaper",
     "result": "replied",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. LinkedIn DM: 'Thanks for the poster.' Warm, brief. Meeting ask sent, went quiet; routing question (People/Talent side) awaiting response."
+    "notes": "Cosmic campaign 1. LinkedIn DM: 'Thanks for the poster.' Warm, brief. Meeting ask sent, went quiet; routing question (People/Talent side) awaiting response.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list",
+    "first_reply_date": "2026-06-23",
+    "reply_language": "gift"
   },
   "hussein-kanji-hoxton-ventures": {
     "recipient": "Hussein Kanji",
@@ -13,7 +17,11 @@
     "format": "newspaper",
     "result": "replied",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Email: 'Received the newsprint art today. It is pretty cool. Going up on our walls.' Meeting ask went quiet; wall-photo ask sent. Anonymised quote cleared for external use."
+    "notes": "Cosmic campaign 1. Email: 'Received the newsprint art today. It is pretty cool. Going up on our walls.' Meeting ask went quiet; wall-photo ask sent. Anonymised quote cleared for external use.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list",
+    "first_reply_date": "2026-06-23",
+    "reply_language": "gift"
   },
   "simon-menashy-mmc-ventures": {
     "recipient": "Simon Menashy",
@@ -21,7 +29,10 @@
     "format": "newspaper",
     "result": "replied",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. 'Eye-catching campaign, very clever' + explicit route-in: get a portfolio company to recommend. Shane (existing client at MMC portfolio co) recommendation in motion. Quote cleared. Shaped campaign 2 strategy."
+    "notes": "Cosmic campaign 1. 'Eye-catching campaign, very clever' + explicit route-in: get a portfolio company to recommend. Shane (existing client at MMC portfolio co) recommendation in motion. Quote cleared. Shaped campaign 2 strategy.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list",
+    "reply_language": "gift"
   },
   "hector-mason-episode-1-ventures": {
     "recipient": "Hector Mason",
@@ -29,7 +40,11 @@
     "format": "newspaper",
     "result": "replied",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Engaged but flagged environmental concern about the board (thought plastic; it is paper-faced foam core). Materials feedback logged; plastic-free alternatives being explored with Birch. Routing question (Paul Fifield) awaiting response."
+    "notes": "Cosmic campaign 1. Engaged but flagged environmental concern about the board (thought plastic; it is paper-faced foam core). Materials feedback logged; plastic-free alternatives being explored with Birch. Routing question (Paul Fifield) awaiting response.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list",
+    "first_reply_date": "2026-06-23",
+    "reply_language": "gift"
   },
   "chris-smith-playfair-capital": {
     "recipient": "Chris Smith",
@@ -37,7 +52,10 @@
     "format": "newspaper",
     "result": "opportunity",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Strongest buying signal: 'Have you placed anybody within the Playfair portfolio yet?' Named live roles at Protex AI and Nory; Matthew contacting both directly, keeping Chris posted. His question is the brief for campaign 2."
+    "notes": "Cosmic campaign 1. Strongest buying signal: 'Have you placed anybody within the Playfair portfolio yet?' Named live roles at Protex AI and Nory; Matthew contacting both directly, keeping Chris posted. His question is the brief for campaign 2.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list",
+    "reply_language": "problem"
   },
   "brent-hoberman-firstminute-capital": {
     "recipient": "Brent Hoberman",
@@ -45,7 +63,10 @@
     "format": "newspaper",
     "result": "opportunity",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Piece forwarded Brent -> Min (COO) -> Harri (EA), who asked for more info: active inbound, hottest lead. 15 minutes with Min proposed. The internal forwarding chain is exactly what physical outreach is designed to create."
+    "notes": "Cosmic campaign 1. Piece forwarded Brent -> Min (COO) -> Harri (EA), who asked for more info: active inbound, hottest lead. 15 minutes with Min proposed. The internal forwarding chain is exactly what physical outreach is designed to create.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list",
+    "reply_language": "problem"
   },
   "james-wright-seedcamp": {
     "recipient": "James Wright",
@@ -53,7 +74,10 @@
     "format": "newspaper",
     "result": "declined",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Polite decline with structural feedback: Seedcamp is pre-recruiter stage; larger portfolio cos handled by later-stage investors. Useful targeting signal. Closed."
+    "notes": "Cosmic campaign 1. Polite decline with structural feedback: Seedcamp is pre-recruiter stage; larger portfolio cos handled by later-stage investors. Useful targeting signal. Closed.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list",
+    "reply_language": "problem"
   },
   "stephen-millard-notion-capital": {
     "recipient": "Stephen Millard",
@@ -61,7 +85,10 @@
     "format": "newspaper",
     "result": "declined",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. 'No thank you.' Flat. Closed."
+    "notes": "Cosmic campaign 1. 'No thank you.' Flat. Closed.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list",
+    "reply_language": "none"
   },
   "andrew-scott-7percent-ventures": {
     "recipient": "Andrew Scott",
@@ -69,7 +96,9 @@
     "format": "newspaper",
     "result": "bounced",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Undelivered (only failed delivery of the 20)."
+    "notes": "Cosmic campaign 1. Undelivered (only failed delivery of the 20).",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list"
   },
   "victoria-kennard-plural": {
     "recipient": "Victoria Kennard",
@@ -77,7 +106,9 @@
     "format": "newspaper",
     "result": "no_response",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Delivered, no response."
+    "notes": "Cosmic campaign 1. Delivered, no response.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list"
   },
   "avalon-lee-bacon-dawn-capital": {
     "recipient": "Avalon Lee-Bacon",
@@ -85,7 +116,9 @@
     "format": "newspaper",
     "result": "no_response",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Delivered, no response."
+    "notes": "Cosmic campaign 1. Delivered, no response.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list"
   },
   "leah-sutton-balderton": {
     "recipient": "Leah Sutton",
@@ -93,7 +126,9 @@
     "format": "newspaper",
     "result": "no_response",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Delivered, no response."
+    "notes": "Cosmic campaign 1. Delivered, no response.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list"
   },
   "mads-jensen-superseed": {
     "recipient": "Mads Jensen",
@@ -101,7 +136,9 @@
     "format": "newspaper",
     "result": "no_response",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Delivered, no response."
+    "notes": "Cosmic campaign 1. Delivered, no response.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list"
   },
   "ophelia-brown-blossom-capital": {
     "recipient": "Ophelia Brown",
@@ -109,7 +146,9 @@
     "format": "newspaper",
     "result": "no_response",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Delivered, no response."
+    "notes": "Cosmic campaign 1. Delivered, no response.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list"
   },
   "holly-bennett-accel": {
     "recipient": "Holly Bennett",
@@ -117,7 +156,9 @@
     "format": "newspaper",
     "result": "no_response",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Delivered, no response."
+    "notes": "Cosmic campaign 1. Delivered, no response.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list"
   },
   "sandra-schwarzer-index-ventures": {
     "recipient": "Sandra Schwarzer",
@@ -125,7 +166,9 @@
     "format": "newspaper",
     "result": "no_response",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Delivered, no response."
+    "notes": "Cosmic campaign 1. Delivered, no response.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list"
   },
   "ben-wright-crane-venture-partners": {
     "recipient": "Ben Wright",
@@ -133,7 +176,9 @@
     "format": "newspaper",
     "result": "no_response",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Delivered, no response."
+    "notes": "Cosmic campaign 1. Delivered, no response.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list"
   },
   "george-henry-localglobe": {
     "recipient": "George Henry",
@@ -141,7 +186,9 @@
     "format": "newspaper",
     "result": "no_response",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Delivered, no response."
+    "notes": "Cosmic campaign 1. Delivered, no response.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list"
   },
   "harry-stebbings-20vc": {
     "recipient": "Harry Stebbings",
@@ -149,7 +196,9 @@
     "format": "newspaper",
     "result": "no_response",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Delivered, no response."
+    "notes": "Cosmic campaign 1. Delivered, no response.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list"
   },
   "oli-hammond-fuel-ventures": {
     "recipient": "Oli Hammond",
@@ -157,6 +206,8 @@
     "format": "newspaper",
     "result": "no_response",
     "date": "2026-07",
-    "notes": "Cosmic campaign 1. Delivered, no response."
+    "notes": "Cosmic campaign 1. Delivered, no response.",
+    "angle_type": "problem-tension",
+    "source_signal": "cold-list"
   }
 }

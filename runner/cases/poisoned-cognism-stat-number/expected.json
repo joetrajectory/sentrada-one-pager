@@ -1,0 +1,8 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "WRONG NUMBER",
+  "offending_detail": "Stat box says 494,933 cold calls; the research (and the lead article) say 449,933.",
+  "match_terms": [
+    "494,933"
+  ]
+}

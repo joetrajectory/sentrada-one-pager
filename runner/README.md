@@ -174,6 +174,65 @@ To **revise** one brief, re-run it singly (`generate ... --brief-only --feedback
 "notes"`), then set it to `APPROVE`. Pieces run **sequentially**; a batch of 20 is
 roughly 45–90 minutes and ~$20–40 of subscription credit.
 
+`batch-build` starts with a **staleness guard**: if any gate template file (the
+4b grounding template and anything it includes) changed after the last saved
+harness run, it warns and asks for an explicit `yes` before building — an edited
+gate is an unmeasured gate. Run `harness` first, or pass `--ignore-stale-gates`
+for non-interactive use.
+
+## The grounding-gate exam (harness / flag / retro)
+
+`runner/cases/` is a committed library of real cases — research + gate-visible
+copy + expected verdict — seeded from every factual incident that shipped or
+nearly shipped. See `runner/cases/README.md` for the case format and provenance.
+
+```bash
+python runner/sentrada_runner.py harness      # run the current 4b template over
+                                              # every case; print the scorecard
+                                              # vs the last saved run
+python runner/sentrada_runner.py flag \
+  --slug chris-evans-cognism \
+  --note 'the headline stripped "over" from the research figure'
+python runner/sentrada_runner.py retro        # flags since the last retro ->
+                                              # candidate rule + exemplar pairs,
+                                              # each applied only on approval,
+                                              # harness re-run immediately after
+```
+
+The harness makes one Opus grounding call per case and nothing else in the
+chain executes. A must-flag case counts as caught only when a match term from
+its answer key appears in the gate's flagged issues; flagged-for-the-wrong-claim
+is a miss. Exit code is non-zero unless the scorecard is clean, so
+weaken-the-template-and-check works as a one-liner. Where `gate-probe` plants
+synthetic violations to find copy-text blind spots, the harness is the durable
+regression exam; they complement, not duplicate.
+
+## Outcomes and the monthly review
+
+Every sent piece gets a record in the committed ledger (`runner/outcomes.json`)
+carrying format, angle type, source signal, delivered date, first-reply date,
+reply language (P7b's classification: gift / problem / mixed / none) and the
+outcome. The P7b reply handler stamps `first_reply_date` and `reply_language`
+into a piece's `meta.json` when it processes a reply; `outcome` harvests them.
+
+```bash
+python runner/sentrada_runner.py outcome --slug jane-doe-acme-corp \
+  --format newspaper --angle problem-tension --signal live-need-signal \
+  --delivered 2026-07-08
+# later, when a reply lands (or P7b already stamped it):
+python runner/sentrada_runner.py outcome --slug jane-doe-acme-corp \
+  --result replied --first-reply 2026-07-11 --reply-language gift
+
+python runner/sentrada_runner.py monthly-review   # compiles the whole ledger
+                                                  # into runner/reviews/YYYY-MM.md
+                                                  # + doctrine observations
+```
+
+The monthly review cuts the ledger by format, angle type, source signal and
+reply language, then asks the model for doctrine observations. Anything resting
+on a cut of fewer than 20 pieces is labelled DIRECTIONAL. Proposals only:
+nothing changes automatically, anywhere.
+
 ## What lands in a piece folder
 
 ```
@@ -270,6 +329,8 @@ drives the engine.
 | `prompt6_review.md` | Review Agent |
 | `prompt6b_recipient.md` | Recipient Agent |
 | `prompt7_followup.md` | Followup Agent |
+| `harness_retro.md` | Retro rule drafting (flag notes -> candidate 4b rules) |
+| `monthly_review.md` | Monthly review doctrine observations |
 | `layer_a_claymation.md`, `layer_c.md` | Claymation format module + variation menu |
 
 ## Models

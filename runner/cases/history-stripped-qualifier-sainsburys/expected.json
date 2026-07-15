@@ -1,0 +1,9 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "STRIPPED QUALIFIER",
+  "offending_detail": "Research says 'over \u00a31.6bn' and '148,000+'; the copy states \u00a31.6bn and 148,000 bare.",
+  "match_terms": [
+    "1.6bn",
+    "148,000"
+  ]
+}

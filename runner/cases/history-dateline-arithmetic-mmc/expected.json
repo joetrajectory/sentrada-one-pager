@@ -1,0 +1,8 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "UNSOURCED INDUSTRY COMMONPLACE",
+  "offending_detail": "'Eighteen months on' from a November 2025 event on a June 2026 page is seven months; the elapsed-time arithmetic contradicts the dateline.",
+  "match_terms": [
+    "eighteen months"
+  ]
+}

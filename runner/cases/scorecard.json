@@ -1,0 +1,161 @@
+{
+  "run_at": "2026-07-14 20:54:44",
+  "templates": {
+    "prompt4b_grounding.md": "5235ff185cade743f6b3fe5df670278c312a81b4"
+  },
+  "caught": 11,
+  "must_flags": 11,
+  "false_alarms": 0,
+  "must_passes": 4,
+  "results": {
+    "clean-cognism-crossword": {
+      "expected": "pass",
+      "outcome": "clean",
+      "detail": "",
+      "violation_type": "",
+      "draft": false
+    },
+    "clean-cognism-newspaper": {
+      "expected": "pass",
+      "outcome": "clean",
+      "detail": "",
+      "violation_type": "",
+      "draft": false
+    },
+    "clean-mmc-newspaper": {
+      "expected": "pass",
+      "outcome": "clean",
+      "detail": "",
+      "violation_type": "",
+      "draft": false
+    },
+    "clean-qflow-email": {
+      "expected": "pass",
+      "outcome": "clean",
+      "detail": "",
+      "violation_type": "",
+      "draft": false
+    },
+    "history-commonplace-reply-rates-cognism": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "UNSOURCED INDUSTRY COMMONPLACE",
+      "draft": false
+    },
+    "history-dateline-arithmetic-mmc": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "UNSOURCED INDUSTRY COMMONPLACE",
+      "draft": false
+    },
+    "history-edition-line-city-sainsburys": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "FABRICATED EDITION-LINE CITY",
+      "draft": false
+    },
+    "history-exemplar-cities-cognism": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "FABRICATED EDITION-LINE CITY",
+      "draft": false
+    },
+    "history-nearly-attachment-pinata": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "TWO-WAY PARSE",
+      "draft": false
+    },
+    "history-stripped-qualifier-sainsburys": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "STRIPPED QUALIFIER",
+      "draft": false
+    },
+    "poisoned-cognism-crossword-date": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "WRONG DATE",
+      "draft": false
+    },
+    "poisoned-cognism-quote-attribution": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "MISATTRIBUTED QUOTE",
+      "draft": false
+    },
+    "poisoned-cognism-stat-number": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "WRONG NUMBER",
+      "draft": false
+    },
+    "poisoned-mmc-founding-city": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "INVENTED PLACE",
+      "draft": false
+    },
+    "poisoned-qflow-sender-customer": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "UNSUPPORTED SENDER CLAIM",
+      "draft": false
+    }
+  },
+  "history": [
+    {
+      "run_at": "2026-07-14 19:39:32",
+      "caught": 11,
+      "must_flags": 11,
+      "false_alarms": 2,
+      "must_passes": 4
+    },
+    {
+      "run_at": "2026-07-14 20:00:04",
+      "caught": 11,
+      "must_flags": 11,
+      "false_alarms": 0,
+      "must_passes": 4
+    },
+    {
+      "run_at": "2026-07-14 20:08:16",
+      "caught": 11,
+      "must_flags": 11,
+      "false_alarms": 0,
+      "must_passes": 4
+    },
+    {
+      "run_at": "2026-07-14 20:20:20",
+      "caught": 11,
+      "must_flags": 11,
+      "false_alarms": 1,
+      "must_passes": 4
+    },
+    {
+      "run_at": "2026-07-14 20:34:16",
+      "caught": 11,
+      "must_flags": 11,
+      "false_alarms": 0,
+      "must_passes": 4
+    },
+    {
+      "run_at": "2026-07-14 20:42:43",
+      "caught": 10,
+      "must_flags": 11,
+      "false_alarms": 0,
+      "must_passes": 4
+    }
+  ]
+}
