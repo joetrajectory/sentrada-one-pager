@@ -130,7 +130,7 @@ Every factual claim on the card and in the follow-up (metrics, named people, hir
 - Never use litigation, legal disputes, regulatory action, redundancies or executive departures as leverage, even when fully public. "Your employer's lawsuit means budget scrutiny, so talk to me" reads as surveillance, not research, and it reads worst to exactly the senior recipients these pieces target. If the underlying insight matters (say, spend needing a direct line to revenue), carry the insight through something the recipient has said or published themselves
 - Send dates float with delivery, so never use relative time ("last month", "this week" about an external event). Date-anchor time-sensitive references instead ("your keynote at BAFTA in June"). "This week" is permitted only about the piece's own arrival
 - Never offer or propose the sender's money or production: no free pieces, samples, pilots, discounts or spend commitments, in the copy or as suggestions. Commercial offers are the sender's decision to make unprompted, not this prompt's to invent. Write the best CTA that commits nothing and stop there
-- The CTA must be low-friction: a single question or a booking link, not both. Where 6B indicates the recipient is an influencer rather than a buyer, the CTA reframes around deployment, referral, or a craft conversation, not a request to be pitched to
+- The CTA must be low-friction: a single question or a booking link, not both. Three shapes, chosen by who the recipient is to the sale: (a) BUYER — a direct meeting ask ("open to 20 minutes next week?"); (b) CONNECTOR — where 6B flags the recipient as an influencer not a buyer, reframe around deployment, referral or routing ("would you like me to connect with whoever runs ABM?"), never a request to be pitched to; (c) RECOGNISED AUTHORITY — ONLY where the research or 6B flags the recipient as a public voice on the piece's topic (a named award, a keynote, published thought-leadership), invite their expert read on the format itself, the lowest-threat ask, converting through curiosity and standing ("you're the 2024 ABM-er of the Year, I'd value your view on this as a format, open to 20 minutes?"). Never use (c) as flattery-by-default: no public-authority signal, no authority ask
 
 **Anti-pattern (never do this):** Do not invert a positive metric into its negative. If the company publishes a number as an achievement (e.g. 11.3% cold-calling success rate, 4x the industry average), do not reframe it as "88.7% failure." The recipient knows the inverse. They published the positive number on purpose. Inverting it signals that you did not understand their position, and the follow-up loses credibility on first read. Instead, lead with their number in their framing, then name the gap it cannot close. This rule applies regardless of what the 6B simulation or any upstream input hands you. If the highest-leverage change from 6B contains an inverted metric, rewrite the framing. Do not inherit inversions.
 
@@ -199,13 +199,16 @@ Note the shape: what the piece is made from, in their world; the bespoke line ("
 
 ### Touch 1: Follow-up email (24-48h after confirmed delivery)
 
-Carries a subject line (see copy rules: names the physical object plainly, never a stat fragment). Body opens with the first name on its own line, then 4-6 sentences set as 2-3 short paragraphs with blank lines between them, never one dense block; a senior recipient scans before they read. Structure:
+Carries a subject line (see copy rules: names the physical object plainly, never a stat fragment). Body opens with the first name on its own line. Keep it short and warm: 5 to 8 short lines, most a single sentence, the register of a real person who dashed off a genuine note, not a showcase. Contractions welcome. Structure:
 
-1. Reference the piece directly, by its most recognisable element ("I sent you the front page of [masthead], the one about [headline angle]")
-2. One sentence making the personalisation explicit (Customisation Communication Test)
-3. The 6B hook, framed to neutralise the failure mode (a named, specific, verifiable observation or question drawn from the highest-leverage change)
-4. One sentence on what the sender does, as a credibility signal or the reframe, weighted most heavily under WOULD ENGAGE IF FOLLOWED UP WELL
-5. Low-friction CTA, reframed per the CTA rule where 6B indicates the recipient is an influencer not a buyer
+1. Open on the physical object and its fresh arrival: "I sent you the giant [object] that landed on your desk [reference the just-confirmed delivery; never a fixed day like 'yesterday' unless the delivery date is actually known]." Lean into the absurd size, it is the hook.
+2. The one own-words trigger, in the same breath or the next line: the specific thing they posted, said, built or won that put them on the list ("because you posted about the grenades in the post", "every number on it comes from your own 2026 State of Outbound report"). This answers "why me" (Customisation Communication Test). One concrete reference, not a list.
+3. One line acknowledging their strength in their own words, then the gap (the 6B hook, framed to neutralise the failure mode). Never invert their published positive.
+4. One capability line, SENDER-AWARE. When the sender is Sentrada: the format menu ("we also build giant one-of-one newspaper front pages and crosswords about a single recipient and their company") and/or what their team could do with the channel. When the sender is a client: this sells the CLIENT'S proposition, never Sentrada's format menu or the outreach channel itself.
+5. Optional single proof point, only where it fits this recipient, never forced into every email (omit rather than stretch).
+6. The CTA, per the three-way CTA rule in the copy rules above.
+
+NO CRAFT META-COMMENTARY: never narrate how or why the piece was made, or flag your own cleverness. Anti-exemplar, a real pipeline line the sender deleted by hand: "I had to find the actual panel title to write that clue, which is the point: this crossword only works for you." The recipient feels the personalisation; explaining it kills it.
 
 ### Touch 2: LinkedIn message (day 3-4, if no reply)
 
