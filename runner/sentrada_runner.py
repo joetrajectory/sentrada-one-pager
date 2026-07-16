@@ -37,6 +37,7 @@ import argparse
 import base64
 import csv
 import datetime
+import filecmp
 import hashlib
 import json
 import os
@@ -2636,6 +2637,197 @@ def cmd_birch_csv(args):
           "to the deliverables branch. Send it to Birch directly.")
 
 
+# --- Durability: snapshot renders to the deliverables branch -----------------
+# runner/pieces/ is gitignored (it holds personal data) and therefore does NOT
+# survive a container restart: a fresh clone restores tracked files only. The
+# expensive, hard-to-regenerate outputs are the render + companion-card PNGs,
+# and the `deliverables` branch already exists as their durable, address-free
+# home. So the instant a piece is built we push its PNGs there; `restore` pulls
+# them back after a restart. This makes the loss that hit batch-2026-07-09
+# structurally impossible: built renders live in git within seconds, not only
+# in an ephemeral folder.
+
+def _batch_label(manifest_path):
+    """Derive a stable batch label (YYYY-MM-DD when present) from a manifest
+    filename, e.g. research/batch-2026-07-09.json -> 2026-07-09."""
+    base = os.path.splitext(os.path.basename(manifest_path))[0]
+    m = re.search(r"(\d{4}-\d{2}-\d{2})", base)
+    return m.group(1) if m else base
+
+
+def _piece_pngs(slug):
+    """The render + companion-card PNGs for a slug that exist on disk, as
+    (src_abspath, dest_filename) pairs."""
+    items = []
+    for suffix in ("", "-card"):
+        p = os.path.join(PIECES_DIR, slug, slug + suffix + ".png")
+        if os.path.exists(p):
+            items.append((p, slug + suffix + ".png"))
+    return items
+
+
+def _git(a, cwd, check=True, binary=False):
+    r = subprocess.run(["git"] + a, cwd=cwd,
+                       capture_output=True, text=(not binary))
+    if check and r.returncode != 0:
+        raise RuntimeError("git " + " ".join(a) + ": "
+                           + ((r.stderr or r.stdout) if not binary else "binary"))
+    return r
+
+
+def _deliverables_push(cwd, wt_branch, attempts=4):
+    """Push the worktree branch to origin/deliverables, rebasing onto any
+    concurrent snapshot and retrying network errors with backoff."""
+    delay = 2
+    for i in range(attempts):
+        r = subprocess.run(["git", "push", "origin", wt_branch + ":deliverables"],
+                           cwd=cwd, capture_output=True, text=True)
+        if r.returncode == 0:
+            return True
+        err = (r.stderr or "") + (r.stdout or "")
+        if "non-fast-forward" in err or "fetch first" in err or "rejected" in err:
+            subprocess.run(["git", "fetch", "origin", "deliverables"], cwd=cwd,
+                           capture_output=True, text=True)
+            subprocess.run(["git", "rebase", "origin/deliverables"], cwd=cwd,
+                           capture_output=True, text=True)
+            continue
+        if i < attempts - 1:
+            time.sleep(delay)
+            delay *= 2
+    return False
+
+
+def _deliverables_snapshot(items, batch_label, push=True):
+    """Stage (src, dest_filename) PNGs under batch-<label>/ on the durable
+    `deliverables` branch through a temporary worktree. Idempotent: a byte
+    identical file already on the branch is skipped. Pushes file by file so a
+    large batch never builds a >100MB pack (the git proxy rejects those with
+    413), matching the documented manual process."""
+    items = [(s, d) for (s, d) in items if os.path.exists(s)]
+    if not items:
+        return {"staged": 0, "skipped": 0, "pushed": 0, "failed": 0, "empty": True}
+    _git(["fetch", "origin", "deliverables"], REPO_ROOT, check=False)
+    have_remote = _git(["rev-parse", "--verify", "origin/deliverables"],
+                       REPO_ROOT, check=False).returncode == 0
+    wt = tempfile.mkdtemp(prefix="sentrada-deliv-")
+    br = "deliverables-snapshot-wt"
+    _git(["worktree", "prune"], REPO_ROOT, check=False)
+    _git(["worktree", "remove", "-f", wt], REPO_ROOT, check=False)
+    _git(["branch", "-D", br], REPO_ROOT, check=False)
+    staged = skipped = pushed = failed = 0
+    try:
+        if have_remote:
+            _git(["worktree", "add", "-f", "-B", br, wt, "origin/deliverables"], REPO_ROOT)
+        else:
+            _git(["worktree", "add", "-f", "--orphan", "-b", br, wt], REPO_ROOT)
+        _git(["config", "user.email", "noreply@anthropic.com"], wt, check=False)
+        _git(["config", "user.name", "Claude"], wt, check=False)
+        for src, dest in items:
+            rel = os.path.join("batch-" + batch_label, dest)
+            dst = os.path.join(wt, rel)
+            if os.path.exists(dst) and filecmp.cmp(src, dst, shallow=False):
+                skipped += 1
+                continue
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(src, dst)
+            _git(["add", rel], wt)
+            _git(["commit", "-m", "snapshot " + rel], wt)
+            staged += 1
+            if push:
+                if _deliverables_push(wt, br):
+                    pushed += 1
+                else:
+                    failed += 1
+        return {"staged": staged, "skipped": skipped, "pushed": pushed,
+                "failed": failed}
+    finally:
+        _git(["worktree", "remove", "-f", wt], REPO_ROOT, check=False)
+        _git(["branch", "-D", br], REPO_ROOT, check=False)
+
+
+def _auto_snapshot(slugs, label):
+    """Best-effort durability hook wired into batch-build. Warns on failure,
+    never raises: a snapshot problem must not fail a build that otherwise
+    succeeded, but the operator must know the renders are not yet durable."""
+    items = []
+    for slug in slugs:
+        items += _piece_pngs(slug)
+    if not items:
+        return
+    try:
+        res = _deliverables_snapshot(items, label, push=True)
+        if res.get("failed"):
+            print(f"\n[durable] WARNING: {res['failed']} PNG(s) committed but NOT "
+                  f"pushed to deliverables (network?). Re-run `snapshot --manifest "
+                  "<manifest>` before relying on them.")
+        else:
+            print(f"\n[durable] {res['staged']} PNG(s) pushed to the deliverables "
+                  f"branch under batch-{label}/ ({res['skipped']} already current). "
+                  "A restart can no longer lose these renders.")
+    except Exception as e:
+        print(f"\n[durable] WARNING: snapshot to deliverables failed ({e}). Renders "
+              "are NOT yet durable; run `python runner/sentrada_runner.py snapshot "
+              f"--manifest <manifest>` manually.")
+
+
+def cmd_snapshot(args):
+    if args.folder:
+        slugs = [os.path.basename(os.path.normpath(args.folder))]
+        label = args.batch_label
+        if not label:
+            die("snapshot --folder needs --batch-label (e.g. 2026-07-09)")
+    else:
+        entries, _ = _load_manifest(args.manifest)
+        slugs = [_piece_slug(e) for e in entries]
+        label = args.batch_label or _batch_label(args.manifest)
+    items = []
+    for slug in slugs:
+        items += _piece_pngs(slug)
+    if not items:
+        die("no render/card PNGs found on disk for these pieces (nothing to snapshot)")
+    res = _deliverables_snapshot(items, label, push=not args.no_push)
+    print("\n" + "=" * 70)
+    print("DELIVERABLES SNAPSHOT")
+    print("=" * 70)
+    print(f"  batch-{label}/  on the deliverables branch")
+    print(f"  {res['staged']} pushed, {res['skipped']} already current"
+          + (f", {res['failed']} FAILED to push" if res.get("failed") else ""))
+    if res.get("failed"):
+        die("some pushes failed; renders are not fully durable")
+
+
+def cmd_restore(args):
+    label = args.batch_label or (_batch_label(args.manifest) if args.manifest else None)
+    if not label:
+        die("restore needs --batch-label (e.g. 2026-07-09) or --manifest")
+    _git(["fetch", "origin", "deliverables"], REPO_ROOT, check=False)
+    if _git(["rev-parse", "--verify", "origin/deliverables"],
+            REPO_ROOT, check=False).returncode != 0:
+        die("no deliverables branch on origin; nothing to restore")
+    listing = _git(["ls-tree", "-r", "--name-only", "origin/deliverables",
+                    "batch-" + label + "/"], REPO_ROOT, check=False)
+    files = [f for f in listing.stdout.splitlines() if f.endswith(".png")]
+    if not files:
+        die(f"no snapshot found on deliverables for batch-{label}")
+    restored = 0
+    for f in files:
+        name = os.path.basename(f)
+        slug = name[:-9] if name.endswith("-card.png") else name[:-4]
+        dest_dir = os.path.join(PIECES_DIR, slug)
+        os.makedirs(dest_dir, exist_ok=True)
+        blob = _git(["show", "origin/deliverables:" + f], REPO_ROOT,
+                    check=False, binary=True)
+        if blob.returncode != 0:
+            continue
+        with open(os.path.join(dest_dir, name), "wb") as fh:
+            fh.write(blob.stdout)
+        restored += 1
+    print(f"[restore] pulled {restored} PNG(s) for batch-{label} back into "
+          "runner/pieces/. NOTE: this restores the renders + cards (the "
+          "durable, expensive outputs) only. data.json, research and the QC "
+          "artefacts are rebuilt from research if you need to re-run the chain.")
+
+
 def cmd_followup(args):
     _usage_reset()
     config = load_config(args.config)
@@ -3699,6 +3891,12 @@ def cmd_batch_build(args):
         results.append(_assess_build(slug, entry, rc, out, err))
         print(f"  {results[-1]['status']} (${results[-1].get('credit', 0.0):.2f})")
     _write_batch_summary(args.manifest, results)
+    # Durability: push every completed piece's render + card to the deliverables
+    # branch immediately. runner/pieces/ does not survive a container restart;
+    # the deliverables branch does. Guarded so a snapshot failure only warns.
+    if not getattr(args, "no_snapshot", False):
+        _auto_snapshot([r["slug"] for r in results if r["status"] == "complete"],
+                       _batch_label(args.manifest))
 
 
 def _assess_build(slug, entry, rc, out, err):
@@ -4664,7 +4862,30 @@ def main():
                     dest="ignore_stale_gates",
                     help="skip the warning when a gate template is newer than "
                          "the last harness run (non-interactive use)")
+    bd.add_argument("--no-snapshot", action="store_true", dest="no_snapshot",
+                    help="skip auto-pushing built renders to the deliverables "
+                         "branch (they will not survive a container restart)")
     bd.set_defaults(func=cmd_batch_build)
+
+    sn = sub.add_parser("snapshot",
+                        help="push a batch's render + card PNGs to the durable "
+                             "deliverables branch (survives container restarts)")
+    sn.add_argument("--manifest", help="path to the JSON manifest")
+    sn.add_argument("--folder", help="a single runner/pieces/<slug> folder")
+    sn.add_argument("--batch-label", dest="batch_label",
+                    help="batch label, e.g. 2026-07-09 (derived from the "
+                         "manifest name when omitted; required with --folder)")
+    sn.add_argument("--no-push", action="store_true", dest="no_push",
+                    help="stage into the worktree without pushing (testing)")
+    sn.set_defaults(func=cmd_snapshot)
+
+    rs = sub.add_parser("restore",
+                        help="pull a batch's render + card PNGs back from the "
+                             "deliverables branch after a container restart")
+    rs.add_argument("--manifest", help="path to the JSON manifest")
+    rs.add_argument("--batch-label", dest="batch_label",
+                    help="batch label, e.g. 2026-07-09 (or use --manifest)")
+    rs.set_defaults(func=cmd_restore)
 
     args = ap.parse_args()
     args.func(args)

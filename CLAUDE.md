@@ -261,6 +261,11 @@ python runner/sentrada_runner.py ...
                 after any edit to prompt4b, house_rules or a copy-text builder
                 (--lint-only for the free deterministic subset)
   birch-csv     shipping CSV for the print supplier (holds addresses; never commit)
+  snapshot      push a batch's render + card PNGs to the durable deliverables
+                branch (batch-build does this automatically; run manually after a
+                re-render). Idempotent, pushes file by file
+  restore       pull a batch's render + card PNGs back from the deliverables
+                branch after a container restart wiped runner/pieces/
   harness       the grounding-gate exam: run the CURRENT 4b template over every
                 case in runner/cases/ (research + copy + expected verdict, seeded
                 from every shipped/near-shipped incident), one Opus call per
@@ -400,11 +405,45 @@ Runner side: SENTRADA_RUNNER_SECRET in env or .env must match RUNNER_SECRET;
 config "capture_api" is the deployed base URL (SENTRADA_CAPTURE_API overrides
 it, used by the local validation harness).
 
+## Durability: gitignored output does NOT survive a container restart
+
+The remote container is ephemeral: on restart it re-clones the repo, so ONLY
+committed-and-pushed files come back. `runner/pieces/` and `research/` are
+gitignored (they hold personal data), so a restart wipes every render, card,
+follow-up, data.json and research input that was not pushed somewhere durable.
+This is not hypothetical: batch-2026-07-09's ten print-ready renders were lost
+to exactly this on 14 July.
+
+The fix is mechanical, not a habit to remember:
+- `batch-build` auto-pushes every completed piece's render + card PNG to the
+  `deliverables` branch the instant the build finishes (`_auto_snapshot`);
+  within seconds of existing, a render lives in git. The push is guarded: a
+  failure warns loudly but never fails the build. `--no-snapshot` opts out.
+- `snapshot --manifest <m>` (or `--folder <piece> --batch-label <YYYY-MM-DD>`)
+  pushes on demand; it is idempotent (byte-identical files already on the branch
+  are skipped) and pushes file by file so a batch never builds a >100MB pack.
+- `restore --batch-label <YYYY-MM-DD>` (or `--manifest <m>`) pulls a batch's
+  renders + cards back into `runner/pieces/` after a restart. It restores the
+  expensive, hard-to-regenerate outputs only; data.json / research / QC are
+  rebuilt from research (system of record: the Notion Sentrada Claude Project)
+  if the chain must be re-run.
+- What is NOT made durable, by design: research inputs and data.json (they carry
+  personal data and cannot go to a code or print branch) and the delivery CSV.
+  After a restart, re-paste research from Notion to rebuild those; the renders
+  themselves come back from `deliverables`.
+
+Rule of thumb: if a container restart would lose it and it was expensive to
+make, it must be on a branch before you move on. Renders are; treat everything
+in `runner/pieces/` as disposable working state between snapshots.
+
 ## Print-ready deliverables (the `deliverables` branch)
 
 Birch (the print supplier) needs the lossless PNGs, not JPGs, every run. They
 live on a dedicated orphan branch named `deliverables`, never on code branches.
 Code branches stay free of the large binaries; Birch gets one stable link.
+`batch-build` now stages each run's PNGs there automatically (see Durability
+above); the manual steps below remain the way to add a companion-cards.md and
+to re-stage after manual re-renders.
 
 Standing process for each run:
 0. Run `python runner/sentrada_runner.py ship-check --manifest <batch.json>` (or
