@@ -81,20 +81,30 @@ def call_model(prompt, model_key, cfg):
             return "".join(b.text for b in msg.content if b.type == "text")
         except ModuleNotFoundError:
             pass
-    # claude CLI headless (Max subscription path)
-    alias = CLI_ALIASES.get(model, model)
-    r = subprocess.run(
-        ["claude", "-p", "--model", alias],
-        input=prompt,
-        text=True,
-        capture_output=True,
-    )
-    if r.returncode != 0:
-        raise RuntimeError(
-            "Model call failed (no ANTHROPIC_API_KEY and claude CLI errored):\n"
-            + r.stderr.strip()
+    # claude CLI headless (Max subscription path). If the configured model is
+    # unavailable (e.g. Fable access has lapsed), fall back to Opus rather
+    # than dying mid-reply.
+    fallbacks = [model] + (["claude-opus-4-8"] if model != "claude-opus-4-8"
+                           else [])
+    last_err = ""
+    for m in fallbacks:
+        alias = CLI_ALIASES.get(m, m)
+        r = subprocess.run(
+            ["claude", "-p", "--model", alias],
+            input=prompt,
+            text=True,
+            capture_output=True,
         )
-    return r.stdout
+        if r.returncode == 0:
+            if m != model:
+                print("NOTE: model %s unavailable, used %s." % (model, m),
+                      file=sys.stderr)
+            return r.stdout
+        last_err = r.stderr.strip()
+    raise RuntimeError(
+        "Model call failed (no ANTHROPIC_API_KEY and claude CLI errored):\n"
+        + last_err
+    )
 
 
 # ------------------------------------------------------------------ utilities
