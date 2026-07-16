@@ -2797,18 +2797,42 @@ def cmd_snapshot(args):
 
 
 def cmd_restore(args):
-    label = args.batch_label or (_batch_label(args.manifest) if args.manifest else None)
-    if not label:
-        die("restore needs --batch-label (e.g. 2026-07-09) or --manifest")
     _git(["fetch", "origin", "deliverables"], REPO_ROOT, check=False)
     if _git(["rev-parse", "--verify", "origin/deliverables"],
             REPO_ROOT, check=False).returncode != 0:
+        if getattr(args, "all", False):
+            return  # nothing to restore yet; a clean first session is fine
         die("no deliverables branch on origin; nothing to restore")
+    if getattr(args, "all", False):
+        listing = _git(["ls-tree", "-r", "--name-only", "origin/deliverables"],
+                       REPO_ROOT, check=False)
+        prefixes = sorted({f.split("/", 1)[0] for f in listing.stdout.splitlines()
+                           if f.startswith("batch-") and "/" in f})
+        if not prefixes:
+            return
+        total = sum(_restore_batch(p[len("batch-"):]) for p in prefixes)
+        if total:
+            print(f"[restore] pulled {total} render/card PNG(s) across "
+                  f"{len(prefixes)} batch(es) back into runner/pieces/.")
+        return
+    label = args.batch_label or (_batch_label(args.manifest) if args.manifest else None)
+    if not label:
+        die("restore needs --batch-label (e.g. 2026-07-09), --manifest, or --all")
+    n = _restore_batch(label)
+    if not n:
+        die(f"no snapshot found on deliverables for batch-{label}")
+    print(f"[restore] pulled {n} PNG(s) for batch-{label} back into "
+          "runner/pieces/. NOTE: this restores the renders + cards (the "
+          "durable, expensive outputs) only. data.json, research and the QC "
+          "artefacts are rebuilt from research if you need to re-run the chain.")
+
+
+def _restore_batch(label):
+    """Copy every render/card PNG under batch-<label>/ on origin/deliverables
+    back into runner/pieces/<slug>/. Returns the count restored."""
     listing = _git(["ls-tree", "-r", "--name-only", "origin/deliverables",
                     "batch-" + label + "/"], REPO_ROOT, check=False)
     files = [f for f in listing.stdout.splitlines() if f.endswith(".png")]
-    if not files:
-        die(f"no snapshot found on deliverables for batch-{label}")
     restored = 0
     for f in files:
         name = os.path.basename(f)
@@ -2822,10 +2846,7 @@ def cmd_restore(args):
         with open(os.path.join(dest_dir, name), "wb") as fh:
             fh.write(blob.stdout)
         restored += 1
-    print(f"[restore] pulled {restored} PNG(s) for batch-{label} back into "
-          "runner/pieces/. NOTE: this restores the renders + cards (the "
-          "durable, expensive outputs) only. data.json, research and the QC "
-          "artefacts are rebuilt from research if you need to re-run the chain.")
+    return restored
 
 
 def cmd_followup(args):
@@ -4885,6 +4906,9 @@ def main():
     rs.add_argument("--manifest", help="path to the JSON manifest")
     rs.add_argument("--batch-label", dest="batch_label",
                     help="batch label, e.g. 2026-07-09 (or use --manifest)")
+    rs.add_argument("--all", action="store_true",
+                    help="restore every batch on the deliverables branch "
+                         "(used by the session-start self-heal hook)")
     rs.set_defaults(func=cmd_restore)
 
     args = ap.parse_args()
