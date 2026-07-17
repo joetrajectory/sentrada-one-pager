@@ -393,7 +393,9 @@ Where things live, and why:
   as gate-probe is run after copy-gate edits.
 
 Site side (deployed with the site on Vercel): for.html is the token page
-(mobile-first, noindexed, exact copy fixed), api/token.js, api/submit.js and
+(mobile-first, noindexed, exact copy fixed, self-hosted Fraunces from
+/assets/fraunces.woff2 so it makes zero third-party requests), api/token.js,
+api/submit.js and
 api/runner.js are the serverless functions. Deployment env vars:
 KV_REST_API_URL + KV_REST_API_TOKEN (Upstash via the Vercel marketplace),
 RUNNER_SECRET (bearer auth for api/runner.js), RESEND_API_KEY + NOTIFY_EMAIL

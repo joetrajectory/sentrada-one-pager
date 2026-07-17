@@ -3617,6 +3617,13 @@ def cmd_capture_probe(args):
             # guard against a vercel.json rewrite regression.
             check("/for/<token> keeps the token (no cleanUrls redirect strips it)",
                   final_url.rstrip("/").endswith(token))
+            # Privacy: the token page must not reference any third-party origin
+            # (no Google Fonts, no analytics). Locks the self-hosted-font fix.
+            page_l = page.lower()
+            check("token page references no third-party origin",
+                  not any(h in page_l for h in
+                          ("googleapis.com", "gstatic.com", "fonts.google",
+                           "plausible.io", "//cdn", "http://")))
         # cleanUrls is actually active: /for.html redirects to the clean path.
         with urllib.request.urlopen(urllib.request.Request(f"{base}/for.html"), timeout=10) as resp:
             check("cleanUrls active: /for.html resolves to the clean /for path",

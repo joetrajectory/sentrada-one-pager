@@ -128,7 +128,7 @@ const resendServer = http.createServer((req, res) => {
 // ---- app server: static files + the real /api functions ---------------------
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css",
   ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png",
-  ".webp": "image/webp", ".jpg": "image/jpeg" };
+  ".webp": "image/webp", ".jpg": "image/jpeg", ".woff2": "font/woff2" };
 
 const apiHandlers = {
   "/api/token": require(path.join(REPO, "api/token.js")),
