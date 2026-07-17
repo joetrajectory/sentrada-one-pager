@@ -1,0 +1,8 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "MISATTRIBUTED DEAL",
+  "offending_detail": "Research: the Series E was led by Google Ventures; MMC led only the original investment. The copy hands MMC the round.",
+  "match_terms": [
+    "led by mmc"
+  ]
+}

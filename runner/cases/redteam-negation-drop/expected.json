@@ -1,0 +1,8 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "NEGATION DROP",
+  "offending_detail": "Research says better data alone is NOT reversing the trend; the copy drops the negation and asserts the opposite.",
+  "match_terms": [
+    "reversing the trend"
+  ]
+}
