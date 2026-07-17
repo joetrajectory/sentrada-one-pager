@@ -1,3 +1,56 @@
+# Pending Notion sync: Prompt 4b page rewrite (parked 17 July 2026)
+
+The Notion connection required interactive approval mid-session, so this
+rewrite is parked here, same pattern as the 3 July P7 card-ask sync. Apply it
+to the "Prompt 4b: Grounding Gate" page (replace the whole page body), then
+delete this file.
+
+---
+
+## Purpose
+
+P4b is the factual grounding gate: an automated text fact-checker that runs
+after P4 (Copy) and before the format engine renders. It catches fabricated or
+contradicted factual claims in the copy before anything is printed. It also
+gates P7's output (card + touches) and P7b reply drafts.
+
+Pipeline position: P1 research, P2 brief, [human approval], P4 copy, P4b
+grounding gate, engine render, P6 craft QC, P6B recipient sim, P7 follow-up.
+
+## Where it lives
+
+Runner-side. Source of truth: runner/templates/prompt4b_grounding.md; this
+page mirrors it, and when they disagree the template is right. Runner
+function: grounding_check() in runner/sentrada_runner.py. Model: Opus (config
+key "p4b").
+
+Two regression rigs guard it. gate-probe plants synthetic violations into a
+clean piece's data through the live copy-text builders (finds builder blind
+spots). harness runs the current template over the committed exam in
+runner/cases/ (research + copy + expected verdict per case, seeded from every
+shipped or near-shipped incident plus red-team classes) and scores it against
+the last saved run; batch-build refuses to run quietly when this template
+changed after the last harness run. New incidents enter via `flag`; new rules
+enter ONLY via `retro` with per-rule human approval, and the harness re-runs
+immediately after each applied rule.
+
+## What it does
+
+Reads the drafted copy plus the recipient research and returns a JSON verdict
+listing any unsupported claims. On any unsupported claim the runner re-runs P4
+with the violations fed back, up to 3 attempts, and halts the piece if it
+cannot clear them.
+
+## Format behaviour
+
+- Newspaper and Crossword: research-only. The gate-visible copy text includes
+  the printed DATE (anchors elapsed-time arithmetic), the EDITION LINE (its
+  city list is checkable) and stat_source.
+- The Email: research OR sender proof points (sender_facts argument); genuine
+  sender proof is accepted, invented facts are still caught.
+
+## The prompt (current, 17 July 2026 — verbatim from the template)
+
 You are a fact-checker for a one-of-one physical outreach piece sent to a named
 senior executive. The piece's entire value is that every factual claim is true to
 the recipient's own world. A single fabricated or contradicted fact destroys it.
@@ -112,3 +165,33 @@ Output ONLY a single fenced ```json code block, nothing else:
 Set "grounded" to false if and only if "unsupported" is non-empty. If every claim
 checks out, return "grounded": true and an empty "unsupported" list. Never flag the
 masthead name or fictional bylines.
+
+
+## Changelog
+
+- 17 July 2026: violation 7, SUPERLATIVE INFLATION — promoting a research
+  hedge on rank ("one of the most effective outbound engines") to an absolute
+  superlative ("the most effective outbound engine in B2B technology"), the
+  mirror image of the stripped qualifier. Found by a red-team probe the gate
+  missed, entered through the live flag -> retro loop, refined after the
+  confirmation harness showed the first draft over-reached onto indefinite
+  forms ("a best-in-class operation"). Same day: the gate-visible newspaper
+  copy gains the printed DATE line (the elapsed-time check was assuming
+  today's date: a true "nine months in post" on a June piece flagged as ten in
+  July), and the grounding-gate exam (runner/cases/ + harness/flag/retro) went
+  live with the weaken-restore validation passed.
+- 13 July 2026: violation 6, UNSOURCED INDUSTRY COMMONPLACE, with elapsed-time
+  arithmetic against the dateline. Two live exemplars reached print files
+  before the rule existed (cold-review 6D catches).
+- 10 July 2026: edition-line example de-citied in P4; world-knowledge rule
+  added to house rules (a true-but-unsourced fact fails the piece), batch
+  2026-07-09 retro.
+- 6 July 2026: violation 5, STRIPPED QUALIFIER (validated live: caught a
+  stripped "over" in a shipped headline human review missed). Edition-line
+  city list made checkable and included in the gate-visible copy text;
+  fictional-furniture exemption narrowed to masthead + bylines.
+- 3 July 2026: violation 4, LITIGATION LEVERAGE. P4b also gates Prompt 7's
+  output, not just printed copy.
+- 22 June 2026: sender-facts support for the email format. Newspaper and
+  crossword stay research-only.
+- Earlier: added as the factual-grounding gate between P4 and the engine.
