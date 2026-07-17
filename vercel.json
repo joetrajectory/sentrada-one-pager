@@ -3,11 +3,18 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/for/:token", "destination": "/for.html" }
+    { "source": "/for/:token", "destination": "/for" }
   ],
   "headers": [
     {
-      "source": "/for(.*)",
+      "source": "/for",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    },
+    {
+      "source": "/for/(.*)",
       "headers": [
         { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
         { "key": "Cache-Control", "value": "no-store" }

@@ -1,10 +1,10 @@
 [
   {
-    "name": "Chris Evans",
+    "name": "Sam Rivera",
     "title": "Chief Revenue Officer",
-    "company": "Cognism",
+    "company": "Northwind Data",
     "format": "newspaper",
-    "research": "research/cognism.md"
+    "research": "research/northwind.md"
   },
   {
     "name": "Jane Doe",

@@ -101,8 +101,34 @@ Expected: a one-off link prints. Then verify, in order:
 
 If any step fails, stop and fix before Block D/E; `capture-probe` still
 passing locally means the divergence is real-infrastructure behaviour, which
-is exactly what this block exists to catch. Known first suspect: the
-`/for/:token` rewrite in vercel.json interacting with `cleanUrls`.
+is exactly what this block exists to catch.
+
+Platform checks a cold-eyes review flagged as real divergence risks between
+the local mock and live Vercel/Upstash. Run through these once during Block C:
+
+- **The token link (highest risk).** `curl -sI https://<project>.vercel.app/for/AAAAAAAAAAAAAAAAAAAAAA`
+  must return `200`, not `308` or `404`. A 308 or 404 means the `/for/:token`
+  rewrite is fighting `cleanUrls` and every real tease link would fail. The
+  fix (rewrite destination `/for`, no `.html`) is already in vercel.json and
+  `capture-probe` now guards it, but confirm it on the real platform. If it
+  regresses, the symptom is recipients seeing "This one's expired."
+- **Deployment Protection must be OFF for the production domain.** Vercel >
+  Project Settings > Deployment Protection. If a password/SSO wall or Attack
+  Challenge covers production, recipients hit an auth page instead of the
+  form, and the runner's Python client gets 401/403 HTML (which now surfaces
+  as a clear "non-JSON reply" error rather than a crash). Verify with one real
+  `capture` call.
+- **Confirm the four store env var names exist** after attaching Upstash:
+  `KV_REST_API_URL`, `KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_URL` /
+  `_TOKEN`). If a custom env prefix was chosen in the connect dialog, neither
+  name exists and every request 500s with "Redis store is not configured".
+- **Node version >= 18** (Project Settings > Node.js Version). New projects
+  default to 22.x; anything >= 18 has the `fetch`/`crypto` the functions use.
+- **One sanity curl:** `curl https://<project>.vercel.app/api/token?t=x` must
+  return JSON (`{"state":"expired"}`), not JavaScript source.
+- **After the first `tease`,** open the Upstash data browser and confirm the
+  `tok:<token>` key shows a TTL (about 90 days). That confirms the atomic
+  `SET ... EX` wire format landed as intended on real Upstash.
 
 ## Block D — Email notification (sender, 5 minutes; optional but recommended)
 
@@ -177,6 +203,43 @@ capture commands: `python runner/sentrada_runner.py capture-probe`.
   still captured regardless; `capture` shows them.
 - To rotate the runner secret: set a new value in Vercel, redeploy, update
   .env / environment settings. Tokens and data are unaffected.
+
+## Residual risks (a cold-eyes review accepted these as known, not fixed)
+
+- **The link is a bearer capability.** Anyone who holds a live `/for/<token>`
+  link can submit any address, and the first submission is final (the record
+  locks to "submitted"). So: never post a tease link anywhere semi-public;
+  keep it to a direct DM or email to the target. If a bad-faith or mistaken
+  submission ever needs undoing, there is currently no reset command; ask a
+  session to purge and re-tease (`delivered` then `tease --again` after
+  re-marking printed), or add a `reset` action.
+- **`address` prints to the terminal by design.** If you run it inside a
+  logged or cloud session, the address lands in that transcript, which the
+  `delivered` purge cannot reach. Run `address` in a local, unlogged terminal
+  when possible; the command prints this warning each time.
+- **Google Fonts on the token page** sends the recipient's IP to Google. Minor
+  for a B2B tool, but on an EU-facing page with a strict privacy promise it is
+  worth self-hosting Fraunces/Inter as woff2 under /assets (a follow-up; the
+  fonts were not bundled at build time). Until then the page still works and
+  falls back to system fonts if Google is blocked.
+- **Committed ledgers in a PUBLIC repo.** See the separate note below; this is
+  a project-level decision, not a capture bug.
+
+## The public-repo data question (decide before the pilot)
+
+`runner/outcomes.json` is committed and world-readable, and it contains real
+recipient names, companies and verbatim private replies. `runner/capture.json`
+(once teasing starts) will hold recipient names and slugs of the form
+`firstname-lastname-company`. The repo `joetrajectory/sentrada-one-pager` is
+public. These files are committed on purpose (containers are ephemeral and the
+ledgers must survive), but a public repo is the wrong place for third-party
+PII. Options, roughly in order of effort: make the repo private (simplest,
+fixes it wholesale); or gitignore the ledgers and persist them privately
+(a private gist, a separate private repo, or Notion) while keeping opaque
+piece codes instead of name-company slugs. Either way the existing history
+needs scrubbing (`git filter-repo`), because the data is already public.
+This is the single highest-impact item the review surfaced and it is the
+sender's call.
 
 ## Deployment log
 

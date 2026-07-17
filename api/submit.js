@@ -9,7 +9,7 @@
 "use strict";
 
 const { getRecord, setRecord, TOKEN_RE, isExpired, noindex, clean,
-  expireKeys, withinRateLimit } = require("./_lib/store.js");
+  withinRateLimit } = require("./_lib/store.js");
 
 // Same-day notification via Resend (https://resend.com). Optional: if the key
 // is missing or the send fails, the submission still lands in the store and
@@ -70,10 +70,10 @@ module.exports = async (req, res) => {
     record.submitted_at = new Date().toISOString();
     record.address_type = addressType;
     record.address = address;
+    // setRecord writes the value and the 90-day TTL as one atomic command, so
+    // the address can never be stored without an expiry and the self-delete
+    // clock restarts from submission even if `delivered` is never run.
     await setRecord(token, record);
-    // Restart the self-delete clock: the address lives at most SAFETY_TTL_DAYS
-    // from submission even if `delivered` is never run.
-    await expireKeys(token, record.piece_id);
 
     let notified = "failed";
     try {

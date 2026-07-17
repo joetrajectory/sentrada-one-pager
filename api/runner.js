@@ -17,14 +17,19 @@
 "use strict";
 
 const crypto = require("crypto");
-const { redis, getRecord, setRecord, TOKEN_RE, noindex, clean, expireKeys } = require("./_lib/store.js");
+const { redis, getRecord, setRecord, setPointer, TOKEN_RE, noindex, clean } = require("./_lib/store.js");
 
 function authorised(req) {
   const secret = process.env.RUNNER_SECRET || "";
   const header = String(req.headers.authorization || "");
   const provided = header.startsWith("Bearer ") ? header.slice(7) : "";
-  if (!secret || !provided || provided.length !== secret.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(secret));
+  if (!secret || !provided) return false;
+  // Compare fixed-length SHA-256 digests so timingSafeEqual never sees unequal
+  // buffer lengths (a multibyte header of the right string length would
+  // otherwise make it throw a 500 instead of returning a clean 401).
+  const a = crypto.createHash("sha256").update(provided).digest();
+  const b = crypto.createHash("sha256").update(secret).digest();
+  return crypto.timingSafeEqual(a, b);
 }
 
 async function tokenForPiece(pieceId) {
@@ -50,9 +55,17 @@ module.exports = async (req, res) => {
       if (previous) {
         // Never let a re-tease silently destroy an address that arrived on the
         // old token and has not been shipped yet. Pull it and mark the piece
-        // delivered (which purges), then tease again.
+        // delivered (which purges), then tease again. The state is re-checked
+        // immediately before the DEL so a submit that lands mid-register (after
+        // the first read, before the delete) cannot be clobbered.
         const prevRecord = await getRecord(previous);
         if (prevRecord && prevRecord.state === "submitted") {
+          return res.status(409).json({
+            error: "an address is on file for this piece; run `address` to pull "
+              + "it and `delivered` to purge it before re-teasing" });
+        }
+        const confirm = await getRecord(previous);
+        if (confirm && confirm.state === "submitted") {
           return res.status(409).json({
             error: "an address is on file for this piece; run `address` to pull "
               + "it and `delivered` to purge it before re-teasing" });
@@ -68,8 +81,7 @@ module.exports = async (req, res) => {
         created_at: now.toISOString(),
         expires_at: new Date(now.getTime() + ttlDays * 86400000).toISOString(),
       });
-      await redis("SET", `piece:${pieceId}`, token);
-      await expireKeys(token, pieceId);
+      await setPointer(pieceId, token);
       return res.status(200).json({ ok: true, replaced: Boolean(previous) });
     }
 
