@@ -207,6 +207,33 @@ weaken-the-template-and-check works as a one-liner. Where `gate-probe` plants
 synthetic violations to find copy-text blind spots, the harness is the durable
 regression exam; they complement, not duplicate.
 
+## Replies (P7b)
+
+When a recipient replies to a delivered piece, `reply` drafts the response. It
+never sends anything: you copy, edit and send.
+
+```bash
+python runner/sentrada_runner.py reply jane-doe-acme-corp --channel email
+# paste the reply (or thread, latest last), finish with END or Ctrl-D
+```
+
+Three steps, all through the runner's `claude -p` plumbing: classify (reply
+language gift/problem/mixed/none + intent, config key `p7b_classify`, Sonnet),
+draft (branch by classification, house rules injected, crossword open-loop
+deployed where a record exists, `p7b_draft`, Opus by default — point it at a
+stronger alias in config while one is available), and a grounding gate
+(`p7b_gate`, Opus: fact errors and house rules only; one failure regenerates,
+a second HALTs). Deterministic lint runs before the gate (em dash,
+exclamation, subject line on a reply, generic openers, length caps).
+
+On the first reply it stamps `first_reply_date` and `reply_language` into the
+piece's `meta.json` (which `outcome` harvests), and every run writes
+`replies/reply-NNN/` (reply, classification, drafts, gate result) in the piece
+folder. `runner/reply_validation/` replays historical replies through the real
+command for side-by-side comparison with what was actually sent; real cases
+contain third-party correspondence, so build them locally and never commit
+them (the committed example case is synthetic).
+
 ## Outcomes and the monthly review
 
 Every sent piece gets a record in the committed ledger (`runner/outcomes.json`)

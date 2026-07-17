@@ -255,6 +255,11 @@ python runner/sentrada_runner.py ...
                 only after the blind read, and a render fact-check against the
                 research (6C/6D). Writes qc_cold.md + qc_render_factcheck.md
   followup      re-run Prompt 7 for a piece
+  reply         P7b: paste an inbound reply; classify (language + intent) ->
+                draft the response -> grounding gate (fact errors + house
+                rules; one regenerate, then HALT). Never sends. Stamps
+                first_reply_date + reply_language into meta.json on the first
+                reply; every run writes replies/reply-NNN/ in the piece folder
   ship-check    print-readiness gate; run before staging anything for print
   gate-probe    regression-test the copy gates: plants known violations in a
                 clean piece's data and asserts P4b + the lint catch them; run

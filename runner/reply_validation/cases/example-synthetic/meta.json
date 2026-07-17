@@ -1,0 +1,14 @@
+{
+  "recipient": "Alex Example",
+  "company": "Acme Analytics",
+  "format": "crossword",
+  "open_loop": {
+    "answer": "COVERAGE",
+    "clue": "What three dashboards report differently every Monday",
+    "clue_number": 14,
+    "direction": "Down",
+    "metric": "true pipeline coverage ratio across the three systems",
+    "question": "What is Acme's actual coverage ratio when the three dashboards are reconciled?",
+    "tier": "B"
+  }
+}
