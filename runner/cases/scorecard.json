@@ -1,10 +1,10 @@
 {
-  "run_at": "2026-07-14 20:54:44",
+  "run_at": "2026-07-17 10:21:44",
   "templates": {
-    "prompt4b_grounding.md": "5235ff185cade743f6b3fe5df670278c312a81b4"
+    "prompt4b_grounding.md": "de8937fd263847ef618fc903a3903e0de2f67baf"
   },
-  "caught": 11,
-  "must_flags": 11,
+  "caught": 16,
+  "must_flags": 16,
   "false_alarms": 0,
   "must_passes": 4,
   "results": {
@@ -112,6 +112,41 @@
       "detail": "",
       "violation_type": "UNSUPPORTED SENDER CLAIM",
       "draft": false
+    },
+    "redteam-aggregation-inflation": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "UNSUPPORTED SCALE CLAIM",
+      "draft": false
+    },
+    "redteam-causation-upgrade": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "UNSUPPORTED CAUSAL CLAIM",
+      "draft": false
+    },
+    "redteam-composite-attribution": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "MISATTRIBUTED DEAL",
+      "draft": false
+    },
+    "redteam-negation-drop": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "NEGATION DROP",
+      "draft": false
+    },
+    "redteam-superlative-inflation": {
+      "expected": "must_flag",
+      "outcome": "caught",
+      "detail": "",
+      "violation_type": "SUPERLATIVE INFLATION",
+      "draft": false
     }
   },
   "history": [
@@ -155,6 +190,27 @@
       "caught": 10,
       "must_flags": 11,
       "false_alarms": 0,
+      "must_passes": 4
+    },
+    {
+      "run_at": "2026-07-14 20:54:44",
+      "caught": 11,
+      "must_flags": 11,
+      "false_alarms": 0,
+      "must_passes": 4
+    },
+    {
+      "run_at": "2026-07-17 09:49:22",
+      "caught": 16,
+      "must_flags": 16,
+      "false_alarms": 1,
+      "must_passes": 4
+    },
+    {
+      "run_at": "2026-07-17 10:05:45",
+      "caught": 16,
+      "must_flags": 16,
+      "false_alarms": 1,
       "must_passes": 4
     }
   ]
