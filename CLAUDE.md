@@ -405,6 +405,13 @@ Runner side: SENTRADA_RUNNER_SECRET in env or .env must match RUNNER_SECRET;
 config "capture_api" is the deployed base URL (SENTRADA_CAPTURE_API overrides
 it, used by the local validation harness).
 
+NOT YET DEPLOYED: the full go-live procedure (Vercel import, Upstash, secret
+generation, DNS move off GitHub Pages, dress rehearsal, rollback) is
+docs/capture-deployment.md. Any session can drive it; the sender does the
+account clicks. Generate a fresh RUNNER_SECRET at deployment time; treat any
+secret that ever appeared in a conversation as burned. Delete this paragraph
+once deployed and logged in the runbook.
+
 ## Durability: gitignored output does NOT survive a container restart
 
 The remote container is ephemeral: on restart it re-clones the repo, so ONLY

@@ -1,0 +1,183 @@
+# Address capture: deployment runbook
+
+How to take the address-capture system (the tokenised page at
+sentrada.io/for/<token>, its API, and the runner's tease commands) from
+built-and-tested to live. Written for the sender, who is not a coder, working
+with a Claude session. Any Claude session with this repo can follow it: the
+sender does the account clicks (only they can), the session runs every command
+and verifies every step.
+
+Status when this was written: everything is merged to `main` and passes
+`capture-probe` (20 assertions) plus a simulated-phone walkthrough, but only
+against local mocks. Nothing below has run on real Vercel/Upstash/Resend yet.
+The first session to complete this runbook should note the date and any
+surprises at the bottom.
+
+Why the move: sentrada.io is (or was) served by GitHub Pages from the
+`claude/build-sentrada-sales-page-tMMpY` branch. GitHub Pages cannot run the
+/api serverless functions, so the site moves to Vercel, which serves the same
+static files plus the functions with no build step.
+
+The order below is deliberate: everything is proven on the free
+`.vercel.app` URL before DNS moves, so sentrada.io never points at something
+untested, and the old host stays up until the new one is verified.
+
+---
+
+## Block A — Environment network access (sender, 2 minutes)
+
+The Claude environment's network policy must allow the runner and the session
+to reach the deployment. In the Claude Code environment settings for this
+project, allow: `sentrada.io`, `vercel.com`, `api.vercel.com`, `*.vercel.app`,
+`api.resend.com` (or set full network access).
+
+Verify (session): `curl -s -o /dev/null -w "%{http_code}" https://vercel.com`
+returns an HTTP code, not 000. Until this passes, tease/capture/address/
+delivered cannot work from sessions, and nothing else in this runbook can be
+verified.
+
+## Block B — Vercel project (sender, ~10 minutes, all clicking)
+
+1. GitHub: repo Settings > General > Default branch > change to `main`.
+2. vercel.com > Continue with GitHub (the `joetrajectory` account).
+3. Add New > Project > import `sentrada-one-pager` > Deploy. Change no
+   settings (framework "Other", no build command). If the production branch
+   does not show `main`, set it: Project Settings > Git > Production Branch.
+4. Storage tab > Create Database > Upstash for Redis (free tier, EU region) >
+   connect it to the project. This injects `KV_REST_API_URL` and
+   `KV_REST_API_TOKEN` automatically. (If the integration injects
+   `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` instead, that also
+   works; the functions read both names.)
+5. Generate a FRESH `RUNNER_SECRET` now, at deployment time. Do not reuse any
+   value that has appeared in a chat conversation, document or message; treat
+   any secret that was ever pasted into a conversation as burned. The session
+   generates it:
+
+       python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+
+   The sender puts it in Project Settings > Environment Variables as
+   `RUNNER_SECRET` (all environments is fine), and nowhere else except
+   `.env` locally / the session env as `SENTRADA_RUNNER_SECRET` (step B7).
+   `.env` is gitignored; the secret must never be committed.
+6. Deployments tab > latest deployment > ... menu > Redeploy (env vars only
+   apply to deployments made after they are set).
+7. Session side: put the same value in `.env` as
+   `SENTRADA_RUNNER_SECRET=<value>` for this session, and note that fresh
+   containers need it again (or add it to the environment's env vars in the
+   same settings screen as Block A, which persists across sessions).
+8. Sender tells the session the project URL (like
+   `sentrada-one-pager-xxxx.vercel.app`).
+
+## Block C — Dress rehearsal on the .vercel.app URL (session, 10 minutes)
+
+Run before any DNS change. The session drives; the sender optionally opens
+one link on their phone.
+
+    export SENTRADA_CAPTURE_API=https://<project>.vercel.app
+    python runner/sentrada_runner.py printed --piece test-pilot --name "Testa Fakerson"
+    python runner/sentrada_runner.py tease --piece test-pilot --channel linkedin --variant mystery
+
+Expected: a one-off link prints. Then verify, in order:
+
+1. Open the link (session via headless browser, sender via phone): greeting
+   "Testa.", the one-copy line, My office / Somewhere else, address fields,
+   privacy line, Send it. Submit a made-up address.
+2. Confirmation state appears; revisiting the link shows the confirmation,
+   not the form.
+3. `python runner/sentrada_runner.py capture` shows `test-pilot
+   address-received` and a share rate of 1/1.
+4. `python runner/sentrada_runner.py address --piece test-pilot` prints the
+   made-up address to the terminal.
+5. `python runner/sentrada_runner.py delivered --piece test-pilot` reports the
+   store record deleted; re-running the `address` command now fails with a
+   404. That failure is the deletion promise, observed.
+6. `https://<project>.vercel.app/for/AAAAAAAAAAAAAAAAAAAAAA` shows "This
+   one's expired." with the write-to-me email.
+7. `curl -sI https://<project>.vercel.app/for/x | grep -i x-robots-tag`
+   shows `noindex, nofollow`.
+8. Remove the `test-pilot` entry from `runner/capture.json` (delete the JSON
+   key) before the first real tease, so the pilot's share-rate stats start
+   clean.
+
+If any step fails, stop and fix before Block D/E; `capture-probe` still
+passing locally means the divergence is real-infrastructure behaviour, which
+is exactly what this block exists to catch. Known first suspect: the
+`/for/:token` rewrite in vercel.json interacting with `cleanUrls`.
+
+## Block D — Email notification (sender, 5 minutes; optional but recommended)
+
+Without this, submissions are still safe: `capture` syncs them from the
+store. This adds the same-day email ping.
+
+1. Sign up at resend.com. Either sign up with the exact inbox that should
+   receive the pings (the free `onboarding@resend.dev` sender reliably
+   delivers only to the Resend account's own address), or, better, verify the
+   `sentrada.io` domain: Resend > Domains > Add domain > add the three or
+   four DNS records it lists at Namecheap (Advanced DNS) > wait for verified.
+2. Resend > API Keys > Create > copy the key.
+3. Vercel env vars: add `RESEND_API_KEY` (the key) and `NOTIFY_EMAIL` (the
+   inbox). If the domain was verified, also `NOTIFY_FROM` like
+   `Sentrada <notify@sentrada.io>`. Redeploy (B6).
+4. Verify: repeat a Block C tease+submit; the email must arrive the same day
+   and contain the piece id and NO part of the address. If it does not
+   arrive, check Resend's dashboard logs; the capture poll remains the
+   fallback either way.
+
+## Block E — Move sentrada.io, switch off the old host (sender, 5 minutes)
+
+Only after Block C is green.
+
+1. Vercel: Project Settings > Domains > add `sentrada.io` and
+   `www.sentrada.io`. It shows configuration warnings until DNS moves.
+2. Namecheap: Domain List > sentrada.io > Manage > Advanced DNS. WRITE DOWN
+   the existing records first (for rollback). Delete only the GitHub Pages
+   records: A records pointing at 185.199.108.153 / .109. / .110. / .111.
+   addresses, and any CNAME pointing at `joetrajectory.github.io`. Add:
+   - A record, host `@`, value `76.76.21.21`
+   - CNAME record, host `www`, value `cname.vercel-dns.com`
+   Leave everything else (the nobodyresponds.com redirect lives on that
+   domain, not this one; leave any TXT/MX records alone).
+3. Wait until Vercel's Domains page shows the domain valid with a
+   certificate (minutes to an hour). Check https://sentrada.io loads and
+   https://sentrada.io/for/x shows the expired state.
+4. GitHub: repo Settings > Pages > Source > None. (After this, the CNAME
+   file in the repo is inert; it can be deleted in a later cleanup.)
+5. Rollback if anything goes wrong: restore the Namecheap records written
+   down in step 2 and re-enable Pages; the old site returns as-was.
+
+## Final validation (session + sender, 10 minutes)
+
+The build brief's definition of done, run once against the live domain:
+repeat Block C steps 1 to 8 with `SENTRADA_CAPTURE_API=https://sentrada.io`
+(which is also the committed config default, so the export is optional), plus
+Block D step 4 for the email. The sender walks the link on their actual
+phone. When all pass, the flow is live; start the pilot (two or three
+remote-likely names, LinkedIn DMs, mystery variant first).
+
+## Day-to-day reference
+
+Lives in CLAUDE.md ("Address capture" section) and runner/README.md ("Address
+capture (the tease flow)"). Regression test after ANY edit to api/ or the
+capture commands: `python runner/sentrada_runner.py capture-probe`.
+
+## Troubleshooting
+
+- 401 from tease/capture/address/delivered: `SENTRADA_RUNNER_SECRET` (env or
+  .env) does not match Vercel's `RUNNER_SECRET`, or the redeploy after
+  setting it was skipped.
+- "capture API unreachable": Block A network policy, or the URL in config
+  `capture_api` / `SENTRADA_CAPTURE_API`.
+- Page shows "That didn't load.": the /api/token function failed; check the
+  function logs in Vercel (Deployments > deployment > Functions). Usually
+  missing store env vars (redeploy after attaching Upstash).
+- /for/<token> gives 404 or drops to the homepage: the vercel.json rewrite;
+  check it deployed (vercel.json is committed) and consult the session.
+- Email never arrives: Resend logs first; unverified sender to a
+  non-account inbox is the usual cause (Block D step 1). Submissions are
+  still captured regardless; `capture` shows them.
+- To rotate the runner secret: set a new value in Vercel, redeploy, update
+  .env / environment settings. Tokens and data are unaffected.
+
+## Deployment log
+
+- (fill in: date, who, project URL, surprises found)
