@@ -53,7 +53,16 @@ def call_model(prompt, model_key, cfg):
     models = dict(DEFAULT_MODELS)
     models.update(cfg.get("models", {}))
     model = models.get(model_key, DEFAULT_MODELS[model_key])
-    return _runner.cli_text(prompt, model)
+    try:
+        return _runner.cli_text(prompt, model)
+    except (RuntimeError, SystemExit):
+        if model == "opus":
+            raise
+        # If the configured model is unavailable (e.g. a stronger alias whose
+        # access has lapsed), fall back to Opus rather than dying mid-reply.
+        print("NOTE: model %s unavailable, using opus." % model,
+              file=sys.stderr)
+        return _runner.cli_text(prompt, "opus")
 
 
 # ------------------------------------------------------------------ utilities
