@@ -334,6 +334,24 @@ for.html           # The tokenised address-capture page (sentrada.io/for/<token>
 /pipeline/         # Image-gen pipeline campaign data [GITIGNORED]
 CLAUDE.md          # This file
 
+## Site hosting and repo visibility (verified by Joe, 17 July 2026)
+
+sentrada.io is served by GITHUB PAGES from the old sales-page branch, NOT by
+Vercel. Vercel is not deployed yet; that migration is a planned deployment
+sitting on Joe's side. Two hard consequences until that sitting happens:
+
+- DO NOT flip this repo private. GitHub Pages on this plan stops serving a
+  private repo, so flipping visibility takes the live website down. The repo
+  WILL go private, but only during the deployment sitting where the site moves
+  to Vercel in the same session.
+- Do not infer hosting from repo contents. vercel.json and api/ exist ahead of
+  the migration; a previous session concluded from them that Vercel was
+  already serving the site, which was wrong. Statements here beat inference;
+  when in doubt, ask Joe, who can see the GitHub Pages and Vercel dashboards.
+
+The capture flow's api/ functions require the Vercel deployment, so the tease
+flow goes live at the same sitting.
+
 ## Git tracking
 
 THE CANONICAL BRANCH IS `main` (consolidated 13 July 2026): runner, templates,
@@ -397,7 +415,9 @@ Where things live, and why:
   mock Resend). Run it after any edit to api/ or the capture commands, exactly
   as gate-probe is run after copy-gate edits.
 
-Site side (deployed with the site on Vercel): for.html is the token page
+Site side (WILL deploy with the site on Vercel at the deployment sitting; not
+yet live there, see "Site hosting and repo visibility" below): for.html is the
+token page
 (mobile-first, noindexed, exact copy fixed), api/token.js, api/submit.js and
 api/runner.js are the serverless functions. Deployment env vars:
 KV_REST_API_URL + KV_REST_API_TOKEN (Upstash via the Vercel marketplace),

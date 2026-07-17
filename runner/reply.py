@@ -284,7 +284,10 @@ def format_sender_facts(cfg):
     sender = cfg.get("sender", {})
     if not sender:
         return "(none provided)"
-    keys = ("name", "company", "what_they_sell", "proof_points",
+    # The runner's config sender block names the sender "sender_name" (the P7b
+    # build assumed "name" from the Notion spec; verified against the real
+    # config on integration). "name" stays as a fallback for old configs.
+    keys = ("sender_name", "name", "company", "what_they_sell", "proof_points",
             "measurement_capabilities", "booking_link")
     lines = []
     for k in keys:

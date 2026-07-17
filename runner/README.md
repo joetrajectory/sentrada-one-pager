@@ -226,6 +226,10 @@ stronger alias in config while one is available), and a grounding gate
 a second HALTs). Deterministic lint runs before the gate (em dash,
 exclamation, subject line on a reply, generic openers, length caps).
 
+The runner does not track which follow-up touches have been sent (that lives
+in the shared client doc), so tell `reply` with `--touches-sent 1` or `1,2`
+when any touch is out; without it the draft assumes nothing has been sent.
+
 On the first reply it stamps `first_reply_date` and `reply_language` into the
 piece's `meta.json` (which `outcome` harvests), and every run writes
 `replies/reply-NNN/` (reply, classification, drafts, gate result) in the piece
