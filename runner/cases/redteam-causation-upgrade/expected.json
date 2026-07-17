@@ -1,0 +1,8 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "UNSUPPORTED CAUSAL CLAIM",
+  "offending_detail": "Research states the rebrand and the reply rate as separate facts; the copy invents causation (and the 2025 rate predates the February 2026 rebrand).",
+  "match_terms": [
+    "rebrand has driven"
+  ]
+}

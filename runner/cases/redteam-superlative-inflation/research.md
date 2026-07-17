@@ -56,9 +56,6 @@ Format: newspaper
 
 ## Published outbound and data research
 
-- 2025 was the company's record outbound year: its SDR team's highest call
-  volume and connect performance to date (State of Cold Calling 2026;
-  company blog).
 - Cognism's SDR team made 449,933 cold calls in 2025 with an 11.3 per cent
   connect rate (State of Cold Calling 2026, company report). The industry-wide
   success rate is 2.7 per cent, up from 2.3 per cent the prior year, compiled

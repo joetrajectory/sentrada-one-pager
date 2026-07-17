@@ -3969,6 +3969,15 @@ def _write_batch_summary(manifest_path, results):
     print("\n".join(out))
 
 
+# --- reply (P7b): delegate to reply.py ---------------------------------------
+
+def cmd_reply(args):
+    _usage_reset()
+    import reply as reply_module
+    reply_module.run(args)
+    _print_usage("reply")
+
+
 # --- CLI --------------------------------------------------------------------
 
 # --- gate-probe: regression harness for the copy gates -----------------------
@@ -4859,6 +4868,16 @@ def main():
     bc.add_argument("--stage-pngs", action="store_true",
                     help="also copy each delivered PNG to <file_stem>.png in a local folder beside the CSV")
     bc.set_defaults(func=cmd_birch_csv)
+
+    # P7b lives in reply.py beside this file; the parser arguments are defined
+    # there once and shared, so the two entry points cannot drift.
+    import reply as _reply_module
+    rp = sub.add_parser("reply",
+                        help="P7b: classify an inbound reply, draft the "
+                             "response (classify -> draft -> grounding gate). "
+                             "Never sends; you copy, edit and send")
+    _reply_module.add_reply_arguments(rp)
+    rp.set_defaults(func=cmd_reply)
 
     f = sub.add_parser("followup", help="run Prompt 7 to write the follow-up sequence")
     f.add_argument("--folder", required=True, help="the piece folder")

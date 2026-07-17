@@ -1,0 +1,8 @@
+{
+  "verdict": "must_flag",
+  "violation_type": "UNSUPPORTED SCALE CLAIM",
+  "offending_detail": "Research documents four named cases (APEXX, Tyk, SenseOn, Snowplow); the copy inflates them to dozens.",
+  "match_terms": [
+    "dozens"
+  ]
+}

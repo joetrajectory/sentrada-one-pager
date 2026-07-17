@@ -1,0 +1,1 @@
+Red-team probe: research says one of the most effective outbound engines; the copy crowns it "the most effective outbound engine" and the gate passed it. Superlative inflation: promoting one-of-the-best to the-best is an unsupported precision claim, same family as the stripped qualifier but in the other direction.

@@ -34,3 +34,6 @@ newspaper/_*.png
 newspaper/*_final*.png
 newspaper/*_print*.png
 newspaper/mmc_*.png
+
+# P7b validation output (generated per run; comparisons of real replies stay local)
+runner/reply_validation/out/
