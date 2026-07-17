@@ -417,8 +417,9 @@ Where things live, and why:
 
 Site side (WILL deploy with the site on Vercel at the deployment sitting; not
 yet live there, see "Site hosting and repo visibility" below): for.html is the
-token page
-(mobile-first, noindexed, exact copy fixed), api/token.js, api/submit.js and
+token page (mobile-first, noindexed, exact copy fixed, self-hosted Fraunces
+from /assets/fraunces.woff2 so it makes zero third-party requests),
+api/token.js, api/submit.js and
 api/runner.js are the serverless functions. Deployment env vars:
 KV_REST_API_URL + KV_REST_API_TOKEN (Upstash via the Vercel marketplace),
 RUNNER_SECRET (bearer auth for api/runner.js), RESEND_API_KEY + NOTIFY_EMAIL
@@ -429,6 +430,13 @@ set NOTIFY_FROM to use anything else.
 Runner side: SENTRADA_RUNNER_SECRET in env or .env must match RUNNER_SECRET;
 config "capture_api" is the deployed base URL (SENTRADA_CAPTURE_API overrides
 it, used by the local validation harness).
+
+NOT YET DEPLOYED: the full go-live procedure (Vercel import, Upstash, secret
+generation, DNS move off GitHub Pages, dress rehearsal, rollback) is
+docs/capture-deployment.md. Any session can drive it; the sender does the
+account clicks. Generate a fresh RUNNER_SECRET at deployment time; treat any
+secret that ever appeared in a conversation as burned. Delete this paragraph
+once deployed and logged in the runbook.
 
 ## Durability: gitignored output does NOT survive a container restart
 

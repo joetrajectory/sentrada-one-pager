@@ -52,7 +52,15 @@ function alive(key) {
 function command(parts) {
   const [cmd, ...rest] = parts;
   switch (String(cmd).toUpperCase()) {
-    case "SET": kv.set(rest[0], String(rest[1])); ttl.delete(rest[0]); return "OK";
+    case "SET": {
+      // SET key val [EX seconds]. A bare SET clears any TTL (real Redis
+      // semantics); SET ... EX arms it atomically in the same command.
+      kv.set(rest[0], String(rest[1]));
+      const exAt = rest.findIndex((a) => String(a).toUpperCase() === "EX");
+      if (exAt !== -1) ttl.set(rest[0], Date.now() + Number(rest[exAt + 1]) * 1000);
+      else ttl.delete(rest[0]);
+      return "OK";
+    }
     case "GET": return alive(rest[0]) ? kv.get(rest[0]) : null;
     case "DEL": ttl.delete(rest[0]); return kv.delete(rest[0]) ? 1 : 0;
     case "KEYS": {
@@ -120,7 +128,7 @@ const resendServer = http.createServer((req, res) => {
 // ---- app server: static files + the real /api functions ---------------------
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css",
   ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png",
-  ".webp": "image/webp", ".jpg": "image/jpeg" };
+  ".webp": "image/webp", ".jpg": "image/jpeg", ".woff2": "font/woff2" };
 
 const apiHandlers = {
   "/api/token": require(path.join(REPO, "api/token.js")),
@@ -128,9 +136,29 @@ const apiHandlers = {
   "/api/runner": require(path.join(REPO, "api/runner.js")),
 };
 
+// Load the REAL vercel.json so the harness reproduces cleanUrls / rewrite /
+// trailingSlash behaviour instead of hardcoding a forgiving version. This is
+// what makes the probe able to catch a rewrite-destination regression (a
+// destination that still carries .html would 308 away and drop the token).
+const vercel = JSON.parse(fs.readFileSync(path.join(REPO, "vercel.json"), "utf8"));
+const CLEAN_URLS = vercel.cleanUrls === true;
+const TRAILING_SLASH = vercel.trailingSlash === true;
+const REWRITES = vercel.rewrites || [];
+
+function sourceToRegex(src) {
+  // Vercel path-to-regexp subset: :param matches one path segment.
+  return new RegExp("^" + src.replace(/:[A-Za-z0-9_]+/g, "([^/]+)") + "$");
+}
+
 function vercelShim(req, res, handler) {
   const u = new URL(req.url, "http://localhost");
   req.query = Object.fromEntries(u.searchParams);
+  // Vercel always sets x-real-ip to the true client IP; it is not client
+  // spoofable. Mimic that so the rate limiter's IP source is exercised as it
+  // is in production (a spoofed x-forwarded-for must NOT create a new bucket).
+  if (!req.headers["x-real-ip"]) {
+    req.headers["x-real-ip"] = (req.socket && req.socket.remoteAddress) || "127.0.0.1";
+  }
   let raw = "";
   req.on("data", (c) => (raw += c));
   req.on("end", () => {
@@ -144,16 +172,50 @@ function vercelShim(req, res, handler) {
   });
 }
 
+function redirect(res, location) {
+  res.statusCode = 308;
+  res.setHeader("Location", location);
+  res.end();
+}
+
 const appServer = http.createServer((req, res) => {
   const u = new URL(req.url, "http://localhost");
   const apiPath = u.pathname.replace(/\/$/, "");
   if (apiHandlers[apiPath]) return vercelShim(req, res, apiHandlers[apiPath]);
 
-  // Mirror the vercel.json rewrite and noindex headers for /for/<token>.
-  let file = u.pathname;
-  if (/^\/for\/[^/]+$/.test(file) || file === "/for") file = "/for.html";
+  let pathname = u.pathname;
+
+  // trailingSlash: false — strip a trailing slash (never the root) with a 308.
+  if (!TRAILING_SLASH && pathname.length > 1 && pathname.endsWith("/")) {
+    return redirect(res, pathname.slice(0, -1) + u.search);
+  }
+  // cleanUrls: a request that carries .html 308-redirects to the clean path.
+  if (CLEAN_URLS && pathname.endsWith(".html")) {
+    return redirect(res, pathname.slice(0, -5) + u.search);
+  }
+
+  // Apply the first matching rewrite (internal; the browser URL is unchanged).
+  let served = pathname;
+  for (const rw of REWRITES) {
+    if (sourceToRegex(rw.source).test(pathname)) { served = rw.destination; break; }
+  }
+  // A rewrite DESTINATION that still ends in .html is itself subject to the
+  // cleanUrls redirect — and the redirect goes to the destination path, losing
+  // the original token. This is exactly the production failure the mock used to
+  // hide; now it 308s here too, so the probe catches it.
+  if (CLEAN_URLS && served.endsWith(".html")) {
+    return redirect(res, served.slice(0, -5));
+  }
+
+  // Resolve the served path to a file on disk (cleanUrls: /for -> /for.html).
+  let file = served;
   if (file === "/") file = "/index.html";
-  if (file.startsWith("/for")) {
+  else if (CLEAN_URLS && !path.extname(file) && fs.existsSync(path.join(REPO, file + ".html"))) {
+    file = file + ".html";
+  }
+
+  // noindex/no-store for the token page, matching the vercel.json header rules.
+  if (pathname === "/for" || pathname.startsWith("/for/")) {
     res.setHeader("X-Robots-Tag", "noindex, nofollow");
     res.setHeader("Cache-Control", "no-store");
   }

@@ -37,13 +37,30 @@ async function redis(...command) {
   return data.result;
 }
 
+// Hard safety net on top of the delete-on-delivery promise: every store key
+// self-deletes after SAFETY_TTL_DAYS even if `delivered` is never run, so no
+// address (or stale token) can outlive the flow by more than 90 days.
+const SAFETY_TTL_DAYS = 90;
+const SAFETY_TTL_SECONDS = SAFETY_TTL_DAYS * 86400;
+
 async function getRecord(token) {
   const raw = await redis("GET", `tok:${token}`);
   return raw ? JSON.parse(raw) : null;
 }
 
-async function setRecord(token, record) {
-  await redis("SET", `tok:${token}`, JSON.stringify(record));
+// Write the record AND its expiry in one command (SET ... EX). A plain SET
+// clears any existing TTL on real Redis, so writing the value and arming the
+// backstop as two calls left a window where a transient failure between them
+// stranded an address key with no expiry. One atomic command closes it: the
+// address can never be TTL-less, and each write (register, submit) restarts
+// the 90-day clock.
+async function setRecord(token, record, ttlSeconds = SAFETY_TTL_SECONDS) {
+  await redis("SET", `tok:${token}`, JSON.stringify(record), "EX", ttlSeconds);
+}
+
+// The piece -> token pointer, written with the same atomic TTL.
+async function setPointer(pieceId, token, ttlSeconds = SAFETY_TTL_SECONDS) {
+  await redis("SET", `piece:${pieceId}`, token, "EX", ttlSeconds);
 }
 
 const TOKEN_RE = /^[A-Za-z0-9_-]{16,64}$/;
@@ -61,26 +78,26 @@ function publicState(record) {
   return { state: "active", first_name: record.first_name };
 }
 
-// Hard safety net on top of the delete-on-delivery promise: every store key
-// self-deletes after SAFETY_TTL_DAYS even if `delivered` is never run, so no
-// address (or stale token) can outlive the flow by more than 90 days.
-const SAFETY_TTL_DAYS = 90;
-
-async function expireKeys(token, pieceId, days = SAFETY_TTL_DAYS) {
-  const seconds = days * 86400;
-  await redis("EXPIRE", `tok:${token}`, seconds);
-  if (pieceId) await redis("EXPIRE", `piece:${pieceId}`, seconds);
+// The caller's real IP. On Vercel `x-real-ip` is set by the platform and
+// cannot be spoofed by the client; the leftmost `x-forwarded-for` entry CAN
+// be, so it is only a local-dev fallback and we take its LAST hop (closest to
+// the edge) rather than the client-controlled first one.
+function clientIp(req) {
+  const real = String(req.headers["x-real-ip"] || "").trim();
+  if (real) return real;
+  const fwd = String(req.headers["x-forwarded-for"] || "").split(",").map((s) => s.trim()).filter(Boolean);
+  return fwd.length ? fwd[fwd.length - 1] : "unknown";
 }
 
-// Small fixed-window rate limit per IP per route. Fail-open: if the store
-// call itself fails the request proceeds and fails on the store anyway.
+// Small fixed-window rate limit per IP per route. Fail-open: if the store call
+// itself fails the request proceeds and fails on the store anyway. The EXPIRE
+// is re-issued on every hit, so a single failed EXPIRE can never leave the
+// counter key (which names an IP) immortal.
 async function withinRateLimit(req, route, limit) {
   try {
-    const ip = String(req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || "")
-      .split(",")[0].trim() || "unknown";
-    const key = `rl:${route}:${ip}:${Math.floor(Date.now() / 60000)}`;
+    const key = `rl:${route}:${clientIp(req)}:${Math.floor(Date.now() / 60000)}`;
     const count = await redis("INCR", key);
-    if (count === 1) await redis("EXPIRE", key, 60);
+    await redis("EXPIRE", key, 120);
     return count <= limit;
   } catch {
     return true;
@@ -93,11 +110,16 @@ function noindex(res) {
 }
 
 function clean(value, max = 200) {
+  // Strip ASCII control chars (neutralises terminal-escape and header
+  // injection into the runner output and the notification email) AND Unicode
+  // bidi / zero-width characters, so a submitted address cannot render
+  // deceptively in the operator's terminal or the Birch CSV.
   return String(value == null ? "" : value)
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, " ")
     .trim()
     .slice(0, max);
 }
 
-module.exports = { redis, getRecord, setRecord, TOKEN_RE, isExpired, publicState,
-  noindex, clean, expireKeys, withinRateLimit, SAFETY_TTL_DAYS };
+module.exports = { redis, getRecord, setRecord, setPointer, TOKEN_RE, isExpired,
+  publicState, noindex, clean, clientIp, withinRateLimit,
+  SAFETY_TTL_DAYS, SAFETY_TTL_SECONDS };

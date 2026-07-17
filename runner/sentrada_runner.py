@@ -3184,7 +3184,13 @@ def _capture_call(config, payload):
         method="POST")
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            raw = resp.read().decode("utf-8")
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            die(f"capture API {payload.get('action')} returned a non-JSON reply "
+                f"(is the base URL a Vercel deployment, not a proxy/login page?): "
+                f"{raw[:200]}")
     except urllib.error.HTTPError as e:
         die(f"capture API {payload.get('action')} failed ({e.code}): "
             f"{e.read().decode('utf-8', 'replace')[:300]}")
@@ -3349,6 +3355,10 @@ def cmd_address(args):
     print("\n[capture] this address goes into the Birch CSV or a manifest "
           "delivery override ONLY (both gitignored). Never commit it. It is "
           "deleted everywhere by:  delivered --piece " + args.piece)
+    print("[capture] PRIVACY: this printed the address to your terminal. If this "
+          "session is a logged/cloud transcript, the address now lives in that "
+          "log, which `delivered` cannot reach. Run `address` in a local, "
+          "unlogged terminal, or pipe it straight into the Birch CSV.")
 
 
 def cmd_delivered(args):
@@ -3597,8 +3607,27 @@ def cmd_capture_probe(args):
         req = urllib.request.Request(f"{base}/for/{token}")
         with urllib.request.urlopen(req, timeout=10) as resp:
             page = resp.read().decode()
+            final_url = resp.geturl()
             check("/for/<token> serves the page with a noindex header",
                   "noindex" in resp.headers.get("X-Robots-Tag", "") and "One copy" in page)
+            # The deploy-blocker class: a rewrite destination that still carries
+            # .html would 308 away under cleanUrls and STRIP the token. Assert
+            # the token survives to the served URL (the page reads it from the
+            # path). The harness now reproduces cleanUrls, so this is a real
+            # guard against a vercel.json rewrite regression.
+            check("/for/<token> keeps the token (no cleanUrls redirect strips it)",
+                  final_url.rstrip("/").endswith(token))
+            # Privacy: the token page must not reference any third-party origin
+            # (no Google Fonts, no analytics). Locks the self-hosted-font fix.
+            page_l = page.lower()
+            check("token page references no third-party origin",
+                  not any(h in page_l for h in
+                          ("googleapis.com", "gstatic.com", "fonts.google",
+                           "plausible.io", "//cdn", "http://")))
+        # cleanUrls is actually active: /for.html redirects to the clean path.
+        with urllib.request.urlopen(urllib.request.Request(f"{base}/for.html"), timeout=10) as resp:
+            check("cleanUrls active: /for.html resolves to the clean /for path",
+                  resp.geturl().rstrip("/").endswith("/for"))
 
         # 5. Submission: validation, storage, and an address-free notification.
         status, data, _ = http_json(f"{base}/api/submit",
@@ -3664,14 +3693,18 @@ def cmd_capture_probe(args):
         check("expired token reads as expired, no name leaked",
               data == {"state": "expired"})
 
-        # 10. The rate limit bites (last: it saturates the token route).
+        # 10. The rate limit bites, AND a spoofed X-Forwarded-For does not
+        # bypass it. The harness injects x-real-ip like Vercel does, so a fresh
+        # forged X-Forwarded-For per request must still land in the same bucket.
         limited = False
-        for _ in range(140):
-            status, _, _ = http_json(f"{base}/api/token?t={'B' * 22}")
+        for i in range(140):
+            status, _, _ = http_json(
+                f"{base}/api/token?t={'B' * 22}",
+                headers={"X-Forwarded-For": f"203.0.113.{i % 256}, 10.0.0.{i % 256}"})
             if status == 429:
                 limited = True
                 break
-        check("token lookups rate-limited within 140 rapid requests", limited)
+        check("rate limit holds against a spoofed X-Forwarded-For", limited)
 
         os.unlink(probe_cfg)
     finally:
