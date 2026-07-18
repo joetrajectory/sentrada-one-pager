@@ -1,0 +1,19 @@
+{
+  "_note": "Operational settings for the sourcing pipeline. Signal points live in scoring.json, never here.",
+  "extract_model": "sonnet",
+  "fetch_timeout_seconds": 30,
+  "fetch_delay_seconds": 2,
+  "fullenrich": {
+    "_note": "Endpoints reconstructed from FullEnrich's documented v1 API (docs.fullenrich.com). VERIFY against the live docs on the first keyed run; the client prints every request before sending.",
+    "base_url": "https://app.fullenrich.com/api/v1",
+    "enrich_start_path": "/contact/enrich/bulk",
+    "enrich_poll_path": "/contact/enrich/bulk/{enrichment_id}",
+    "enrich_fields": ["contact.work_emails"],
+    "enrich_fields_with_phones": ["contact.work_emails", "contact.phones"],
+    "poll_interval_seconds": 15,
+    "poll_timeout_seconds": 600,
+    "search_enabled": false,
+    "search_note": "Search API (person resolution) is NOT wired. Cost model: 0.25 credits per person exported vs 1 credit per work email / 10 per mobile on Enrich. Set search_enabled true only after Joe approves the cost model."
+  },
+  "companies_house_search_url": "https://find-and-update.company-information.service.gov.uk/search?q="
+}

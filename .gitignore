@@ -37,3 +37,10 @@ newspaper/mmc_*.png
 
 # P7b validation output (generated per run; comparisons of real replies stay local)
 runner/reply_validation/out/
+
+# Sourcing: the candidate store (sourcing/candidates.json) IS committed (same
+# reasoning as outcomes.json — containers are ephemeral; it holds only public
+# professional footprint). Contact data returned by FullEnrich and raw scraped
+# page dumps are NOT: personal contact data never goes on a code branch.
+sourcing/enriched.json
+sourcing/raw/

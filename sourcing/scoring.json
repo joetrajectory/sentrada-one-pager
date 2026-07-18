@@ -1,0 +1,12 @@
+{
+  "_note": "The ONLY place signal points live. Edit numbers here, never in code. Weights are opinion until outcome data exists; monthly-review cuts by source_signal will eventually set them.",
+  "points": {
+    "abm-hiring": 3,
+    "gifting-case-studies": 3,
+    "new-leader-abm-history": 2,
+    "abm-tooling-jd": 1,
+    "enterprise-ae-hiring": 1
+  },
+  "max_signal_age_days": 90,
+  "undated_signals_use_discovery_date": true
+}

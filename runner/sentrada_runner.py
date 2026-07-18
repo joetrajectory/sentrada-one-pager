@@ -706,13 +706,23 @@ def _build_base_values(args, sender, research, fmt):
 
 
 def _build_meta(args, fmt, brief, sender):
-    return {
+    meta = {
         "recipient_name": args.name, "recipient_title": args.title,
         "recipient_company": args.company, "format": fmt,
         "problem_label": brief.get("problem_label", ""),
         "companion_card_hook": brief.get("companion_card_hook", ""),
         "sender": sender,
     }
+    # Sourcing handoff: when the manifest entry carries source_signals (see
+    # sourcing/sourcing.py export), they ride into the piece record so the
+    # outcome ledger can compute response rate per signal source later.
+    raw = getattr(args, "source_signals", "") or ""
+    if raw:
+        try:
+            meta["source_signals"] = json.loads(raw)
+        except json.JSONDecodeError:
+            print("[warn] --source-signals is not valid JSON; ignored")
+    return meta
 
 
 def _run_brief(config, folder, base_values, feedback_text=""):
@@ -2921,6 +2931,15 @@ def cmd_outcome(args):
         for key in ("first_reply_date", "reply_language"):
             if meta.get(key):
                 rec.setdefault(key, meta[key])
+        # The sourcing pipeline stamps the signals that surfaced this
+        # recipient into meta.json; harvest them so response rate per signal
+        # source is computable from the ledger alone.
+        if meta.get("source_signals"):
+            rec.setdefault("source_signals", meta["source_signals"])
+            types = sorted({s.get("type", "") for s in meta["source_signals"]
+                            if s.get("type")})
+            if types:
+                rec.setdefault("source_signal", ", ".join(types))
     sixb_path = os.path.join(folder, "qc_recipient.md")
     if os.path.exists(sixb_path):
         v = extract_6b_verdict(read_file(sixb_path))
@@ -3785,6 +3804,8 @@ def _run_piece(entry, mode, config_path, research_abs=None):
            "--name", entry["name"], "--title", entry["title"],
            "--company", entry["company"], "--format", entry["format"],
            "--config", config_path]
+    if entry.get("source_signals"):
+        cmd += ["--source-signals", json.dumps(entry["source_signals"])]
     if mode == "brief":
         cmd += ["--brief-only", "--research", research_abs]
     else:
@@ -4666,6 +4687,10 @@ def main():
                    help="skip the brief; continue from the approved brief.json in the piece folder")
     g.add_argument("--feedback", default="",
                    help="with --brief-only, regenerate the brief incorporating this feedback")
+    g.add_argument("--source-signals", default="",
+                   help="JSON list of sourcing signals (stamped into meta.json "
+                        "so outcomes can be cut by signal source; normally set "
+                        "by batch manifests from sourcing/ export)")
     g.add_argument("--delivery-date", default="to be confirmed on delivery",
                    help="delivery date passed to the chained follow-up (placeholder is fine; "
                         "the follow-up is generated and held until delivery is confirmed)")

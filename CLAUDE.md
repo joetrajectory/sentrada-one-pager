@@ -305,6 +305,63 @@ python runner/sentrada_runner.py ...
 Human-run prompts (not runner-invoked): Prompt 0 (sender onboarding, produces the
 config.json sender block), Prompt 1 (research, in the Sentrada Claude Project).
 
+## Sourcing pipeline (sourcing/)
+
+Discovers, scores and shortlists targets BEFORE the chain runs. Signal modules
+feed one candidate store, a scorer ranks it, Joe approves names, and only
+approved names get enriched and desk-checked before handoff as P1 candidates.
+Money and heavy effort only ever flow after Joe's judgment, never before.
+
+python sourcing/sourcing.py ...
+  ingest      scrape path: walk a module's listing sources (blocked in this
+              container: the egress policy 403s the vendor sites; works where
+              egress allows)
+  paste       paste path: parse a pasted job ad / case study / announcement
+              into the same candidate format. Structured COMPANY:/PERSON:/
+              EVIDENCE:/URL: blocks (separated by ---) parse free and offline;
+              freeform text goes through claude -p extraction (subscription)
+  shortlist   ranked candidates: score, distinct signal count, every evidence
+              line with its link. Approval decisions are ALWAYS Joe's
+  approve / reject   per-name decisions, recorded with date
+  status      store counts
+  enrich      FullEnrich Enrich API on APPROVED names only. Stub without
+              FULLENRICH_API_KEY (prints the exact request, spends nothing).
+              Default work emails (1 credit); --phones adds mobiles (10)
+  resolve     Search-API person resolution for shortlisted company-level
+              records: NOT WIRED, prints the cost model (0.25 credits per
+              person exported). Wire only after Joe approves the cost model
+  desk-check  office evidence for an approved name: --gather fetches company
+              site pages + Companies House (key or manual URL); record with
+              --evidence/--source, verdict office-confirmed | hybrid-likely |
+              remote-likely. Remote-likely is NOT a rejection: it routes to
+              the address-capture play
+  export      approved + enriched + desk-checked -> research/sourcing-<date>/
+              (gitignored): manifest skeleton + per-candidate signals file as
+              P1 input. source_signals ride the manifest into each piece's
+              meta.json (generate --source-signals) and the outcome ledger
+              harvests them, so response rate per signal source is computable
+              later. The weights in scoring.json eventually get set by that
+              data, not opinion
+
+Modules (sourcing/modules/): gifting-case-studies BUILT (Sendoso/Reachdesk/
+Alyce customer stories, tier one). Planned, in scoring.json already:
+abm-hiring (tier one), new-leader-abm-history (tier two), abm-tooling-jd and
+enterprise-ae-hiring (tier three). Every module gets both input paths from
+sourcing.py; a new module is a file exposing NAME, TEMPLATE, LISTING_SOURCES,
+discover().
+
+Scoring: points live ONLY in sourcing/scoring.json. Signals older than 90
+days score zero (configurable); undated signals fall back to their discovery
+date (case studies are rarely dated; an undated study is live evidence the
+day it is found). Simple sum, no decimals, no multipliers.
+
+Storage: sourcing/candidates.json is COMMITTED (same reasoning as
+outcomes.json; holds only public professional footprint: names, titles,
+companies, published quotes, URLs). sourcing/enriched.json (FullEnrich
+contact data) and sourcing/raw/ are GITIGNORED: personal contact data never
+goes on a code branch. Commit the store after every sourcing session.
+No LinkedIn automation, ever.
+
 Legacy slash commands (/generate-artefact, /research-company, /review-output,
 /write-followup, /log-campaign) belong to the image-gen pipeline (parked formats).
 
@@ -321,6 +378,9 @@ newspaper/         # Newspaper layout engine (Pango/Cairo + upscaled template)
 crossword/         # Crossword engine + grid generator + upscaled template
 email/             # The Email engine (procedural Gmail chrome)
 card/              # Companion-card engine (A6) + bundled fonts and wordmark
+sourcing/          # Target discovery: sourcing.py, modules/ (signal modules),
+                   # scoring.json (the points), candidates.json (committed
+                   # store), enriched.json + raw/ [GITIGNORED]
 research/          # Per-recipient research + batch manifests + Birch CSVs [GITIGNORED]
 api/               # Address-capture serverless functions (token, submit, runner)
 for.html           # The tokenised address-capture page (sentrada.io/for/<token>)
@@ -365,6 +425,9 @@ Committed (core IP):
   outcomes.json, the cross-session outcome ledger, and capture.json, the
   address-capture ledger: statuses and token hashes, never addresses)
   for.html, api/ (the address-capture page and its serverless functions)
+  sourcing/ (sourcing.py, modules/, templates/, scoring.json, config.json and
+  candidates.json, the committed candidate store; enriched.json and raw/ are
+  gitignored: contact data and page dumps stay off code branches)
   newspaper/, crossword/, email/, card/ (the layout engines + their templates/assets)
   .claude/ (agents, commands, skills, hooks, settings)
   .mcp.json
