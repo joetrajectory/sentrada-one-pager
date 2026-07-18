@@ -505,6 +505,27 @@ def _engine_file_sha1(engine_path):
         return hashlib.sha1(fh.read()).hexdigest()
 
 
+def _stamp_qc(folder, qc_name, image_path):
+    """Record WHICH render a QC verdict actually looked at (qc_stamp.json,
+    keyed by QC filename). Ship-check prefers this hash over mtimes: mtime
+    comparison can be fooled by copy2-preserved times or a `qc --image` run
+    against a different file than the delivered render."""
+    try:
+        path = os.path.join(folder, "qc_stamp.json")
+        stamps = {}
+        if os.path.exists(path):
+            try:
+                s = json.loads(read_file(path))
+                if isinstance(s, dict):
+                    stamps = s
+            except (ValueError, OSError):
+                pass
+        stamps[qc_name] = {"image_sha1": _engine_file_sha1(image_path)}
+        write_file(path, json.dumps(stamps, indent=2))
+    except OSError:
+        pass  # stamping is best-effort; the mtime fallback still applies
+
+
 def _stamp_engine(output_path, engine_path):
     """Record which engine build produced a render (engine_stamp.json beside it).
     ship-check compares this against the current engine file and warns when a
@@ -1665,6 +1686,7 @@ def _p6(config, folder, image_path, meta, brief, research):
     review = vision_call(config, fill(load_template("prompt6_review.md"), values),
                          model_for(config, "p6"), image_path)
     write_file(os.path.join(folder, "qc_review.md"), review)
+    _stamp_qc(folder, "qc_review.md", image_path)
     return review, extract_p6_verdict(review)
 
 
@@ -1728,7 +1750,9 @@ def _p6b(config, folder, image_path, meta, research, package=False):
     print(f"[{label}] simulating the recipient ({model_for(config, 'p6b')}, vision)...")
     sixb = vision_call(config, fill(load_template("prompt6b_recipient.md"), values),
                        model_for(config, "p6b"), image_path)
-    write_file(os.path.join(folder, "qc_package.md" if package else "qc_recipient.md"), sixb)
+    qc_name = "qc_package.md" if package else "qc_recipient.md"
+    write_file(os.path.join(folder, qc_name), sixb)
+    _stamp_qc(folder, qc_name, image_path)
     return sixb, extract_6b_verdict(sixb)
 
 
@@ -2367,6 +2391,26 @@ def _ship_status(folder):
 
     png_m = os.path.getmtime(render)
 
+    # QC freshness: prefer the qc_stamp.json hash (which render the verdict
+    # actually saw) over mtime ordering; fall back to mtimes for QC files that
+    # predate stamping.
+    qc_stamps = {}
+    qsp = os.path.join(folder, "qc_stamp.json")
+    if os.path.exists(qsp):
+        try:
+            s = json.loads(read_file(qsp))
+            if isinstance(s, dict):
+                qc_stamps = s
+        except (ValueError, OSError):
+            pass
+    render_sha = _engine_file_sha1(render) if qc_stamps else None
+
+    def qc_stale(qc_path, qc_name):
+        st = qc_stamps.get(qc_name) or {}
+        if st.get("image_sha1"):
+            return st["image_sha1"] != render_sha
+        return os.path.getmtime(qc_path) <= png_m
+
     # Copy staleness: data.json newer than the render means the printed file no
     # longer matches the copy (post-QC edit, forgotten re-render) AND the edited
     # copy never re-passed the grounding gate (P4b runs inside generate only).
@@ -2380,9 +2424,9 @@ def _ship_status(folder):
         holds.append("no qc_review.md — P6 craft QC never ran")
     else:
         p6 = extract_p6_verdict(read_file(review))
-        if os.path.getmtime(review) <= png_m:
-            holds.append("render is NEWER than qc_review.md — re-QC required "
-                         "(P6 has not seen the delivered file)")
+        if qc_stale(review, "qc_review.md"):
+            holds.append("qc_review.md did not see the delivered render — "
+                         "re-QC required")
         if p6 is None:
             holds.append("qc_review.md exists but no P6 verdict is readable — "
                          "an unreadable verdict must not pass; re-run `qc`")
@@ -2395,9 +2439,9 @@ def _ship_status(folder):
         holds.append("no qc_recipient.md — P6B recipient sim never ran")
     else:
         p6b = extract_6b_verdict(read_file(recipient))
-        if os.path.getmtime(recipient) <= png_m:
-            holds.append("render is NEWER than qc_recipient.md — re-QC required "
-                         "(P6B has not seen the delivered file)")
+        if qc_stale(recipient, "qc_recipient.md"):
+            holds.append("qc_recipient.md did not see the delivered render — "
+                         "re-QC required")
         if p6b is None:
             holds.append("qc_recipient.md exists but no 6B verdict is readable — "
                          "an unreadable verdict must not pass; re-run `qc`")
@@ -2413,9 +2457,9 @@ def _ship_status(folder):
     card_json = os.path.join(folder, slug + "-card.json")
     if os.path.exists(package):
         pkg = extract_6b_verdict(read_file(package))
-        if os.path.getmtime(package) <= png_m:
-            holds.append("render is NEWER than qc_package.md — re-run `package-qc` "
-                         "(the package pass has not seen the delivered file)")
+        if qc_stale(package, "qc_package.md"):
+            holds.append("qc_package.md did not see the delivered render — "
+                         "re-run `package-qc`")
         if os.path.exists(card_json) and \
                 os.path.getmtime(card_json) >= os.path.getmtime(package):
             holds.append("card copy changed after the package pass — re-run `package-qc`")

@@ -24,6 +24,7 @@ so its shape changes with every company.
 
 import argparse
 import ctypes
+import hashlib
 import io
 import json
 import os
@@ -837,8 +838,18 @@ def build(template_path, data_path, output_path, cfg=CONFIG,
     # Generate the grid (or accept a pre-built one in the data file).
     if data.get("grid_data"):
         gridres = data["grid_data"]
+        # A hand-supplied grid may omit the generator's bookkeeping keys.
+        for key, default in (("anchors", []), ("anchors_missing", []),
+                             ("digit_dropped", []), ("short", False)):
+            gridres.setdefault(key, default)
     else:
         eff_seed = seed if seed is not None else data.get("seed")
+        if eff_seed is None:
+            # Deterministic by construction: with no seed anywhere, derive one
+            # from the candidate pool so a bare data file still re-renders
+            # byte-identically (the render contract every engine promises).
+            blob = json.dumps(data.get("candidates", []), sort_keys=True)
+            eff_seed = int(hashlib.sha1(blob.encode("utf-8")).hexdigest()[:8], 16)
         gridres = grid_generator.generate_grid(
             data["candidates"],
             min_words=data.get("min_words", cfg["min_words"]),

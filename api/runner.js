@@ -51,26 +51,23 @@ module.exports = async (req, res) => {
       if (!TOKEN_RE.test(token) || !pieceId || !firstName) {
         return res.status(400).json({ error: "register needs token, piece_id, first_name" });
       }
+      const ADDRESS_ON_FILE = "an address is on file for this piece; run "
+        + "`address` to pull it and `delivered` to purge it before re-teasing";
+      // Never let a re-tease silently destroy an address that arrived on the
+      // old token and has not been shipped yet. Order matters: write the new
+      // record, FLIP the pointer, and only then delete the old token — submit
+      // re-reads the pointer and refuses a token it no longer names, so once
+      // the flip lands the old link is dead. The old record is re-checked
+      // after the flip; a submission that slipped in keeps its address and
+      // the tease rolls back. (No atomic compare-and-delete exists here, so a
+      // submit completing between that re-check and the DEL could still be
+      // lost; the window is one round trip, not the whole register.)
       const previous = await tokenForPiece(pieceId);
       if (previous) {
-        // Never let a re-tease silently destroy an address that arrived on the
-        // old token and has not been shipped yet. Pull it and mark the piece
-        // delivered (which purges), then tease again. The state is re-checked
-        // immediately before the DEL so a submit that lands mid-register (after
-        // the first read, before the delete) cannot be clobbered.
         const prevRecord = await getRecord(previous);
         if (prevRecord && prevRecord.state === "submitted") {
-          return res.status(409).json({
-            error: "an address is on file for this piece; run `address` to pull "
-              + "it and `delivered` to purge it before re-teasing" });
+          return res.status(409).json({ error: ADDRESS_ON_FILE });
         }
-        const confirm = await getRecord(previous);
-        if (confirm && confirm.state === "submitted") {
-          return res.status(409).json({
-            error: "an address is on file for this piece; run `address` to pull "
-              + "it and `delivered` to purge it before re-teasing" });
-        }
-        await redis("DEL", `tok:${previous}`);
       }
       const ttlDays = Math.min(Math.max(parseInt(body.ttl_days, 10) || 30, 1), 90);
       const now = new Date();
@@ -82,6 +79,15 @@ module.exports = async (req, res) => {
         expires_at: new Date(now.getTime() + ttlDays * 86400000).toISOString(),
       });
       await setPointer(pieceId, token);
+      if (previous && previous !== token) {
+        const confirm = await getRecord(previous);
+        if (confirm && confirm.state === "submitted") {
+          await setPointer(pieceId, previous);
+          await redis("DEL", `tok:${token}`);
+          return res.status(409).json({ error: ADDRESS_ON_FILE });
+        }
+        await redis("DEL", `tok:${previous}`);
+      }
       return res.status(200).json({ ok: true, replaced: Boolean(previous) });
     }
 

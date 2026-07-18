@@ -649,6 +649,26 @@ def render_headline_and_byline(cr, ctx, data):
     ctx["headline_fits"] = fits
     ctx["headline_balanced"] = balanced()
 
+    # A line break INSIDE the NBSP-fused tail means Pango fell back to a
+    # character break (WORD_CHAR) in the page's largest type: mid-word, no
+    # hyphen. The fused tail has no spaces, so any line starting past its
+    # first byte is a char break.
+    midword = False
+    toks = sanitise(data["headline"]).split(" ")
+    if len(toks) > 3:
+        fused = " ".join(toks[-3:])
+        tail_start = len(text.encode("utf-8")) - len(fused.encode("utf-8"))
+        it = layout.get_iter()
+        while True:
+            line = (it.get_line_readonly() if hasattr(it, "get_line_readonly")
+                    else it.get_line())
+            if line.start_index > tail_start:
+                midword = True
+                break
+            if not it.next_line():
+                break
+    ctx["headline_midword"] = midword
+
     # Chain: headline at region top, byline directly beneath, then the redrawn
     # standfirst rule, then the columns, each measured off the previous element's
     # real bottom so nothing crowds.
@@ -893,9 +913,11 @@ def render_pullquote(cr, ctx, data):
 
     # Size the quote to fill the block. It is the closing feature of the page, so
     # it is allowed to grow large; the block is tall enough to carry it.
-    q_size, _ = largest_fitting(lambda s: q_height(s) <= quote_budget, 0.0090 * H, 0.046 * H)
+    q_size, q_fits = largest_fitting(lambda s: q_height(s) <= quote_budget, 0.0090 * H, 0.046 * H)
     q_height(q_size)
     qh = measure(layout)[1]
+    ctx["pullquote_fit"] = {"fits": bool(q_fits) and qh <= quote_budget,
+                            "over_px": max(0.0, qh - quote_budget)}
 
     block_h = qh + gap + ah
     qy = zy + max(0.0, (zh - block_h) / 2.0)
@@ -1484,6 +1506,16 @@ def run_checks(ctx, data, cfg):
     # --- Zone fit ------------------------------------------------------------
     if ctx.get("headline_fits") is False:
         add("fail", "headline", "does not fit its band even at minimum size (truncated)")
+    if ctx.get("headline_midword"):
+        add("fail", "headline",
+            "headline breaks mid-word in its final phrase (the orphan-bound tail "
+            "exceeds the line width); reword or shorten the headline")
+    pq = ctx.get("pullquote_fit")
+    if pq and not pq["fits"]:
+        add("fail", "pull_quote_text",
+            f"pull quote overflows its block even at the minimum size "
+            f"({pq['over_px']:.0f}px over) — the attribution would push into the "
+            "logo zone; trim the quote")
     mf = ctx.get("masthead_fit")
     if mf and not mf["fits"]:
         add("fail", "masthead_name",
