@@ -1588,10 +1588,16 @@ _SRGB_ICC = None
 def srgb_icc_bytes():
     """The sRGB ICC profile, cached, so every saved file is tagged with an
     unambiguous colour space. An untagged RGB file forces the print RIP to guess;
-    a tagged file converts predictably to the press's CMYK profile."""
+    a tagged file converts predictably to the press's CMYK profile.
+    The ICC header's creation datetime and profile ID are zeroed: LittleCMS
+    stamps generation time into the header, which would make byte-identical
+    re-renders impossible."""
     global _SRGB_ICC
     if _SRGB_ICC is None:
-        _SRGB_ICC = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        raw = bytearray(ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes())
+        raw[24:36] = bytes(12)
+        raw[84:100] = bytes(16)
+        _SRGB_ICC = bytes(raw)
     return _SRGB_ICC
 
 

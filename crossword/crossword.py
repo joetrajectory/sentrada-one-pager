@@ -587,9 +587,14 @@ _SRGB_ICC = None
 
 
 def srgb_icc_bytes():
+    # Header datetime + profile ID zeroed: LittleCMS stamps generation time,
+    # which would make byte-identical re-renders impossible.
     global _SRGB_ICC
     if _SRGB_ICC is None:
-        _SRGB_ICC = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        raw = bytearray(ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes())
+        raw[24:36] = bytes(12)
+        raw[84:100] = bytes(16)
+        _SRGB_ICC = bytes(raw)
     return _SRGB_ICC
 
 

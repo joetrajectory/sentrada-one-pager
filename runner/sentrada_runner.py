@@ -4211,6 +4211,254 @@ def _finish_gate_probe(failures):
     _print_usage("gate-probe")
 
 
+# --- engine-probe: regression harness for the layout engines ------------------
+# The third probe leg: gate-probe covers the copy gates, capture-probe the
+# address flow, engine-probe the deterministic render contract every engine
+# promises (--check exits non-zero on oversized copy without rendering, renders
+# carry the right print size, DPI metadata and sRGB tag, a failed render
+# quarantines as *.FAILED.png with no clean output, a re-render is
+# byte-identical) plus the runner's own pure logic: slug/verdict parsing, the
+# ungated-field lint, the DELIVERY block parser and snapshot idempotence in a
+# throwaway git repo. No model calls; free to run. Run after any edit to an
+# engine, a run_*_engine helper, or the snapshot/CSV code.
+
+def _probe_break_data(fmt, data):
+    """Mutate a copy of a known-good data dict so the engine must refuse it."""
+    if fmt == "newspaper":
+        data["lead_article"] = " ".join([data["lead_article"]] * 3)
+    elif fmt == "crossword":
+        data["subtitle"] = ("An interminable subtitle that cannot possibly be "
+                            "shrunk onto the line ") * 20
+    elif fmt == "email":
+        filler = {"type": "p",
+                  "text": "This paragraph repeats far past the sheet. " * 30}
+        data["body"] = data["body"] + [dict(filler) for _ in range(30)]
+    elif fmt == "card":
+        data["body"] = [p + (" and the point keeps going on" * 40)
+                        for p in data["body"]]
+    return data
+
+
+def _engine_probe_specs(config):
+    """(fmt, engine, template, bundled test data, print size in mm) per engine.
+    Sizes: production formats print at A2, the companion card at A6."""
+    return [
+        ("newspaper", config.get("engine"), config.get("newspaper_template"),
+         os.path.join(REPO_ROOT, "newspaper", "cognism.json"), (420, 594)),
+        ("crossword", config.get("crossword_engine"), config.get("crossword_template"),
+         os.path.join(REPO_ROOT, "crossword", "test_cognism.json"), (420, 594)),
+        ("email", config.get("email_engine"), None,
+         os.path.join(REPO_ROOT, "email", "test_qflow.json"), (420, 594)),
+        ("card", config.get("card_engine"), None,
+         os.path.join(REPO_ROOT, "card", "samples", "chris.json"), (105, 148)),
+    ]
+
+
+def _probe_engine_cmd(engine, template, data_path, output=None, check=False, dpi=None):
+    """Invoke an engine exactly as the run_*_engine helpers do (same
+    interpreter, cwd, flag shape), with a --print-dpi override for fast probes."""
+    cmd = [sys.executable, engine, "--data", data_path]
+    if template:
+        cmd += ["--template", template]
+    if check:
+        cmd.append("--check")
+    if output:
+        cmd += ["--output", output, "--print-dpi", str(dpi or 360)]
+    r = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
+    return r.returncode, (r.stdout or "") + (r.stderr or "")
+
+
+def _probe_png_report(path, dpi, size_mm):
+    """Problems with a rendered PNG's print contract; empty list means clean."""
+    from PIL import Image
+    problems = []
+    with Image.open(path) as img:
+        w, h = img.size
+        if img.mode != "RGB":
+            problems.append(f"mode {img.mode}, expected RGB")
+        if not img.info.get("icc_profile"):
+            problems.append("no ICC profile (sRGB tag missing)")
+        meta = img.info.get("dpi")
+        if not meta or abs(meta[0] - dpi) > 1 or abs(meta[1] - dpi) > 1:
+            problems.append(f"dpi metadata {meta}, expected {dpi}")
+        want = sorted(round(m / 25.4 * dpi) for m in size_mm)
+        got = sorted((w, h))
+        tol = max(2, dpi // 10)          # ~2.5mm: rounding, never a wrong size
+        if any(abs(a - b) > tol for a, b in zip(got, want)):
+            problems.append(f"size {w}x{h}px, expected ~{want[0]}x{want[1]} at {dpi}dpi")
+    return problems
+
+
+def _probe_runner_units(check):
+    check("slugify collapses punctuation runs",
+          slugify("Jane O'Brien @ Acme!") == "jane-o-brien-acme")
+    check("slugify never returns empty", slugify("!!!") == "x")
+    j = extract_last_json('x ```json\n{"a": 1}\n``` y ```json\n{"b": 2}\n```')
+    check("extract_last_json takes the last block", j == {"b": 2})
+    check("extract_last_json tolerates malformed JSON",
+          extract_last_json("```json\n{oops\n```") is None)
+    check("P6 verdict read through markdown wrap",
+          extract_p6_verdict("**VERDICT: BORDERLINE**") == "BORDERLINE")
+    check("P6 verdict takes the earliest keyword on the line",
+          extract_p6_verdict("VERDICT: FAIL (would otherwise PASS)") == "FAIL")
+    check("P6 verdict absent reads as None",
+          extract_p6_verdict("no verdict anywhere") is None)
+    check("6B verdict phrase scan",
+          extract_6b_verdict("blah WOULD ADMIRE AND IGNORE blah")
+          == "WOULD ADMIRE AND IGNORE")
+    check("surname drops honours and punctuation",
+          _surname("Jane van Helsing OBE") == "Helsing"
+          and _surname("Amy Smith-Jones") == "SmithJones")
+    check("company condensed keeps casing, drops punctuation",
+          _company_condensed("Verizon Business, Inc.") == "VerizonBusinessInc")
+    email_data = json.loads(read_file(os.path.join(REPO_ROOT, "email",
+                                                   "test_qflow.json")))
+    check("ungated-field lint: bundled email data fully gated",
+          ungated_copy_fields(email_data, "email") == [])
+    email_data["promo_line"] = "Printed in Milton Keynes since 1962"
+    check("ungated-field lint flags a field the builder omits",
+          ungated_copy_fields(email_data, "email") == ["promo_line"])
+
+
+def _probe_delivery(check):
+    global PIECES_DIR
+    saved = PIECES_DIR
+    td = tempfile.mkdtemp(prefix="engine-probe-pieces-")
+    PIECES_DIR = td
+    try:
+        os.makedirs(os.path.join(td, "p1"))
+        write_file(os.path.join(td, "p1", "research.md"),
+                   "prose...\nDELIVERY_STATUS: confirmed\n"
+                   "DELIVERY_ADDRESS: 1 High St, London EC1A 1AA\n"
+                   "DELIVERY_NOTES: reception, ask for the post room\n")
+        d = _delivery_from_research("p1")
+        check("DELIVERY block parsed from research.md",
+              d == {"status": "CONFIRMED", "address": "1 High St, London EC1A 1AA",
+                    "notes": "reception, ask for the post room"})
+        os.makedirs(os.path.join(td, "p2"))
+        write_file(os.path.join(td, "p2", "research.md"),
+                   "DELIVERY_STATUS: BLOCKED\nDELIVERY_ADDRESS: <office address>\n"
+                   "DELIVERY_NOTES:\n")
+        d = _delivery_from_research("p2")
+        check("unfilled address placeholder reads as empty",
+              d["address"] == "" and d["status"] == "BLOCKED" and d["notes"] == "")
+        check("missing research.md reads as empty",
+              _delivery_from_research("nope")
+              == {"status": "", "address": "", "notes": ""})
+    finally:
+        PIECES_DIR = saved
+        shutil.rmtree(td, ignore_errors=True)
+
+
+def _probe_snapshot(check):
+    """Prove _deliverables_snapshot's promises against a throwaway origin:
+    a new render is pushed, an identical re-run is skipped (idempotence), and
+    the file lands under batch-<label>/ on the deliverables branch."""
+    global REPO_ROOT
+    saved = REPO_ROOT
+    base = tempfile.mkdtemp(prefix="engine-probe-git-")
+    try:
+        origin = os.path.join(base, "origin.git")
+        work = os.path.join(base, "work")
+        for cmd, cwd in ((["git", "init", "--bare", origin], base),
+                         (["git", "init", work], base),
+                         (["git", "remote", "add", "origin", origin], work)):
+            r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+            if r.returncode != 0:
+                check("snapshot: throwaway git repo builds", False)
+                return
+        src = os.path.join(base, "x.png")
+        with open(src, "wb") as fh:
+            fh.write(b"\x89PNG\r\n\x1a\nprobe-bytes")
+        REPO_ROOT = work
+        r1 = _deliverables_snapshot([(src, "x.png")], "probe", push=True)
+        check("snapshot pushes a new render to deliverables",
+              r1.get("staged") == 1 and r1.get("pushed") == 1
+              and not r1.get("failed"))
+        r2 = _deliverables_snapshot([(src, "x.png")], "probe", push=True)
+        check("snapshot is idempotent (identical file skipped)",
+              r2.get("skipped") == 1 and r2.get("staged") == 0)
+        ls = subprocess.run(["git", "ls-tree", "-r", "--name-only", "deliverables"],
+                            cwd=origin, capture_output=True, text=True)
+        check("deliverables branch holds batch-probe/x.png",
+              "batch-probe/x.png" in (ls.stdout or ""))
+    finally:
+        REPO_ROOT = saved
+        shutil.rmtree(base, ignore_errors=True)
+
+
+def cmd_engine_probe(args):
+    config = load_config(args.config)
+    only = {e.strip() for e in (args.engines or "").split(",") if e.strip()}
+    results = []
+
+    def check(label, ok, detail=""):
+        results.append((label, ok))
+        line = ("  PASS  " if ok else "  FAIL  ") + label
+        if detail and not ok:
+            line += "\n          " + detail.strip().replace("\n", "\n          ")
+        print(line)
+
+    print("\n" + "=" * 70)
+    print("ENGINE PROBE — render contract + runner logic (no model calls)")
+    print("=" * 70)
+    td = tempfile.mkdtemp(prefix="engine-probe-")
+    try:
+        for fmt, engine, template, data_path, size_mm in _engine_probe_specs(config):
+            if only and fmt not in only:
+                continue
+            print(f"\n[{fmt}]")
+            if not engine or not os.path.exists(os.path.join(REPO_ROOT, engine)):
+                check(f"{fmt}: engine present in config and on disk", False)
+                continue
+            rc, out = _probe_engine_cmd(engine, template, data_path, check=True)
+            check(f"{fmt}: --check passes the bundled data", rc == 0, out[-400:])
+            broken = _probe_break_data(fmt, json.loads(read_file(data_path)))
+            bpath = os.path.join(td, fmt + "-broken.json")
+            write_file(bpath, json.dumps(broken))
+            rc, out = _probe_engine_cmd(engine, template, bpath, check=True)
+            check(f"{fmt}: --check refuses oversized copy (non-zero exit)", rc != 0)
+            if args.skip_render:
+                continue
+            out1 = os.path.join(td, fmt + "-a.png")
+            rc, out = _probe_engine_cmd(engine, template, data_path,
+                                        output=out1, dpi=args.dpi)
+            ok = rc == 0 and os.path.exists(out1)
+            check(f"{fmt}: renders the bundled data", ok, out[-400:])
+            if ok:
+                problems = _probe_png_report(out1, args.dpi, size_mm)
+                check(f"{fmt}: render carries print size, DPI and sRGB tag",
+                      not problems, "; ".join(problems))
+                out2 = os.path.join(td, fmt + "-b.png")
+                rc2, _ = _probe_engine_cmd(engine, template, data_path,
+                                           output=out2, dpi=args.dpi)
+                check(f"{fmt}: re-render is byte-identical (deterministic)",
+                      rc2 == 0 and os.path.exists(out2)
+                      and filecmp.cmp(out1, out2, shallow=False))
+            qout = os.path.join(td, fmt + "-broken.png")
+            rc, out = _probe_engine_cmd(engine, template, bpath,
+                                        output=qout, dpi=args.dpi)
+            qpath = os.path.join(td, fmt + "-broken.FAILED.png")
+            check(f"{fmt}: failed render quarantines as *.FAILED.png, no clean "
+                  "output", rc != 0 and not os.path.exists(qout)
+                  and os.path.exists(qpath))
+        print("\n[runner logic]")
+        _probe_runner_units(check)
+        _probe_delivery(check)
+        print("\n[snapshot]")
+        _probe_snapshot(check)
+    finally:
+        shutil.rmtree(td, ignore_errors=True)
+    fails = [label for label, ok in results if not ok]
+    print("-" * 70)
+    if fails:
+        print(f"{len(fails)} probe(s) FAILED. Do not trust renders (or the "
+              "snapshot path) until fixed.")
+        sys.exit(1)
+    print(f"All {len(results)} probes passed. Engines honour the render "
+          "contract; runner logic intact.")
+
+
 # --- harness: the grounding-gate exam ----------------------------------------
 # A committed library of real cases (research + gate-visible copy + expected
 # verdict) that the CURRENT 4b template is run over, one grounding call per
@@ -4889,6 +5137,21 @@ def main():
                               "capture commands")
     cpr.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     cpr.set_defaults(func=cmd_capture_probe)
+
+    ep = sub.add_parser("engine-probe",
+                        help="regression-test the layout engines' render contract "
+                             "(--check refusal, print size/DPI/sRGB, *.FAILED "
+                             "quarantine, deterministic re-render) plus the "
+                             "runner's pure logic and snapshot idempotence; free "
+                             "(no model calls), run after any engine or runner edit")
+    ep.add_argument("--engines", default="",
+                    help="comma-separated subset (newspaper,crossword,email,card)")
+    ep.add_argument("--skip-render", action="store_true",
+                    help="contract checks only, no renders (fast)")
+    ep.add_argument("--dpi", type=int, default=96,
+                    help="probe render DPI (default 96 for speed; 360 = full print size)")
+    ep.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    ep.set_defaults(func=cmd_engine_probe)
 
     bc = sub.add_parser("birch-csv",
                         help="emit the print supplier's shipping CSV (code, recipient, "

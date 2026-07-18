@@ -15,6 +15,14 @@ cp runner/config.example.json runner/config.json   # then fill in the sender blo
 The chain runner (the production pipeline) authenticates through the logged-in
 Claude CLI on a subscription; it needs no API key.
 
+Render dependencies (remote container): the engines need Pango/Cairo bindings,
+Pillow and pyphen, which are apt packages and DO NOT survive a container
+rebuild. In this container only python3.12 has the compiled gi bindings (plain
+python3 is 3.11 without _gi), so run the runner with python3.12 — engines
+inherit its interpreter. To reinstall after a rebuild:
+apt-get install -y gir1.2-pango-1.0 python3-gi python3-gi-cairo python3-cairo python3-pil python3-pyphen
+`engine-probe` verifies the whole render stack in one command.
+
 ## Environment variables
 
 Required for the chain runner: none.
@@ -41,6 +49,12 @@ python runner/sentrada_runner.py ship-check --all
 # Runs the print-readiness gate over existing pieces; confirms the runner,
 # config and piece folders are healthy. For a full smoke test, run a
 # generate --brief-only against a test research file.
+
+python3.12 runner/sentrada_runner.py engine-probe
+# Free (no model calls): renders all four engines against their bundled test
+# data and asserts the render contract (--check refusal, print size, DPI,
+# sRGB tag, *.FAILED quarantine, byte-identical re-render) plus the runner's
+# pure logic and snapshot idempotence.
 
 ## Validate output quality
 
@@ -169,6 +183,8 @@ Image-gen formats keep their Layer A modules in .claude/skills/{format-name}/SKI
    session, as newspaper/crossword/email/card were.
 2. Add runner/templates/prompt4_copy_<format>.md, a <format>_engine_data() /
    run_<format>_engine() pair, and a dispatch branch in _continue_after_brief.
+   Add the engine to _engine_probe_specs (with bundled test data) and a break
+   recipe to _probe_break_data so engine-probe covers it.
 3. Add the format to the accepted list in cmd_generate and _load_manifest, and to
    Prompt 2's format weighting.
 4. Update this format library section and bump the version.
@@ -301,6 +317,11 @@ python runner/sentrada_runner.py ...
                 share rate by variant
   capture-probe regression-test the capture flow end to end (real api/ functions,
                 mock store); run after any edit to api/ or the capture commands
+  engine-probe  regression-test the layout engines' render contract (--check
+                refusal, print size/DPI/sRGB tag, *.FAILED quarantine,
+                byte-identical re-render) plus the runner's pure logic and
+                snapshot idempotence; free (no model calls), run after any
+                engine or runner edit
 
 Human-run prompts (not runner-invoked): Prompt 0 (sender onboarding, produces the
 config.json sender block), Prompt 1 (research, in the Sentrada Claude Project).
