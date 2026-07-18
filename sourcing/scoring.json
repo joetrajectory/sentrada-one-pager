@@ -1,12 +1,11 @@
 {
-  "_note": "The ONLY place signal points live. Edit numbers here, never in code. Weights are opinion until outcome data exists; monthly-review cuts by source_signal will eventually set them.",
-  "points": {
-    "abm-hiring": 3,
-    "gifting-case-studies": 3,
-    "new-leader-abm-history": 2,
-    "abm-tooling-jd": 1,
-    "enterprise-ae-hiring": 1
+  "_note": "The ONLY place signal points and ageing live. Edit numbers here, never in code. Weights are opinion until outcome data exists; monthly-review cuts by source_signal will eventually set them. max_age_days is per signal type: hiring and new-in-role signals go stale in 90 days, but a gifting case study proves someone pays for physical outreach for much longer (24 months). Signals older than their window score zero but stay on the record.",
+  "signals": {
+    "abm-hiring": { "points": 3, "max_age_days": 90 },
+    "gifting-case-studies": { "points": 3, "max_age_days": 730 },
+    "new-leader-abm-history": { "points": 2, "max_age_days": 90 },
+    "abm-tooling-jd": { "points": 1, "max_age_days": 90 },
+    "enterprise-ae-hiring": { "points": 1, "max_age_days": 90 }
   },
-  "max_signal_age_days": 90,
   "undated_signals_use_discovery_date": true
 }

@@ -105,7 +105,7 @@ def load_env_key(name):
 
 def load_scoring():
     sc = load_json(SCORING_PATH, None)
-    if not sc or "points" not in sc:
+    if not sc or "signals" not in sc:
         die(f"scoring config missing or malformed: {SCORING_PATH}")
     return sc
 
@@ -125,6 +125,25 @@ def save_store(store):
     write_file(STORE_PATH, json.dumps(store, indent=2, ensure_ascii=False) + "\n")
 
 
+def _remind_durability():
+    print("[durability] candidates.json is GITIGNORED while the repo is "
+          "public (it is the sender's target list). A container reset loses "
+          "it; run `dump` and keep a copy, or re-import with `import --file`.")
+
+
+def _dump_store(store, reason=""):
+    """Print the full store so the chat log holds a durable copy: the repo is
+    public, so the store cannot ride a code branch until the repo goes
+    private at the deployment sitting."""
+    print(f"\n[durability] full store dump{' (' + reason + ')' if reason else ''} "
+          "— candidates.json is gitignored while the repo is public; copy "
+          "this somewhere safe. Restore with: sourcing.py import --file "
+          "<saved.json> --replace")
+    print("----- BEGIN SOURCING STORE DUMP -----")
+    print(json.dumps(store, indent=2, ensure_ascii=False))
+    print("----- END SOURCING STORE DUMP -----")
+
+
 def candidate_id(person, company):
     if person:
         return f"{slugify(person)}-{slugify(company)}"
@@ -133,7 +152,8 @@ def candidate_id(person, company):
     return f"co--{slugify(company)}"
 
 
-def upsert(store, person, title, company, sector, size, signal):
+def upsert(store, person, title, company, sector, size, signal,
+           location=None):
     """One record per person+company; signals stack on it. Returns
     (id, created, signal_added)."""
     if not company:
@@ -149,10 +169,14 @@ def upsert(store, person, title, company, sector, size, signal):
             "company": company,
             "sector": sector or None,
             "size": size or None,
+            "location": location or None,
+            "location_basis": None,
+            "tags": [],
             "status": "new",
             "date_discovered": today(),
             "decided_date": None,
             "signals": [],
+            "currency": None,
             "enrichment": None,
             "desk_check": None,
             "piece_slug": None,
@@ -162,7 +186,8 @@ def upsert(store, person, title, company, sector, size, signal):
     else:
         created = False
         # Fill gaps, never overwrite what a human may have corrected.
-        for key, val in (("title", title), ("sector", sector), ("size", size)):
+        for key, val in (("title", title), ("sector", sector), ("size", size),
+                         ("location", location)):
             if val and not rec.get(key):
                 rec[key] = val
     # Same signal type from the same source is the same signal.
@@ -185,30 +210,146 @@ def make_signal(sig_type, evidence, source_url, signal_date):
 
 # --- Scoring -----------------------------------------------------------------
 
-def signal_points(sig, scoring):
-    """Points for one signal. Signals older than max_signal_age_days score
-    zero. Undated signals fall back to the date they entered the store (an
-    undated case study is 'live' evidence the day we find it) when the config
-    says so; otherwise undated scores zero."""
-    points = scoring["points"].get(sig["type"], 0)
-    max_age = int(scoring.get("max_signal_age_days", 90))
+def signal_effective_date(sig, scoring):
+    """The date a signal ages from: its own date, else (per config) the date
+    it entered the store. Returns a datetime.date or None."""
     eff = sig.get("signal_date")
     if not eff and scoring.get("undated_signals_use_discovery_date", True):
         eff = sig.get("date_added")
     if not eff:
-        return 0
+        return None
     # Tolerate YYYY or YYYY-MM by pinning to the earliest day they could mean.
     eff = {4: eff + "-01-01", 7: eff + "-01"}.get(len(eff), eff)
     try:
-        eff_date = datetime.date.fromisoformat(eff)
+        return datetime.date.fromisoformat(eff)
     except ValueError:
+        return None
+
+
+def signal_points(sig, scoring):
+    """Points for one signal. Ageing is per signal type (scoring.json):
+    hiring signals go stale fast, a gifting case study stays meaningful for
+    24 months. Signals past their window score zero but stay recorded."""
+    entry = scoring["signals"].get(sig["type"]) or {}
+    eff_date = signal_effective_date(sig, scoring)
+    if eff_date is None:
         return 0
     age = (datetime.date.today() - eff_date).days
-    return 0 if age > max_age else points
+    return 0 if age > int(entry.get("max_age_days", 90)) \
+        else int(entry.get("points", 0))
 
 
 def score(rec, scoring):
     return sum(signal_points(s, scoring) for s in rec["signals"])
+
+
+def needs_currency_check(rec, scoring, config):
+    """True when the record's evidence is old enough (any DATED signal past
+    currency_check_after_days) that the person must be confirmed still in
+    the seat before approval. Undated signals do not trigger this (their age
+    is unknowable here; P1 research re-verifies everyone regardless)."""
+    if (rec.get("currency") or {}).get("checked"):
+        return False
+    limit = int(config.get("currency_check_after_days", 365))
+    for sig in rec["signals"]:
+        if not sig.get("signal_date"):
+            continue
+        eff = signal_effective_date(sig, scoring)
+        if eff and (datetime.date.today() - eff).days > limit:
+            return True
+    return False
+
+
+# --- Thread-aware holds -------------------------------------------------------
+# One live thread per company, ever. The check reads the chain's committed
+# ledgers and piece folders at shortlist time; nothing is stored, so a hold
+# lifts by itself the moment the thread closes, whatever the outcome.
+
+OUTCOMES_PATH = os.path.join(REPO_ROOT, "runner", "outcomes.json")
+CAPTURE_PATH = os.path.join(REPO_ROOT, "runner", "capture.json")
+PIECES_DIR = os.path.join(REPO_ROOT, "runner", "pieces")
+
+
+def company_key(name):
+    return re.sub(r"[^a-z0-9]", "", (name or "").lower())
+
+
+def _outcome_state(rec, config):
+    """'live' or 'closed' for one outcomes-ledger record."""
+    th = config.get("thread_hold", {})
+    result = rec.get("result", "")
+    if result in th.get("live_results", ["replied", "opportunity"]):
+        return "live"
+    if result == "no_response":
+        when = rec.get("delivered_date") or rec.get("first_reply_date") \
+            or rec.get("date") or ""
+        when = {4: when + "-01-01", 7: when + "-01"}.get(len(when), when)
+        try:
+            days = (datetime.date.today()
+                    - datetime.date.fromisoformat(when)).days
+        except ValueError:
+            return "live"  # unparseable date: hold rather than double-thread
+        return "live" if days <= int(th.get("followup_window_days", 14)) \
+            else "closed"
+    return "closed"  # declined, bounced, meeting, swapped, ...
+
+
+def live_threads(config):
+    """Map of company_key -> human-readable reason the company is held."""
+    threads, closed = {}, set()
+    outcomes = load_json(OUTCOMES_PATH, {})
+    for slug, rec in outcomes.items():
+        ck = company_key(rec.get("company") or "")
+        if not ck:
+            continue
+        if _outcome_state(rec, config) == "live":
+            threads[ck] = (f"live thread: {slug} "
+                           f"({rec.get('result')}, {rec.get('date', '?')})")
+        else:
+            closed.add(ck)
+    # Pieces on disk with no outcome recorded yet are in flight (folder name
+    # convention CP-NN_Surname_Company, or meta.json when the folder has one).
+    if os.path.isdir(PIECES_DIR):
+        for folder in sorted(os.listdir(PIECES_DIR)):
+            meta_path = os.path.join(PIECES_DIR, folder, "meta.json")
+            company = ""
+            if os.path.exists(meta_path):
+                try:
+                    company = json.loads(read_file(meta_path)).get(
+                        "recipient_company", "")
+                except (json.JSONDecodeError, OSError):
+                    company = ""
+            if not company and "_" in folder:
+                company = folder.split("_")[-1]
+            ck = company_key(company)
+            if ck and ck not in threads and ck not in closed:
+                threads[ck] = f"piece in flight: {folder} (no outcome yet)"
+    # Capture flow: a tease/address cycle is a live thread too.
+    capture = load_json(CAPTURE_PATH, {})
+    if isinstance(capture, dict):
+        for code, rec in capture.items():
+            if not isinstance(rec, dict):
+                continue
+            if rec.get("status") in ("printed", "tease-sent",
+                                     "address-received"):
+                ck = company_key(rec.get("company") or "")
+                if ck and ck not in threads:
+                    threads[ck] = f"capture flow: {code} ({rec['status']})"
+    return threads
+
+
+# --- Location ------------------------------------------------------------------
+
+def location_class(rec, config):
+    """'uk' | 'non-uk' | 'unknown' for the PERSON's location (never HQ)."""
+    loc = (rec.get("location") or "").lower()
+    if not loc:
+        return "unknown"
+    terms = config.get("shortlist", {}).get("uk_location_terms", ["uk"])
+    for t in terms:
+        if re.search(r"\b" + re.escape(t.lower()) + r"\b", loc):
+            return "uk"
+    return "non-uk"
 
 
 # --- Fetching (scrape path) --------------------------------------------------
@@ -248,7 +389,7 @@ _BLOCK_KEYS = {"company": "company", "person": "person", "name": "person",
                "evidence": "quote_or_evidence",
                "quote/evidence": "quote_or_evidence", "url": "source_url",
                "source": "source_url", "date": "date", "sector": "sector",
-               "size": "size"}
+               "size": "size", "location": "location"}
 
 
 def parse_structured(text):
@@ -268,7 +409,7 @@ def parse_structured(text):
                 item[key] = (item[key] + " " + line.strip()).strip()
         if item.get("company"):
             for k in ("person", "role", "quote_or_evidence", "source_url",
-                      "date", "sector", "size"):
+                      "date", "sector", "size", "location"):
                 item.setdefault(k, None)
                 if item[k] in ("", "null", "None", "-"):
                     item[k] = None
@@ -335,7 +476,8 @@ def ingest_extractions(store, module_name, extractions, default_url,
         cid, created, sig_added = upsert(
             store, (x.get("person") or "").strip() or None,
             x.get("role"), (x.get("company") or "").strip(),
-            x.get("sector"), x.get("size"), sig)
+            x.get("sector"), x.get("size"), sig,
+            location=x.get("location"))
         if cid is None:
             continue
         tag = "new" if created else ("+signal" if sig_added else "dup")
@@ -363,6 +505,17 @@ def cmd_ingest(args):
     module = get_module(args.module)
     config = load_config()
     store = load_store()
+    # API-backed modules (e.g. abm-hiring via Adzuna) implement api_ingest and
+    # return extraction dicts directly; listing-page modules use discover().
+    if hasattr(module, "api_ingest") and not args.source:
+        extractions = module.api_ingest(config, load_env_key)
+        if extractions is None:  # module printed its own instructions
+            return
+        n, s = ingest_extractions(store, module.NAME, extractions, "")
+        save_store(store)
+        print(f"\n[ingest] done: {n} new candidate(s), {s} signal(s) added.")
+        _dump_store(store, "after ingest")
+        return
     sources = args.source or module.LISTING_SOURCES
     print(f"[ingest] {module.NAME}: discovering from {len(sources)} listing page(s)")
     docs = module.discover(lambda u: fetch(u, config.get("fetch_timeout_seconds", 30)),
@@ -389,7 +542,7 @@ def cmd_ingest(args):
         time.sleep(config.get("fetch_delay_seconds", 2))
     print(f"\n[ingest] done: {total_new} new candidate(s), "
           f"{total_sig} signal(s) added. Store: {os.path.relpath(STORE_PATH, REPO_ROOT)}")
-    print("[ingest] commit the store: it is the committed system of record.")
+    _dump_store(store, "after ingest")
 
 
 def cmd_paste(args):
@@ -418,49 +571,80 @@ def cmd_paste(args):
                               default_date=args.date)
     save_store(store)
     print(f"\n[paste] done: {n} new candidate(s), {s} signal(s) added.")
+    _dump_store(store, "after paste")
 
 
 def _sorted_candidates(store, scoring):
     cands = list(store["candidates"].values())
-    # At equal score, a named person outranks an unresolved company-level
-    # record: the list Joe reviews should lead with real people.
+    # At equal score: a confirmed-UK desk outranks unknown outranks non-UK,
+    # and a named person outranks an unresolved company-level record. The
+    # list Joe reviews leads with real people he can actually send to.
+    loc_rank = {"uk": 0, "unknown": 1, "non-uk": 2}
+    config = load_config()
     return sorted(cands, key=lambda r: (-score(r, scoring),
                                         -len({s["type"] for s in r["signals"]}),
+                                        loc_rank[location_class(r, config)],
                                         0 if r.get("person") else 1,
                                         r["company"].lower()))
 
 
 def cmd_shortlist(args):
     scoring = load_scoring()
+    config = load_config()
     store = load_store()
+    threads = live_threads(config)
     rows = _sorted_candidates(store, scoring)
     if not args.all:
         rows = [r for r in rows if r["status"] in ("new", "approved")]
     if args.min_score:
         rows = [r for r in rows if score(r, scoring) >= args.min_score]
+    banked = 0
+    if not args.world:
+        kept = []
+        for r in rows:
+            if location_class(r, config) == "non-uk":
+                banked += 1
+            else:
+                kept.append(r)
+        rows = kept
     if args.limit:
         rows = rows[:args.limit]
     if args.json:
-        print(json.dumps([dict(r, score=score(r, scoring)) for r in rows],
-                         indent=2, ensure_ascii=False))
+        print(json.dumps(
+            [dict(r, score=score(r, scoring),
+                  hold=threads.get(company_key(r["company"]), ""),
+                  location_class=location_class(r, config)) for r in rows],
+            indent=2, ensure_ascii=False))
         return
     if not rows:
-        print("[shortlist] no candidates. Feed a module first "
-              "(ingest or paste).")
+        print("[shortlist] no candidates in this view."
+              + (f" ({banked} non-UK banked; --world shows them.)"
+                 if banked else " Feed a module first (ingest or paste)."))
         return
     print(f"\nSHORTLIST — {len(rows)} candidate(s), scored from "
           f"{os.path.relpath(SCORING_PATH, REPO_ROOT)} "
-          f"(signals older than {scoring.get('max_signal_age_days', 90)} days "
-          "score zero)\n" + "=" * 78)
+          "(per-signal ageing; stale signals score zero)")
+    if not args.world:
+        print(f"UK view (the desk, not the HQ): non-UK names banked, not "
+              f"shown ({banked} banked; --world shows the full list)")
+    print("=" * 78)
     for i, r in enumerate(rows, 1):
         distinct = len({s["type"] for s in r["signals"]})
         who = r["person"] or "(person unresolved — company-level signal)"
         title = f", {r['title']}" if r.get("title") else ""
+        loc = r.get("location") or "location unknown"
         extra = ", ".join(x for x in (r.get("sector"), r.get("size")) if x)
         extra = f"  [{extra}]" if extra else ""
+        tags = f"  <{', '.join(r['tags'])}>" if r.get("tags") else ""
         print(f"\n#{i:<3} {score(r, scoring)} pts | {distinct} signal type(s) | "
               f"{r['status'].upper():<8} | id: {r['id']}")
-        print(f"     {who}{title} — {r['company']}{extra}")
+        print(f"     {who}{title} — {r['company']} ({loc}){extra}{tags}")
+        hold = threads.get(company_key(r["company"]))
+        if hold:
+            print(f"     ** HOLD until that thread resolves — {hold} **")
+        if needs_currency_check(r, scoring, config):
+            print("     ** CURRENCY CHECK — story older than 12 months; "
+                  "confirm still in seat before approving (see `verify`) **")
         for s in r["signals"]:
             pts = signal_points(s, scoring)
             date = s.get("signal_date") or f"found {s['date_added']}"
@@ -470,22 +654,43 @@ def cmd_shortlist(args):
     print("\n" + "=" * 78)
     print("Approve or reject per name (approval is always you):\n"
           "  python sourcing/sourcing.py approve <id> [<id> ...]\n"
-          "  python sourcing/sourcing.py reject  <id> [<id> ...]")
+          "  python sourcing/sourcing.py reject  <id> [<id> ...]\n"
+          "Holds are computed live from runner/outcomes.json, runner/pieces/ "
+          "and the capture ledger;\nthey lift by themselves when the thread "
+          "closes, whatever its outcome.")
 
 
 def _set_status(args, new_status):
+    scoring = load_scoring()
+    config = load_config()
     store = load_store()
+    threads = live_threads(config) if new_status == "approved" else {}
     for cid in args.ids:
         rec = store["candidates"].get(cid)
         if not rec:
             print(f"  ! no candidate '{cid}'")
             continue
+        if new_status == "approved":
+            if needs_currency_check(rec, scoring, config):
+                print(f"  ! {cid}: REFUSED — the story behind this name is "
+                      "older than 12 months; confirm they are still in the "
+                      "seat first:\n"
+                      f"      python sourcing/sourcing.py verify --id {cid} "
+                      "[--in-seat | --moved ...]")
+                continue
+            hold = threads.get(company_key(rec["company"]))
+            if hold:
+                print(f"  ! {cid}: company has a live thread ({hold}). "
+                      "One thread per company at a time — approving anyway "
+                      "records your decision, but do not start this thread "
+                      "until the live one resolves.")
         rec["status"] = new_status
         rec["decided_date"] = today()
         print(f"  {new_status}: {cid} ({rec['person'] or 'unresolved'} — "
               f"{rec['company']})")
     save_store(store)
-    print(f"[{new_status}] store updated — commit it.")
+    print(f"[{new_status}] store updated.")
+    _remind_durability()
 
 
 def cmd_approve(args):
@@ -637,37 +842,276 @@ def cmd_enrich(args):
           "commit the store.")
 
 
-def cmd_resolve(args):
-    """Search-API person resolution: deliberately NOT wired. The addendum's
-    condition is that Joe sees the credit cost model before any wiring."""
-    config = load_config()
+def _search_people(filters, config, limit=None):
+    """FullEnrich v2 people/search. Returns (people, note). Without a key it
+    prints the exact request and returns (None, 'stub'). The request shape is
+    reconstructed from the documented filter set (docs.fullenrich.com is
+    blocked from this container) — verify on the first keyed run; cost is
+    0.25 credits per person exported."""
     fe = config.get("fullenrich", {})
-    print(
-        "[resolve] FullEnrich Search API person resolution is NOT wired yet.\n"
-        "\n"
-        "Cost model (from FullEnrich's published docs, July 2026):\n"
-        "  Search export:  0.25 credits per person or company exported\n"
-        "                  (re-exporting the same record is free; the raw\n"
-        "                  search call's own cost beyond export is not\n"
-        "                  clearly documented)\n"
-        "  Enrich:         1 credit per work email found, 3 per personal\n"
-        "                  email, 10 per mobile; only charged on success\n"
-        "  So resolving the current CMO/VP Marketing/Head of ABM/VP Sales\n"
-        "  for a shortlisted company costs ~0.25 credits per person, an\n"
-        "  order of magnitude cheaper than an enrich call. On the ~$29/500-\n"
-        "  credit Starter tier that is ~1.6 cents per resolution.\n"
-        "\n"
-        "Planned behaviour once you approve: resolution runs ONLY for\n"
-        "candidates that reach the shortlist view with no named person\n"
-        "(id co--*) or a person marked as departed; never over the whole\n"
-        "store. Enrich still only ever runs on names you approve.\n"
-        "\n"
-        "To approve the wiring: say so, and set fullenrich.search_enabled\n"
-        "to true in sourcing/config.json in the same sitting.")
     if not fe.get("search_enabled"):
-        sys.exit(1)
-    die("search_enabled is true but the Search client is not implemented "
-        "yet; implement it in the sitting where the flag is flipped.")
+        die("fullenrich.search_enabled is false in sourcing/config.json")
+    payload = {"filters": filters,
+               "limit": int(limit or fe.get("search_limit", 5))}
+    url = (fe.get("base_url_v2", "https://app.fullenrich.com/api/v2")
+           + fe.get("search_people_path", "/people/search"))
+    print(f"[search] request to {url}:")
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    api_key = load_env_key("FULLENRICH_API_KEY")
+    if not api_key:
+        print("[search] STUB MODE: no FULLENRICH_API_KEY, nothing sent, no "
+              "credits spent. Cost when live: 0.25 credits per person "
+              "exported. Verify the request shape against docs.fullenrich.com "
+              "on the first keyed run.")
+        return None, "stub"
+    req = urllib.request.Request(
+        url, data=json.dumps(payload).encode(),
+        headers={"Authorization": f"Bearer {api_key}",
+                 "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        body = json.loads(resp.read().decode())
+    for key in ("datas", "data", "people", "results", "items"):
+        if isinstance(body.get(key), list):
+            return body[key], ""
+    die(f"unexpected search response shape: {str(body)[:300]}")
+
+
+def _person_fields(p):
+    """Best-effort name/title/company/location from one search result."""
+    name = p.get("name") or " ".join(
+        x for x in (p.get("first_name") or p.get("firstname"),
+                    p.get("last_name") or p.get("lastname")) if x)
+    return (name,
+            p.get("job_title") or p.get("title") or p.get("headline") or "",
+            p.get("company_name") or p.get("company") or "",
+            p.get("location") or "")
+
+
+def cmd_resolve(args):
+    """Person resolution for shortlisted person-less records (id co--*):
+    find the current holder of the relevant seat via the Search API. Runs
+    ONLY for records in the shortlist view, never the whole store. Enrich
+    still only ever runs on names Joe approves."""
+    scoring = load_scoring()
+    config = load_config()
+    store = load_store()
+    if args.ids:
+        recs = [store["candidates"].get(c) or die(f"no candidate '{c}'")
+                for c in args.ids]
+    else:
+        visible = [r for r in _sorted_candidates(store, scoring)
+                   if r["status"] in ("new", "approved")]
+        recs = [r for r in visible if not r.get("person")]
+    recs = [r for r in recs if not r.get("person")] or die(
+        "nothing to resolve: no person-less records in scope")
+    titles = config.get("fullenrich", {}).get("resolve_titles", [])
+    for rec in recs:
+        print(f"\n[resolve] {rec['id']}: current holder of "
+              f"{titles[0] if titles else 'the relevant seat'}-class seat "
+              f"at {rec['company']}")
+        people, note = _search_people(
+            {"job_titles": titles, "company_names": [rec["company"]]}, config)
+        if people is None:
+            continue
+        if not people:
+            print("  no match returned")
+            continue
+        for i, p in enumerate(people, 1):
+            name, title, comp, loc = _person_fields(p)
+            print(f"  {i}. {name} — {title}, {comp} ({loc or 'location ?'})")
+        if args.assign:
+            p = people[int(args.assign) - 1]
+            name, title, comp, loc = _person_fields(p)
+            if not name:
+                die("picked result has no name field to assign")
+            _reid_person(store, rec, name, title or None, loc or None,
+                         tag="resolved-via-search")
+    save_store(store)
+    print("\n[resolve] store updated. Assign a result with --assign N (single "
+          "--id runs), or record a manual find with:\n"
+          "  sourcing.py set --id co--<company> --person \"Name\" --title \"T\"")
+    _remind_durability()
+
+
+def _reid_person(store, rec, person, title=None, location=None, tag=None):
+    """Fill the person on a company-level record, which changes its id.
+    Merges into an existing person record if one is already stored."""
+    old_id = rec["id"]
+    new_id = candidate_id(person, rec["company"])
+    target = store["candidates"].get(new_id)
+    if target and target is not rec:
+        # Person record already exists: stack the company-level signals on it.
+        for sig in rec["signals"]:
+            if not any(s["type"] == sig["type"]
+                       and s["source_url"] == sig["source_url"]
+                       for s in target["signals"]):
+                target["signals"].append(sig)
+        del store["candidates"][old_id]
+        rec = target
+    else:
+        store["candidates"].pop(old_id, None)
+        rec["id"] = new_id
+        rec["person"] = person
+        store["candidates"][new_id] = rec
+    if title and not rec.get("title"):
+        rec["title"] = title
+    if location and not rec.get("location"):
+        rec["location"] = location
+    if tag and tag not in rec.setdefault("tags", []):
+        rec["tags"].append(tag)
+    print(f"  {old_id} -> {new_id} ({person}{', ' + title if title else ''})")
+    return rec
+
+
+def cmd_set(args):
+    """Human corrections and additions to one record (the store's fields are
+    machine-filled; this is the hand on the tiller)."""
+    store = load_store()
+    rec = store["candidates"].get(args.id) or die(f"no candidate '{args.id}'")
+    if args.person:
+        rec = _reid_person(store, rec, args.person, args.title or None,
+                           args.location or None,
+                           tag="resolved-manually" if not rec.get("person")
+                           else None)
+    for field, val in (("title", args.title), ("location", args.location),
+                       ("location_basis", args.location_basis),
+                       ("sector", args.sector), ("size", args.size)):
+        if val:
+            rec[field] = val
+            print(f"  {rec['id']}.{field} = {val}")
+    if args.tag:
+        if args.tag not in rec.setdefault("tags", []):
+            rec["tags"].append(args.tag)
+        print(f"  {rec['id']}.tags += {args.tag}")
+    save_store(store)
+
+
+def cmd_verify(args):
+    """Currency check: is the person still in the seat the story put them in?
+    Required before approving anyone whose story is older than a year.
+    Manual paths record your own check; the API path uses people/search.
+    If someone moved, two records replace the stale one: the successor in
+    the seat, and the person at their new company tagged champion-moved."""
+    config = load_config()
+    store = load_store()
+    rec = store["candidates"].get(args.id) or die(f"no candidate '{args.id}'")
+    if not rec.get("person"):
+        die("nothing to verify on a person-less record; resolve it first")
+
+    if args.in_seat:
+        rec["currency"] = {"checked": today(), "in_seat": True,
+                           "method": "manual", "note": args.note or ""}
+        save_store(store)
+        print(f"[verify] {args.id}: confirmed still in seat ({today()})")
+        return
+
+    if args.moved:
+        if not args.new_company:
+            die("--moved needs --new-company (and ideally --new-title)")
+        rec["currency"] = {"checked": today(), "in_seat": False,
+                           "method": "manual",
+                           "note": f"moved to {args.new_company}. "
+                                   + (args.note or "")}
+        rec["status"] = "superseded"
+        rec["decided_date"] = today()
+        annotated = []
+        for sig in rec["signals"]:
+            s = dict(sig)
+            s["evidence"] = (f"(as {rec.get('title') or 'their prior role'} "
+                             f"at {rec['company']}) " + s["evidence"])
+            annotated.append(s)
+        # Record 1: the seat at the original company, successor named or not.
+        seat_id, created, _ = upsert(
+            store, args.successor or None, args.successor_title or None,
+            rec["company"], rec.get("sector"), rec.get("size"),
+            dict(rec["signals"][0],
+                 evidence="(inherited seat) " + rec["signals"][0]["evidence"]))
+        for sig in rec["signals"][1:]:
+            upsert(store, args.successor or None, args.successor_title or None,
+                   rec["company"], None, None,
+                   dict(sig, evidence="(inherited seat) " + sig["evidence"]))
+        seat = store["candidates"][seat_id]
+        if "successor-seat" not in seat.setdefault("tags", []):
+            seat["tags"].append("successor-seat")
+        # Record 2: the champion at the new company, signals travelling along.
+        mover_id, _, _ = upsert(
+            store, rec["person"], args.new_title or None, args.new_company,
+            None, None, annotated[0])
+        for s in annotated[1:]:
+            upsert(store, rec["person"], args.new_title or None,
+                   args.new_company, None, None, s)
+        mover = store["candidates"][mover_id]
+        if "champion-moved" not in mover.setdefault("tags", []):
+            mover["tags"].append("champion-moved")
+        if rec.get("location") and not mover.get("location"):
+            mover["location"] = rec["location"]
+        rec["superseded_by"] = [seat_id, mover_id]
+        save_store(store)
+        print(f"[verify] {args.id}: moved. Created/updated:\n"
+              f"  seat at {rec['company']}: {seat_id}"
+              + (" (person-less; resolve it)" if not seat.get("person") else "")
+              + f"\n  champion-moved: {mover_id} at {args.new_company}")
+        _remind_durability()
+        return
+
+    # API path: does the person still appear in the seat at the company?
+    print(f"[verify] {args.id}: checking {rec['person']} at {rec['company']} "
+          "via people/search")
+    titles = ([rec["title"]] if rec.get("title") else []) \
+        + config.get("fullenrich", {}).get("resolve_titles", [])
+    people, note = _search_people(
+        {"job_titles": titles, "company_names": [rec["company"]]}, config)
+    if people is None:
+        print("[verify] record the check manually meanwhile:\n"
+              f"  verify --id {args.id} --in-seat\n"
+              f"  verify --id {args.id} --moved --new-company \"X\" "
+              "[--new-title T] [--successor \"Name\" --successor-title T]")
+        return
+    names = [_person_fields(p)[0].lower() for p in people]
+    if rec["person"].lower() in names:
+        rec["currency"] = {"checked": today(), "in_seat": True,
+                           "method": "search-api", "note": ""}
+        save_store(store)
+        print(f"[verify] {args.id}: still in seat (search-api, {today()})")
+    else:
+        print(f"[verify] {rec['person']} NOT among current seat-holders:")
+        for i, p in enumerate(people, 1):
+            name, title, comp, loc = _person_fields(p)
+            print(f"  {i}. {name} — {title} ({loc or 'location ?'})")
+        print("Record the move (creates successor + champion-moved records):\n"
+              f"  verify --id {args.id} --moved --new-company \"X\" "
+              "[--new-title T] [--successor \"Name\" --successor-title T]")
+
+
+def cmd_dump(args):
+    _dump_store(load_store(), "on demand")
+
+
+def cmd_import(args):
+    incoming = json.loads(read_file(args.file))
+    if "candidates" not in incoming:
+        die("that file is not a store dump (no 'candidates' key)")
+    if args.replace:
+        save_store(incoming)
+        print(f"[import] store replaced: {len(incoming['candidates'])} "
+              "candidate(s)")
+        return
+    store = load_store()
+    added, merged = 0, 0
+    for cid, rec in incoming["candidates"].items():
+        if cid not in store["candidates"]:
+            store["candidates"][cid] = rec
+            added += 1
+        else:
+            existing = store["candidates"][cid]
+            for sig in rec.get("signals", []):
+                if not any(s["type"] == sig["type"]
+                           and s["source_url"] == sig["source_url"]
+                           for s in existing["signals"]):
+                    existing["signals"].append(sig)
+                    merged += 1
+    save_store(store)
+    print(f"[import] merged: {added} new record(s), {merged} new signal(s)")
 
 
 # --- Desk-check ---------------------------------------------------------------
@@ -803,9 +1247,19 @@ def cmd_export(args):
         if missing:
             lines += ["**INCOMPLETE (exported with --force): "
                       + ", ".join(missing) + "**", ""]
+        cur = r.get("currency") or {}
         lines += [f"- Title: {r.get('title') or 'unknown'}",
+                  f"- Location (the desk, not HQ): "
+                  f"{r.get('location') or 'unknown'}"
+                  + (f" ({r['location_basis']})"
+                     if r.get("location_basis") else ""),
                   f"- Sector: {r.get('sector') or 'unknown'}",
                   f"- Size: {r.get('size') or 'unknown'}",
+                  f"- Tags: {', '.join(r.get('tags') or []) or 'none'}",
+                  "- Currency: "
+                  + (f"confirmed in seat {cur['checked']} ({cur['method']})"
+                     if cur.get("in_seat")
+                     else "not checked (story fresh enough not to require it)"),
                   f"- Discovered: {r['date_discovered']}, approved: "
                   f"{r.get('decided_date')}", "",
                   "## Source signals (keep these with the piece: response "
@@ -872,13 +1326,56 @@ def main():
                    help="signal date YYYY-MM-DD if known (else undated)")
     p.set_defaults(func=cmd_paste)
 
-    p = sub.add_parser("shortlist", help="ranked candidates with evidence")
+    p = sub.add_parser("shortlist", help="ranked candidates with evidence "
+                                         "(UK view by default)")
     p.add_argument("--all", action="store_true",
-                   help="include rejected and exported")
+                   help="include rejected, exported and superseded")
+    p.add_argument("--world", action="store_true",
+                   help="show non-UK names too (they stay banked either way)")
     p.add_argument("--min-score", type=int, default=0)
     p.add_argument("--limit", type=int, default=0)
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_shortlist)
+
+    p = sub.add_parser("set", help="hand-correct one record's fields")
+    p.add_argument("--id", required=True)
+    p.add_argument("--person", default="",
+                   help="name the person on a company-level record (re-ids it)")
+    p.add_argument("--title", default="")
+    p.add_argument("--location", default="",
+                   help="where the person sits (the desk, not company HQ)")
+    p.add_argument("--location-basis", default="",
+                   help="one line on where the location came from")
+    p.add_argument("--sector", default="")
+    p.add_argument("--size", default="")
+    p.add_argument("--tag", default="")
+    p.set_defaults(func=cmd_set)
+
+    p = sub.add_parser("verify",
+                       help="currency check: still in the seat? Required "
+                            "before approving stories older than a year")
+    p.add_argument("--id", required=True)
+    p.add_argument("--in-seat", action="store_true",
+                   help="record a manual confirmation they are still in role")
+    p.add_argument("--moved", action="store_true",
+                   help="record a move: supersedes this record and creates "
+                        "the successor seat + a champion-moved record")
+    p.add_argument("--new-company", default="")
+    p.add_argument("--new-title", default="")
+    p.add_argument("--successor", default="",
+                   help="who now holds the seat at the original company")
+    p.add_argument("--successor-title", default="")
+    p.add_argument("--note", default="")
+    p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("dump", help="print the full store (durability copy)")
+    p.set_defaults(func=cmd_dump)
+
+    p = sub.add_parser("import", help="restore/merge a store dump")
+    p.add_argument("--file", required=True)
+    p.add_argument("--replace", action="store_true",
+                   help="replace the store wholesale instead of merging")
+    p.set_defaults(func=cmd_import)
 
     p = sub.add_parser("approve", help="approve candidates (always Joe)")
     p.add_argument("ids", nargs="+")
@@ -903,9 +1400,12 @@ def main():
     p.set_defaults(func=cmd_enrich)
 
     p = sub.add_parser("resolve",
-                       help="Search-API person resolution (NOT wired: prints "
-                            "the cost model)")
+                       help="Search-API person resolution for shortlisted "
+                            "person-less records (0.25 credits per person "
+                            "exported; stub without key)")
     p.add_argument("--id", dest="ids", action="append")
+    p.add_argument("--assign", default="",
+                   help="assign search result N to the record (single-id runs)")
     p.set_defaults(func=cmd_resolve)
 
     p = sub.add_parser("desk-check",

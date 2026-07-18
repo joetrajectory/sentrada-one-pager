@@ -313,28 +313,43 @@ approved names get enriched and desk-checked before handoff as P1 candidates.
 Money and heavy effort only ever flow after Joe's judgment, never before.
 
 python sourcing/sourcing.py ...
-  ingest      scrape path: walk a module's listing sources (blocked in this
-              container: the egress policy 403s the vendor sites; works where
-              egress allows)
+  ingest      scrape path: walk a module's listing sources, or its API
+              (abm-hiring uses Adzuna). Vendor marketing sites are 403'd by
+              this container's egress policy; works where egress allows
   paste       paste path: parse a pasted job ad / case study / announcement
               into the same candidate format. Structured COMPANY:/PERSON:/
-              EVIDENCE:/URL: blocks (separated by ---) parse free and offline;
-              freeform text goes through claude -p extraction (subscription)
+              EVIDENCE:/URL:/LOCATION: blocks (separated by ---) parse free
+              and offline; freeform text goes through claude -p (subscription)
   shortlist   ranked candidates: score, distinct signal count, every evidence
-              line with its link. Approval decisions are ALWAYS Joe's
-  approve / reject   per-name decisions, recorded with date
+              line with its link. UK VIEW BY DEFAULT (the person's desk, not
+              company HQ; unknown-location names show flagged; --world shows
+              banked non-UK names). Marks HOLD and CURRENCY CHECK per name.
+              Approval decisions are ALWAYS Joe's
+  approve / reject   per-name decisions, recorded with date. approve REFUSES
+              names whose dated story is >12 months old until a currency
+              check is recorded (verify), and warns on live-thread holds
+  set         hand-correct one record (person on a co-- record re-ids it,
+              location, title, tags...)
+  verify      currency check: still in the seat? --in-seat records a manual
+              confirmation; --moved supersedes the record and creates TWO new
+              ones: the successor seat at the company (tag successor-seat) and
+              the person at their new company (tag champion-moved). The keyed
+              path checks via people/search
+  resolve     Search-API person resolution (v2 people/search, WIRED) for
+              shortlisted person-less records (id co--*) only, never the
+              whole store. 0.25 credits per person exported; stub without
+              FULLENRICH_API_KEY. --assign N adopts a result
   status      store counts
   enrich      FullEnrich Enrich API on APPROVED names only. Stub without
               FULLENRICH_API_KEY (prints the exact request, spends nothing).
               Default work emails (1 credit); --phones adds mobiles (10)
-  resolve     Search-API person resolution for shortlisted company-level
-              records: NOT WIRED, prints the cost model (0.25 credits per
-              person exported). Wire only after Joe approves the cost model
   desk-check  office evidence for an approved name: --gather fetches company
               site pages + Companies House (key or manual URL); record with
               --evidence/--source, verdict office-confirmed | hybrid-likely |
               remote-likely. Remote-likely is NOT a rejection: it routes to
               the address-capture play
+  dump/import durability while the repo is public: dump prints the full
+              store, import --file [--replace] restores/merges it
   export      approved + enriched + desk-checked -> research/sourcing-<date>/
               (gitignored): manifest skeleton + per-candidate signals file as
               P1 input. source_signals ride the manifest into each piece's
@@ -343,24 +358,37 @@ python sourcing/sourcing.py ...
               later. The weights in scoring.json eventually get set by that
               data, not opinion
 
+THREAD HOLDS: one live thread per company, ever (multithreading accounts is
+fine, two simultaneous threads into one company is not). Computed live from
+runner/outcomes.json (replied/opportunity = live; no_response stays live for
+followup_window_days), runner/pieces/ folders with no outcome yet (in
+flight), and the capture ledger. Nothing stored: a hold lifts by itself when
+the thread closes, whatever its outcome. Config: thread_hold in
+sourcing/config.json. `outcome --company` exists for post-reset recording so
+holds can always match on company.
+
 Modules (sourcing/modules/): gifting-case-studies BUILT (Sendoso/Reachdesk/
-Alyce customer stories, tier one). Planned, in scoring.json already:
-abm-hiring (tier one), new-leader-abm-history (tier two), abm-tooling-jd and
-enterprise-ae-hiring (tier three). Every module gets both input paths from
-sourcing.py; a new module is a file exposing NAME, TEMPLATE, LISTING_SOURCES,
-discover().
+Alyce customer stories, tier one), abm-hiring BUILT (tier one; Adzuna API
+scrape path + paste path for LinkedIn/Indeed ads, which are never scraped).
+Planned, in scoring.json already: new-leader-abm-history (tier two),
+abm-tooling-jd and enterprise-ae-hiring (tier three). Every module gets both
+input paths from sourcing.py; a new module is a file exposing NAME, TEMPLATE,
+LISTING_SOURCES + discover(), or api_ingest() for API-backed sources.
 
-Scoring: points live ONLY in sourcing/scoring.json. Signals older than 90
-days score zero (configurable); undated signals fall back to their discovery
-date (case studies are rarely dated; an undated study is live evidence the
-day it is found). Simple sum, no decimals, no multipliers.
+Scoring: points AND ageing live ONLY in sourcing/scoring.json, per signal
+type: hiring/new-in-role signals stale in 90 days, gifting-case-studies
+stays meaningful for 24 months (730 days). Undated signals fall back to
+their discovery date (case studies are rarely dated; an undated study is
+live evidence the day it is found). Simple sum, no decimals, no multipliers.
 
-Storage: sourcing/candidates.json is COMMITTED (same reasoning as
-outcomes.json; holds only public professional footprint: names, titles,
-companies, published quotes, URLs). sourcing/enriched.json (FullEnrich
-contact data) and sourcing/raw/ are GITIGNORED: personal contact data never
-goes on a code branch. Commit the store after every sourcing session.
-No LinkedIn automation, ever.
+Storage: sourcing/candidates.json is GITIGNORED WHILE THE REPO IS PUBLIC (it
+is the sender's target list; the repo must stay public for GitHub Pages
+until the Vercel sitting). Every ingest/paste prints a full store dump; keep
+a copy, restore with import. WHEN THE REPO GOES PRIVATE at the deployment
+sitting: drop the candidates.json line from .gitignore and commit the store
+for durability like outcomes.json. sourcing/enriched.json (FullEnrich
+contact data) and sourcing/raw/ stay GITIGNORED forever: personal contact
+data never goes on a code branch. No LinkedIn automation, ever.
 
 Legacy slash commands (/generate-artefact, /research-company, /review-output,
 /write-followup, /log-campaign) belong to the image-gen pipeline (parked formats).
@@ -379,8 +407,8 @@ crossword/         # Crossword engine + grid generator + upscaled template
 email/             # The Email engine (procedural Gmail chrome)
 card/              # Companion-card engine (A6) + bundled fonts and wordmark
 sourcing/          # Target discovery: sourcing.py, modules/ (signal modules),
-                   # scoring.json (the points), candidates.json (committed
-                   # store), enriched.json + raw/ [GITIGNORED]
+                   # scoring.json (points + per-signal ageing), candidates.json
+                   # [GITIGNORED while repo public], enriched.json + raw/ [GITIGNORED]
 research/          # Per-recipient research + batch manifests + Birch CSVs [GITIGNORED]
 api/               # Address-capture serverless functions (token, submit, runner)
 for.html           # The tokenised address-capture page (sentrada.io/for/<token>)
@@ -425,9 +453,11 @@ Committed (core IP):
   outcomes.json, the cross-session outcome ledger, and capture.json, the
   address-capture ledger: statuses and token hashes, never addresses)
   for.html, api/ (the address-capture page and its serverless functions)
-  sourcing/ (sourcing.py, modules/, templates/, scoring.json, config.json and
-  candidates.json, the committed candidate store; enriched.json and raw/ are
-  gitignored: contact data and page dumps stay off code branches)
+  sourcing/ (sourcing.py, modules/, templates/, scoring.json, config.json;
+  candidates.json is gitignored WHILE THE REPO IS PUBLIC — the target list is
+  not world-readable; commit it once the repo goes private. enriched.json and
+  raw/ are gitignored forever: contact data and page dumps stay off code
+  branches)
   newspaper/, crossword/, email/, card/ (the layout engines + their templates/assets)
   .claude/ (agents, commands, skills, hooks, settings)
   .mcp.json

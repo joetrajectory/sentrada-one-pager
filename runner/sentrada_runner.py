@@ -2958,6 +2958,8 @@ def cmd_outcome(args):
         rec["result"] = "no_response"  # the default until a reply changes it
     if args.date:
         rec["date"] = args.date
+    if args.company:
+        rec["company"] = args.company
     if args.notes:
         rec["notes"] = args.notes
     for key, val in (("format", args.format), ("angle_type", args.angle),
@@ -4759,6 +4761,10 @@ def main():
                     help="what happened (defaults to no_response until a reply "
                          "changes it)")
     oc.add_argument("--date", default="", help="when it happened, e.g. 2026-07-10")
+    oc.add_argument("--company", default="",
+                    help="recipient company; needed when the piece folder has "
+                         "no meta.json (post-reset recording). The sourcing "
+                         "thread-hold check matches holds on this field")
     oc.add_argument("--notes", default="", help="optional context, e.g. 'replied to Touch 2'")
     oc.add_argument("--format", default="", dest="format",
                     help="piece format, when no piece folder remains to read it from")
