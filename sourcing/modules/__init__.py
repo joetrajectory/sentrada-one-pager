@@ -14,21 +14,20 @@ reliability varies per source; the paste path is the day-one guarantee.
 """
 
 from . import abm_hiring
+from . import abm_tooling_jd
+from . import enterprise_ae_hiring
 from . import gifting_case_studies
+from . import new_leader_abm_history
 
 REGISTRY = {
     gifting_case_studies.NAME: gifting_case_studies,
     abm_hiring.NAME: abm_hiring,
+    new_leader_abm_history.NAME: new_leader_abm_history,
+    abm_tooling_jd.NAME: abm_tooling_jd,
+    enterprise_ae_hiring.NAME: enterprise_ae_hiring,
 }
 
-# Specced but not built yet. Build order is deliberate: gifting-case-studies
-# proved the spine first (see the sourcing section of CLAUDE.md).
-PLANNED = {
-    "new-leader-abm-history": ("CMO / VP Marketing / VP Sales new in role "
-                               "within 90 days with ABM in their history; "
-                               "press releases and joins-as announcements"),
-    "abm-tooling-jd": ("job specs mentioning 6sense, Demandbase, Terminus, "
-                       "RollWorks or Folloze"),
-    "enterprise-ae-hiring": ("Enterprise Account Executive postings at UK "
-                             "mid-market B2B tech companies"),
-}
+# All five specced modules are built. A new module is a file here exposing
+# NAME, TEMPLATE, LISTING_SOURCES + discover(), or api_ingest() for
+# API-backed sources; both input paths come free from sourcing.py.
+PLANNED = {}

@@ -367,13 +367,16 @@ the thread closes, whatever its outcome. Config: thread_hold in
 sourcing/config.json. `outcome --company` exists for post-reset recording so
 holds can always match on company.
 
-Modules (sourcing/modules/): gifting-case-studies BUILT (Sendoso/Reachdesk/
-Alyce customer stories, tier one), abm-hiring BUILT (tier one; Adzuna API
-scrape path + paste path for LinkedIn/Indeed ads, which are never scraped).
-Planned, in scoring.json already: new-leader-abm-history (tier two),
-abm-tooling-jd and enterprise-ae-hiring (tier three). Every module gets both
-input paths from sourcing.py; a new module is a file exposing NAME, TEMPLATE,
-LISTING_SOURCES + discover(), or api_ingest() for API-backed sources.
+Modules (sourcing/modules/): ALL FIVE BUILT. gifting-case-studies (tier one;
+Sendoso/Reachdesk/Alyce customer stories), abm-hiring (tier one; Adzuna API
+scrape path + paste path for LinkedIn/Indeed ads, which are never scraped),
+new-leader-abm-history (tier two; Google News RSS scrape path over joins-as/
+appointed queries + paste path; the extraction template refuses leaders
+whose ABM history is not evidenced in the text itself), abm-tooling-jd and
+enterprise-ae-hiring (tier three; Adzuna via the shared modules/_adzuna.py
+client). Every module gets both input paths from sourcing.py; a new module
+is a file exposing NAME, TEMPLATE, LISTING_SOURCES + discover(), or
+api_ingest() for API-backed sources.
 
 Scoring: points AND ageing live ONLY in sourcing/scoring.json, per signal
 type: hiring/new-in-role signals stale in 90 days, gifting-case-studies
