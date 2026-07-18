@@ -231,6 +231,7 @@ def smarten(text):
     that em dashes become a comma break (mirrors the newspaper engine)."""
     if text is None:
         return ""
+    text = str(text)
     for ch in ("—", "―", "‒", "⸺", "⸻"):
         text = text.replace(" " + ch + " ", ", ").replace(ch, ", ")
     text = text.replace(" -- ", ", ").replace("--", ", ").replace("...", "…")
@@ -273,8 +274,10 @@ def render_title(cr, ctx, data):
         r = ink_extents(size)
         return r.width <= avail_w and r.height <= cap_h
 
-    size, _ = largest_fitting(feasible, 0.020 * H, 0.075 * H)
+    size, fits = largest_fitting(feasible, 0.020 * H, 0.075 * H)
     r = ink_extents(size)
+    ctx["title_fit"] = {"fits": bool(fits) and r.width <= avail_w,
+                        "over_px": max(0.0, r.width - avail_w)}
     title_top = cfg["title_top"] * H
     # Centre on the page; offset by the ink rect so the caps sit optically centred.
     x = (W - r.width) / 2.0 - r.x
@@ -763,6 +766,16 @@ def run_checks(ctx, gridres, cfg):
     # Designated heroes that could not be anchored into the grid.
     for a in (gridres.get("anchors_missing") or []):
         add("fail", "anchor", f"designated anchor '{a}' could not be placed in the grid")
+    tf = ctx.get("title_fit")
+    if tf and not tf["fits"]:
+        add("fail", "title",
+            f"title does not fit the content width even at the minimum size "
+            f"({tf['over_px']:.0f}px over) — it would overprint the border rules; "
+            "shorten the title or company name")
+    for a in (gridres.get("digit_dropped") or []):
+        add("warn", "candidates",
+            f"answer '{a}' contains digits and cannot render in the grid; "
+            "dropped from the pool (its clue is unused)")
     sf = ctx.get("subtitle_fit")
     if sf and not sf["fits"]:
         if sf["collides_grid"]:
@@ -937,8 +950,9 @@ def main():
 
     render_dpi = args.render_dpi
     render_size = parse_size(args.render_size)
-    if args.check and not render_dpi and not render_size:
-        render_dpi = 300
+    # No render-dpi default for --check: the gate lays out at the native
+    # template raster, exactly as the production render does (see the
+    # newspaper engine for the rationale).
 
     diagnostics = build(
         args.template, args.data, args.output,

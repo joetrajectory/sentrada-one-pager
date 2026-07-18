@@ -153,8 +153,13 @@ def read_file(path):
 
 
 def write_file(path, text):
-    with open(path, "w", encoding="utf-8") as fh:
+    # Atomic: committed ledgers (outcomes.json, capture.json) go through here,
+    # and a truncate-write killed mid-flight leaves a corrupt file that can be
+    # committed unnoticed.
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
         fh.write(text)
+    os.replace(tmp, path)
 
 
 def extract_last_json(text):
@@ -504,13 +509,27 @@ def _stamp_engine(output_path, engine_path):
     """Record which engine build produced a render (engine_stamp.json beside it).
     ship-check compares this against the current engine file and warns when a
     render predates an engine change — the lesson of the MongoDB dateline, where a
-    fixed engine bug shipped inside a stale render."""
+    fixed engine bug shipped inside a stale render. Keyed by output filename:
+    the piece and its card render into the same folder, and a single flat stamp
+    let the card render clobber the artefact's."""
     try:
         folder = os.path.dirname(os.path.abspath(output_path))
-        write_file(os.path.join(folder, "engine_stamp.json"), json.dumps({
+        path = os.path.join(folder, "engine_stamp.json")
+        stamps = {}
+        if os.path.exists(path):
+            try:
+                existing = json.loads(read_file(path))
+                if isinstance(existing, dict):
+                    # Legacy flat stamp {"engine":..,"sha1":..}: no output name
+                    # was recorded, so it can only be kept as-is or replaced.
+                    stamps = {} if "engine" in existing else existing
+            except (ValueError, OSError):
+                pass
+        stamps[os.path.basename(output_path)] = {
             "engine": os.path.relpath(engine_path, REPO_ROOT),
             "sha1": _engine_file_sha1(engine_path),
-        }, indent=2))
+        }
+        write_file(path, json.dumps(stamps, indent=2))
     except OSError:
         pass  # stamping is best-effort; never fail a render over it
 
@@ -651,7 +670,14 @@ def grounding_check(config, research, copy_text, sender_facts=""):
                    or "(none provided - verify every claim against the research only)"})
     _, data = cli_json(prompt, model_for(config, "p4b"))
     issues = data.get("unsupported") or []
-    grounded = bool(data.get("grounded", True)) and not issues
+    if not isinstance(data.get("grounded"), bool):
+        # Wrong-schema reply (empty block, copy JSON echoed back): fail CLOSED.
+        # Ungated copy must never proceed because the gate mumbled; the attempt
+        # loop retries and then halts.
+        return False, issues or [{"claim": "(gate reply unusable)",
+                                  "issue": "no boolean 'grounded' verdict in the "
+                                           "gate's JSON; treating as not grounded"}]
+    grounded = data["grounded"] and not issues
     return grounded, issues
 
 
@@ -771,7 +797,10 @@ def research_gate(config, research, name, title, company, fmt):
     verdict = str(data.get("verdict", "")).upper().replace(" ", "_")
     gaps = structural + [str(g) for g in (data.get("gaps") or [])]
     if not verdict:
-        verdict = "NOT_READY" if structural else "READY"
+        # No verdict in the gate's JSON: fail closed, never assume READY.
+        gaps.append("research gate returned no verdict (wrong-schema reply) — "
+                    "treated as NOT_READY; re-run or review manually")
+        verdict = "NOT_READY"
     elif structural and verdict == "READY":
         verdict = "READY_WITH_GAPS"
     return verdict, gaps, data.get("fact_count_estimate")
@@ -1543,12 +1572,41 @@ def _generate_claymation(args, config, folder, base_values, brief, meta):
 # --- QC (Prompts 6 + 6B) and follow-up (Prompt 7): shared steps -------------
 # These run both standalone (cmd_qc / cmd_followup) and chained from generate.
 
+_6B_PHRASES = ("WOULD TAKE THE MEETING", "WOULD ENGAGE IF FOLLOWED UP WELL",
+               "WOULD ADMIRE AND IGNORE", "WOULD BIN")
+
+
 def extract_6b_verdict(text):
-    for phrase in ("WOULD TAKE THE MEETING", "WOULD ENGAGE IF FOLLOWED UP WELL",
-                   "WOULD ADMIRE AND IGNORE", "WOULD BIN"):
-        if phrase in text:
-            return phrase
-    return None
+    """The 6B verdict, robust to prose that DISCUSSES other verdict options.
+    Never scan in fixed phrase-priority order: comparative prose ('narrowly
+    avoids WOULD ADMIRE AND IGNORE territory... VERDICT: WOULD BIN') would let
+    a mention of a better verdict mask the real one, and this parser drives the
+    chain stop, ship-check's WOULD BIN hold and calibration. Preference:
+    the structured JSON tail (authoritative), then the earliest phrase after
+    the LAST 'VERDICT' marker, then the phrase mentioned last in the text."""
+    s = extract_6b_structured(text)
+    if s:
+        v = str(s.get("verdict", "")).upper()
+        for phrase in _6B_PHRASES:
+            if phrase in v:
+                return phrase
+    up = text.upper()
+    i = up.rfind("VERDICT")
+    if i != -1:
+        seg = up[i:]
+        best = None
+        for phrase in _6B_PHRASES:
+            p = seg.find(phrase)
+            if p != -1 and (best is None or p < best[0]):
+                best = (p, phrase)
+        if best:
+            return best[1]
+    best = None
+    for phrase in _6B_PHRASES:
+        p = up.rfind(phrase)
+        if p != -1 and (best is None or p > best[0]):
+            best = (p, phrase)
+    return best[1] if best else None
 
 
 def extract_6b_structured(text):
@@ -2182,6 +2240,8 @@ def _copy_lint(folder, fmt):
             data = json.loads(read_file(data_path))
         except (ValueError, OSError):
             data = None
+            holds.append("lint: data.json exists but cannot be parsed — every "
+                         "data lint is blind until it is fixed")
         if data:
             strings = list(_strings_in(data))
             if any("—" in s for s in strings):
@@ -2306,14 +2366,27 @@ def _ship_status(folder):
                 "pkg": None, "holds": [f"no render found ({slug}.png)"], "warns": []}
 
     png_m = os.path.getmtime(render)
+
+    # Copy staleness: data.json newer than the render means the printed file no
+    # longer matches the copy (post-QC edit, forgotten re-render) AND the edited
+    # copy never re-passed the grounding gate (P4b runs inside generate only).
+    dj = os.path.join(folder, "data.json")
+    if os.path.exists(dj) and os.path.getmtime(dj) >= png_m:
+        holds.append("data.json is NEWER than the render — the copy changed after "
+                     "rendering; re-render and re-QC (edited copy has not "
+                     "re-passed the grounding gate)")
+
     if not os.path.exists(review):
         holds.append("no qc_review.md — P6 craft QC never ran")
     else:
         p6 = extract_p6_verdict(read_file(review))
-        if os.path.getmtime(review) < png_m:
+        if os.path.getmtime(review) <= png_m:
             holds.append("render is NEWER than qc_review.md — re-QC required "
                          "(P6 has not seen the delivered file)")
-        if p6 == "FAIL":
+        if p6 is None:
+            holds.append("qc_review.md exists but no P6 verdict is readable — "
+                         "an unreadable verdict must not pass; re-run `qc`")
+        elif p6 == "FAIL":
             holds.append("P6 verdict is FAIL")
         elif p6 == "BORDERLINE":
             warns.append("P6 verdict is BORDERLINE — review craft notes before print")
@@ -2322,10 +2395,13 @@ def _ship_status(folder):
         holds.append("no qc_recipient.md — P6B recipient sim never ran")
     else:
         p6b = extract_6b_verdict(read_file(recipient))
-        if os.path.getmtime(recipient) < png_m:
+        if os.path.getmtime(recipient) <= png_m:
             holds.append("render is NEWER than qc_recipient.md — re-QC required "
                          "(P6B has not seen the delivered file)")
-        if p6b == "WOULD BIN":
+        if p6b is None:
+            holds.append("qc_recipient.md exists but no 6B verdict is readable — "
+                         "an unreadable verdict must not pass; re-run `qc`")
+        elif p6b == "WOULD BIN":
             holds.append("P6B verdict is WOULD BIN — do not print")
 
     # Package pass (piece + companion card judged together). Optional: pieces
@@ -2337,13 +2413,16 @@ def _ship_status(folder):
     card_json = os.path.join(folder, slug + "-card.json")
     if os.path.exists(package):
         pkg = extract_6b_verdict(read_file(package))
-        if os.path.getmtime(package) < png_m:
+        if os.path.getmtime(package) <= png_m:
             holds.append("render is NEWER than qc_package.md — re-run `package-qc` "
                          "(the package pass has not seen the delivered file)")
         if os.path.exists(card_json) and \
-                os.path.getmtime(card_json) > os.path.getmtime(package):
+                os.path.getmtime(card_json) >= os.path.getmtime(package):
             holds.append("card copy changed after the package pass — re-run `package-qc`")
-        if pkg == "WOULD BIN":
+        if pkg is None:
+            holds.append("qc_package.md exists but no 6B verdict is readable — "
+                         "an unreadable verdict must not pass; re-run `package-qc`")
+        elif pkg == "WOULD BIN":
             holds.append("6B package verdict is WOULD BIN — the full send fails; "
                          "revise the card copy and re-run `package-qc`")
     elif os.path.exists(card_json):
@@ -2367,6 +2446,17 @@ def _ship_status(folder):
     else:
         warns.append("no followup.md — P7 never ran (run `followup` before the piece lands)")
 
+    # A follow-up that failed its grounding gate three times still writes
+    # followup.md; the failure must hold here, not scroll past in a build log.
+    fg = os.path.join(folder, "followup_gate.json")
+    if os.path.exists(fg):
+        try:
+            if json.loads(read_file(fg)).get("grounded") is not True:
+                holds.append("follow-up failed its grounding gate "
+                             "(followup_gate.json) — revise and re-run `followup`")
+        except (ValueError, OSError):
+            holds.append("followup_gate.json unreadable — re-run `followup`")
+
     lint_holds, lint_warns = _copy_lint(folder, fmt)
     holds += lint_holds
     warns += lint_warns
@@ -2378,10 +2468,18 @@ def _ship_status(folder):
     if os.path.exists(stamp_path):
         try:
             stamp = json.loads(read_file(stamp_path))
-            ep = os.path.join(REPO_ROOT, stamp.get("engine", ""))
-            if os.path.exists(ep) and _engine_file_sha1(ep) != stamp.get("sha1"):
-                warns.append("engine has changed since this render — re-render "
-                             "recommended (delivered file may predate an engine fix)")
+            # Legacy flat stamp {"engine":..,"sha1":..} vs the keyed form
+            # {"<output>.png": {...}}: the card render used to clobber the
+            # artefact's flat stamp, which neutralised this check entirely.
+            entries = {slug + ".png": stamp} if "engine" in stamp else stamp
+            for out_name, s in entries.items():
+                if not isinstance(s, dict):
+                    continue
+                ep = os.path.join(REPO_ROOT, s.get("engine", ""))
+                if os.path.exists(ep) and _engine_file_sha1(ep) != s.get("sha1"):
+                    warns.append(f"engine has changed since {out_name} was rendered "
+                                 "— re-render recommended (delivered file may "
+                                 "predate an engine fix)")
         except (ValueError, OSError):
             pass
 
@@ -2575,9 +2673,14 @@ def cmd_birch_csv(args):
         # CONFIRM_FIRST to CONFIRMED, or a remote worker downgrades to BLOCKED).
         # The manifest is committed, so overrides carry status/notes only;
         # addresses stay in the gitignored research files unless corrected.
-        status = (override.get("status") or res.get("status") or "").upper()
-        address = (override.get("address") or res.get("address") or "").strip()
-        notes = (override.get("notes") or res.get("notes") or "").strip()
+        # Presence-checked so an override can deliberately BLANK a field, not
+        # just replace it (`{"address": ""}` must clear, not fall through).
+        status = str(override["status"] if "status" in override
+                     else res.get("status", "") or "").upper()
+        address = str(override["address"] if "address" in override
+                      else res.get("address", "") or "").strip()
+        notes = str(override["notes"] if "notes" in override
+                    else res.get("notes", "") or "").strip()
         flagged = False
         if status == "BLOCKED":
             address = ""
@@ -2588,6 +2691,14 @@ def cmd_birch_csv(args):
             notes = ("CONFIRM ADDRESS BEFORE SHIPPING" + (f" — {notes}" if notes else "")).strip()
             flags.append(f"{slug}: CONFIRM_FIRST")
             flagged = True
+        elif status != "CONFIRMED" and address:
+            # Unknown or missing status with an address present must never ship
+            # blind: the fail-safe only bit on the two exact spellings before.
+            label = "missing" if not status else f"unrecognised: {status}"
+            notes = (f"CONFIRM ADDRESS BEFORE SHIPPING — DELIVERY_STATUS {label}"
+                     + (f" — {notes}" if notes else ""))
+            flags.append(f"{slug}: status {label} — treated as CONFIRM_FIRST")
+            flagged = True
         if not address and not flagged:
             missing.append(slug)
         file_stem = f"{code}_{_surname(recipient)}_{_company_condensed(company)}"
@@ -2597,12 +2708,17 @@ def cmd_birch_csv(args):
 
     out = args.output or os.path.join(
         mdir, os.path.splitext(os.path.basename(args.manifest))[0] + "-birch.csv")
+    def cell(v):
+        # Excel executes a leading =+-@ as a formula; a recipient-submitted
+        # address must never run code in the supplier's spreadsheet.
+        return "'" + v if str(v)[:1] in ("=", "+", "-", "@") else v
+
     with open(out, "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow(["code", "recipient", "company", "delivery_address", "notes", "file_stem"])
         for r in rows:
-            w.writerow([r["code"], r["recipient"], r["company"],
-                        r["delivery_address"], r["notes"], r["file_stem"]])
+            w.writerow([r["code"], cell(r["recipient"]), cell(r["company"]),
+                        cell(r["delivery_address"]), cell(r["notes"]), r["file_stem"]])
 
     staged = cards_staged = 0
     if args.stage_pngs:
@@ -3224,12 +3340,15 @@ def cmd_printed(args):
     if not name and os.path.exists(meta_path):
         name = json.loads(read_file(meta_path)).get("recipient_name", "")
     if not name:
-        name = entry.get("recipient", "")
+        name = entry.get("recipient", "") or entry.get("first_name", "")
     if not name:
         die("no recipient name found (no piece folder in this container): "
             "pass --name \"First Last\"")
-    entry.update({"recipient": name, "first_name": name.split()[0],
-                  "printed": _capture_today()})
+    # Ledger contract: first name only. The committed file's documented contents
+    # are enumerated (token hash, first name, dates, statuses); the full name
+    # lives in meta.json/research, not here.
+    entry.pop("recipient", None)
+    entry.update({"first_name": name.split()[0], "printed": _capture_today()})
     entry.setdefault("status", "printed")
     ledger[args.piece] = entry
     _capture_save(ledger)
@@ -3328,12 +3447,20 @@ def cmd_nudge(args):
 
 
 def cmd_swap(args):
+    config = load_config(args.config)
     ledger = _capture_ledger()
     entry = _capture_entry(ledger, args.piece)
+    # Kill the live token BEFORE recording the swap: the token stays valid in
+    # the store for up to 30 days, and a post-swap submission would land in a
+    # record that nothing ever pulls or purges — an address silently waiting
+    # out the 90-day TTL. If the purge call fails, the swap is not recorded.
+    result = _capture_call(config, {"action": "purge", "piece_id": args.piece})
     entry["status"] = "swapped-after-silence"
     entry["swap_date"] = _capture_today()
     _capture_save(ledger)
-    print(f"[capture] {args.piece}: marked swapped-after-silence. "
+    tok = ("the tease link is dead" if result.get("purged")
+           else "no live store record existed")
+    print(f"[capture] {args.piece}: marked swapped-after-silence ({tok}). "
           f"The piece is free to re-target; run tease again once re-marked printed.")
 
 
@@ -3400,9 +3527,25 @@ def cmd_capture(args):
         for rec in records:
             slug = rec.get("piece_id", "")
             entry = ledger.get(slug)
-            if not entry or entry.get("status") in ("swapped-after-silence",):
+            submitted = rec.get("state") == "submitted"
+            # Never skip a submitted address silently: the sync is the fallback
+            # for missed notifications, and a dropped one waits out the 90-day
+            # TTL unshipped and unpurged.
+            if not entry:
+                if submitted:
+                    print(f"[capture] WARNING: the store holds a SUBMITTED address "
+                          f"for '{slug}', which is not in this ledger (teased from "
+                          f"another container, or ledger not pulled?). Ship it, or "
+                          f"run `delivered --piece {slug}` to purge it.")
                 continue
-            if rec.get("state") == "submitted" and entry.get("status") != "address-received":
+            if entry.get("status") == "swapped-after-silence":
+                if submitted:
+                    print(f"[capture] WARNING: {slug} was swapped but the store "
+                          f"holds a submitted address (token pre-dates the swap "
+                          f"purge). Decide whether to ship, then run `delivered "
+                          f"--piece {slug}` to purge it.")
+                continue
+            if submitted and entry.get("status") != "address-received":
                 entry["status"] = "address-received"
                 entry["submission_date"] = str(rec.get("submitted_at", ""))[:10]
                 entry["address_type"] = rec.get("address_type", "")
@@ -5105,6 +5248,7 @@ def main():
                         help="mark a silent piece swapped-after-silence (your decision; "
                              "the runner only ever recommends)")
     sw.add_argument("--piece", required=True, help="the piece slug")
+    sw.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     sw.set_defaults(func=cmd_swap)
 
     ad = sub.add_parser("address",

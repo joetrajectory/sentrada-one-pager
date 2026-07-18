@@ -218,6 +218,11 @@ def load_text(path):
         raise SystemExit("[fatal] text card needs salutation, body and a sign-off block")
     sign = blocks[-1]
     keys = ["name", "company", "email", "phone"]
+    if len(sign) > len(keys):
+        raise SystemExit(
+            "[fatal] sign-off block has %d lines; the card renders at most %d "
+            "(name, company, email, phone). Trim it — sender copy is never "
+            "silently dropped." % (len(sign), len(keys)))
     contact = {k: sign[i] for i, k in enumerate(keys) if i < len(sign)}
     return _normalise({
         "salutation": " ".join(blocks[0]),

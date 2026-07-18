@@ -25,6 +25,7 @@ import ctypes
 import json
 import math
 import os
+import re
 import sys
 
 # ---------------------------------------------------------------------------
@@ -354,7 +355,13 @@ def flow(cr, data, W, H, bscale, draw):
         # right: "1 of N" then the prev/next nav chevrons, right-aligned.
         unread = data.get("account", {}).get("unread_count")
         if unread:
-            pos = layout(cr, f"1 of {unread:,}", G["small_size"] * H, color=SUB)
+            # Tolerate "1,284" as a string (a natural authoring); a bare
+            # format spec on a str raises ValueError mid-render.
+            try:
+                unread = f"{int(str(unread).replace(',', '')):,}"
+            except ValueError:
+                unread = str(unread)
+            pos = layout(cr, f"1 of {unread}", G["small_size"] * H, color=SUB)
             pw, ph = measure(pos)
             redge = ix + iw
             icon(cr, "chevR", redge - isz * 0.5, ty, isz, lw * 1.7, col=FAINT)
@@ -363,15 +370,19 @@ def flow(cr, data, W, H, bscale, draw):
 
     # --- subject + label chip (fixed) -------------------------------------
     y = G["subject_y"] * H
-    sub = layout(cr, subject, G["subject_size"] * H, w=iw - 0.18 * W,
+    # Measure the chip FIRST: it is drawn over the subject's line, so the
+    # subject must wrap short of whatever the label actually needs (a long
+    # label used to stamp its opaque chip mid-word over the subject).
+    label = data.get("label", "Inbox")
+    chip = layout(cr, label, G["small_size"] * H, color=SUB, weight="Medium")
+    cw, chh = measure(chip)
+    pad = 0.014 * W
+    reserve = max(0.18 * W, cw + 2 * pad + 0.02 * W)
+    sub = layout(cr, subject, G["subject_size"] * H, w=iw - reserve,
                  weight="Medium", color=INK, lead=1.14)
     sh = measure(sub)[1]
     if draw:
         show(cr, sub, ix, y)
-        label = data.get("label", "Inbox")
-        chip = layout(cr, label, G["small_size"] * H, color=SUB, weight="Medium")
-        cw, chh = measure(chip)
-        pad = 0.014 * W
         rrect(cr, ix + iw - cw - 2 * pad, y + sh * 0.12, cw + 2 * pad, chh + pad, 0.006 * H)
         cr.set_source_rgb(*CHIP)
         cr.fill()
@@ -446,7 +457,9 @@ def flow(cr, data, W, H, bscale, draw):
             # ink and weight as the body, no bold on "Best regards,".
             y += 0.013 * H * bscale
             for line in payload:
-                lay = layout(cr, line, bs, color=INK, lead=1.3)
+                # w=iw: an unwrapped long signature line runs to the sheet edge
+                # and is razor-clipped at the trim.
+                lay = layout(cr, line, bs, w=iw, color=INK, lead=1.3)
                 if draw:
                     show(cr, lay, ix, y)
                 y += measure(lay)[1] + bs * 0.12
@@ -455,7 +468,7 @@ def flow(cr, data, W, H, bscale, draw):
     ps = data.get("postscript")
     if ps:
         ps = typographic(str(ps).strip())
-        if not ps.lower().startswith("p.s"):
+        if not re.match(r"p\.?s\b", ps, re.IGNORECASE):
             ps = "P.S. " + ps
         y += 0.016 * H * bscale
         lay = layout(cr, ps, bs, w=iw, color=INK, lead=G["line_lead"])
@@ -565,6 +578,11 @@ def main():
 
     if not args.output and not args.check:
         ap.error("--output is required unless --check is given")
+
+    # A bare --check must validate at the production print geometry, not the
+    # small preview default: fit decisions at ~90 DPI can flip at 360.
+    if args.check and not (args.print_dpi or args.print_size or args.render_size):
+        args.print_dpi = 360
 
     data = load_data(args.data)
     W, H = size_for(args)

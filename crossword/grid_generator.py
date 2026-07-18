@@ -260,6 +260,16 @@ def generate_grid(candidates, min_words=15, max_words=20, seed=None, attempts=40
     anchor_set |= {_normalize(a) for a in (anchors or [])}
     anchor_set = frozenset(a for a in anchor_set if len(a) >= 3)
 
+    # Digit-bearing answers (SOC2, B2B, ISO27001) cannot render: normalisation
+    # strips digits, which would place a silently shortened light under a clue
+    # written for the full answer. Drop them from the pool instead; a
+    # digit-bearing ANCHOR stays in anchor_set and so surfaces as a
+    # placement failure rather than vanishing.
+    digit_dropped = sorted({str(c["answer"]).strip() for c in candidates
+                            if any(ch.isdigit() for ch in str(c["answer"]))})
+    candidates = [c for c in candidates
+                  if not any(ch.isdigit() for ch in str(c["answer"]))]
+
     base = random.Random(seed)
     best_grid, best_key = None, None
 
@@ -280,6 +290,7 @@ def generate_grid(candidates, min_words=15, max_words=20, seed=None, attempts=40
     result["anchors_missing"] = sorted(anchor_set - placed_words)
     result["short"] = result["word_count"] < min_words
     result["seed"] = seed
+    result["digit_dropped"] = digit_dropped
     return result
 
 

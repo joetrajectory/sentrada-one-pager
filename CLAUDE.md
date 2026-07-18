@@ -228,6 +228,18 @@ Layer C: Variation variables (auto-assigned: scene archetype, people visibility,
   data.json string field that is absent from the copy-text output and not on
   the format's furniture exempt list (_COPY_TEXT_EXEMPT), so a new rendered
   field fails until it is consciously routed through the builder or exempted.
+- In the engines, `size, _ = largest_fitting(...)` is the overflow-shipping
+  pattern: discarding the fits flag means the element renders at minimum size
+  and silently overruns (a masthead clipped at the trim, a crossword title over
+  the border rules, a stat number over its box all shipped past --check this
+  way). Always keep the flag, stash the fit in ctx, and add a run_checks FAIL.
+- Never parse a model verdict by scanning phrases in fixed priority order:
+  comparative prose ("narrowly avoids WOULD ADMIRE AND IGNORE... VERDICT:
+  WOULD BIN") lets a mention of a better verdict mask the real one. Prefer the
+  structured JSON tail, then the phrase after the last VERDICT marker.
+- Gates must fail CLOSED on wrong-schema model replies: `data.get("grounded",
+  True)` turned every malformed gate reply into a pass. Require the verdict key
+  to exist and be the right type; missing means not grounded / not ready.
 
 Production-format lessons now live as rules inside the prompt templates
 (runner/templates/) and their Notion sources; the gotchas below mostly concern
@@ -421,8 +433,8 @@ Where things live, and why:
   "Used once, for this delivery. Deleted once it's signed for."
 - runner/capture.json is a COMMITTED ledger (same reasoning as outcomes.json:
   containers are ephemeral). It never holds addresses or raw tokens, only a
-  sha256 of the token, dates, channel, variant and statuses. Commit it after
-  every capture command.
+  sha256 of the token, the recipient's first name, dates, channel, variant and
+  statuses. Commit it after every capture command.
 - The notification email on submission carries the piece id only, never the
   address. If the email fails or is missed, `capture` syncs submissions from
   the store, so nothing escapes deletion's reach.

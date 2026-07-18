@@ -8,7 +8,7 @@
 
 "use strict";
 
-const { getRecord, setRecord, TOKEN_RE, isExpired, noindex, clean,
+const { getRecord, setRecord, setPointer, TOKEN_RE, isExpired, noindex, clean,
   withinRateLimit } = require("./_lib/store.js");
 
 // Same-day notification via Resend (https://resend.com). Optional: if the key
@@ -74,6 +74,10 @@ module.exports = async (req, res) => {
     // the address can never be stored without an expiry and the self-delete
     // clock restarts from submission even if `delivered` is never run.
     await setRecord(token, record);
+    // Refresh the piece pointer's TTL alongside the record's: its clock runs
+    // from register, and if it expired first the address would be stored but
+    // unreachable — pull 404s and purge no-ops until the record TTL fires.
+    await setPointer(record.piece_id, token);
 
     let notified = "failed";
     try {

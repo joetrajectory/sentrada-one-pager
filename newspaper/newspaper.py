@@ -291,6 +291,7 @@ def sanitise(text):
     the engine sets on the pull quote."""
     if text is None:
         return ""
+    text = str(text)
     for ch in ("—", "―", "‒", "⸺", "⸻"):
         text = text.replace(" " + ch + " ", ", ").replace(ch, ", ")
     text = text.replace(" -- ", ", ").replace("--", ", ")
@@ -496,11 +497,13 @@ def render_masthead(cr, ctx, data):
         w, h = name_metrics(size)
         return w <= content_w and h <= band_h * 0.86
 
-    size, _ = largest_fitting(feasible, 0.030 * H, 0.130 * H)
+    size, fits = largest_fitting(feasible, 0.030 * H, 0.130 * H)
     nw, nh = name_metrics(size)
     # Centre the nameplate in the khaki band, both axes. Use ink extents so the
     # caps sit optically centred rather than floating on the line box.
     ink_r = layout.get_pixel_extents()[0]
+    ctx["masthead_fit"] = {"fits": bool(fits) and ink_r.width <= content_w,
+                           "over_px": max(0.0, ink_r.width - content_w)}
     name_x = margin + (content_w - ink_r.width) / 2.0 - ink_r.x
     name_y = band_top + (band_h - ink_r.height) / 2.0 - ink_r.y
     draw_layout(cr, layout, name_x, name_y, ink)
@@ -933,8 +936,11 @@ def render_statbox(cr, ctx, data):
         return (ink_r.width <= zw * cfg["stat_ink_width_frac"]
                 and ink_r.height <= zh * cfg["stat_ink_height_frac"])
 
-    nsize, _ = largest_fitting(num_ok, cfg["stat_size_min"] * H, cfg["stat_size_max"] * H)
+    nsize, nfits = largest_fitting(num_ok, cfg["stat_size_min"] * H, cfg["stat_size_max"] * H)
     ink_r = num_ink(nsize)
+    ctx["statnum_fit"] = {
+        "fits": bool(nfits) and ink_r.width <= zw * cfg["stat_ink_width_frac"],
+        "over_px": max(0.0, ink_r.width - zw * cfg["stat_ink_width_frac"])}
 
     # Descriptor, sized down if needed so the number + descriptor + source still
     # fit the box height. The source line is OPTIONAL: when absent it reserves no
@@ -1478,6 +1484,18 @@ def run_checks(ctx, data, cfg):
     # --- Zone fit ------------------------------------------------------------
     if ctx.get("headline_fits") is False:
         add("fail", "headline", "does not fit its band even at minimum size (truncated)")
+    mf = ctx.get("masthead_fit")
+    if mf and not mf["fits"]:
+        add("fail", "masthead_name",
+            f"nameplate exceeds the content width even at the minimum size "
+            f"({mf['over_px']:.0f}px over) — it would be clipped at the trim; "
+            "shorten the masthead name")
+    snf = ctx.get("statnum_fit")
+    if snf and not snf["fits"]:
+        add("fail", "stat_number",
+            f"stat number does not fit its box even at the minimum size "
+            f"({snf['over_px']:.0f}px over) — it would overprint the box borders; "
+            "shorten the figure")
     if ctx.get("headline_balanced") is False:
         add("warn", "headline", "lines remain ragged (uneven length) at the minimum size")
     if ctx.get("columns_fit") is False:
@@ -1885,10 +1903,11 @@ def main():
 
     render_dpi = args.render_dpi
     render_size = parse_size(args.render_size)
-    # The check must run at print resolution so wrapping/hyphenation matches the
-    # printed page; default it to 300 DPI when no render size was requested.
-    if args.check and not render_dpi and not render_size:
-        render_dpi = 300
+    # No render-dpi default for --check: the gate must lay out at the SAME
+    # geometry the production render uses (the native template raster), or
+    # borderline wrap/hyphenation/auto-size decisions can flip silently
+    # between gate and print. Pass --render-dpi to trade fidelity for speed
+    # explicitly.
 
     diagnostics = build(
         args.template, args.data, args.output,
