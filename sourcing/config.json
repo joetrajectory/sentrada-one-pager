@@ -1,0 +1,39 @@
+{
+  "_note": "Operational settings for the sourcing pipeline. Signal points and ageing live in scoring.json, never here.",
+  "extract_model": "sonnet",
+  "fetch_timeout_seconds": 30,
+  "fetch_delay_seconds": 2,
+  "shortlist": {
+    "_note": "The desk is what matters, not company HQ. Default view: UK-based people plus location-unknown (flagged); --world shows everything. Non-UK names stay banked and scored, other markets are coming.",
+    "default_market": "uk",
+    "uk_location_terms": ["uk", "united kingdom", "england", "scotland", "wales", "northern ireland", "london", "manchester", "birmingham", "leeds", "bristol", "edinburgh", "glasgow", "cambridge", "oxford", "brighton", "reading", "belfast", "cardiff"]
+  },
+  "thread_hold": {
+    "_note": "One live thread per company, ever. A company is held while any piece for it is in flight or its follow-up sequence is still running; the hold lifts by itself when the thread closes, whatever the outcome. live_results are outcome results that mean a conversation is open; no_response stays live for followup_window_days after the recorded date, then closes.",
+    "live_results": ["replied", "opportunity"],
+    "followup_window_days": 14
+  },
+  "currency_check_after_days": 365,
+  "fullenrich": {
+    "_note": "Endpoints reconstructed from FullEnrich's documented API (docs.fullenrich.com; blocked from this container). VERIFY shapes against the live docs on the first keyed run; the client prints every request before sending. Search costs 0.25 credits per person exported; Enrich costs 1 credit per work email / 3 personal / 10 mobile, success-only.",
+    "base_url": "https://app.fullenrich.com/api/v1",
+    "base_url_v2": "https://app.fullenrich.com/api/v2",
+    "enrich_start_path": "/contact/enrich/bulk",
+    "enrich_poll_path": "/contact/enrich/bulk/{enrichment_id}",
+    "enrich_fields": ["contact.work_emails"],
+    "enrich_fields_with_phones": ["contact.work_emails", "contact.phones"],
+    "poll_interval_seconds": 15,
+    "poll_timeout_seconds": 600,
+    "search_enabled": true,
+    "search_people_path": "/people/search",
+    "search_limit": 5,
+    "resolve_titles": ["CMO", "Chief Marketing Officer", "VP Marketing", "VP of Marketing", "Head of ABM", "ABM Manager", "Head of Account-Based Marketing", "Head of Demand Generation", "VP Sales", "VP of Sales"]
+  },
+  "adzuna": {
+    "_note": "abm-hiring scrape path: Adzuna UK jobs API (free tier). Needs ADZUNA_APP_ID + ADZUNA_APP_KEY in env or .env; without them the module prints instructions and the paste path still works.",
+    "base_url": "https://api.adzuna.com/v1/api/jobs/gb/search/1",
+    "results_per_page": 50,
+    "max_days_old": 90
+  },
+  "companies_house_search_url": "https://find-and-update.company-information.service.gov.uk/search?q="
+}

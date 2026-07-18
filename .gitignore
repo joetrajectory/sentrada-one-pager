@@ -37,3 +37,15 @@ newspaper/mmc_*.png
 
 # P7b validation output (generated per run; comparisons of real replies stay local)
 runner/reply_validation/out/
+
+# Sourcing: the candidate store is GITIGNORED WHILE THIS REPO IS PUBLIC — it
+# is the sender's target list and must not be world-readable. The runner
+# prints a full dump after every ingest/paste (and on demand via `dump`);
+# restore with `import --file`. WHEN THE REPO GOES PRIVATE at the Vercel
+# deployment sitting, remove the candidates.json line below and commit the
+# store for durability, exactly like outcomes.json. Contact data returned by
+# FullEnrich and raw scraped page dumps stay ignored forever: personal
+# contact data never goes on a code branch.
+sourcing/candidates.json
+sourcing/enriched.json
+sourcing/raw/
