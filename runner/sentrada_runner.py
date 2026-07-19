@@ -153,8 +153,13 @@ def read_file(path):
 
 
 def write_file(path, text):
-    with open(path, "w", encoding="utf-8") as fh:
+    # Atomic: committed ledgers (outcomes.json, capture.json) go through here,
+    # and a truncate-write killed mid-flight leaves a corrupt file that can be
+    # committed unnoticed.
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
         fh.write(text)
+    os.replace(tmp, path)
 
 
 def extract_last_json(text):
@@ -500,17 +505,52 @@ def _engine_file_sha1(engine_path):
         return hashlib.sha1(fh.read()).hexdigest()
 
 
+def _stamp_qc(folder, qc_name, image_path):
+    """Record WHICH render a QC verdict actually looked at (qc_stamp.json,
+    keyed by QC filename). Ship-check prefers this hash over mtimes: mtime
+    comparison can be fooled by copy2-preserved times or a `qc --image` run
+    against a different file than the delivered render."""
+    try:
+        path = os.path.join(folder, "qc_stamp.json")
+        stamps = {}
+        if os.path.exists(path):
+            try:
+                s = json.loads(read_file(path))
+                if isinstance(s, dict):
+                    stamps = s
+            except (ValueError, OSError):
+                pass
+        stamps[qc_name] = {"image_sha1": _engine_file_sha1(image_path)}
+        write_file(path, json.dumps(stamps, indent=2))
+    except OSError:
+        pass  # stamping is best-effort; the mtime fallback still applies
+
+
 def _stamp_engine(output_path, engine_path):
     """Record which engine build produced a render (engine_stamp.json beside it).
     ship-check compares this against the current engine file and warns when a
     render predates an engine change — the lesson of the MongoDB dateline, where a
-    fixed engine bug shipped inside a stale render."""
+    fixed engine bug shipped inside a stale render. Keyed by output filename:
+    the piece and its card render into the same folder, and a single flat stamp
+    let the card render clobber the artefact's."""
     try:
         folder = os.path.dirname(os.path.abspath(output_path))
-        write_file(os.path.join(folder, "engine_stamp.json"), json.dumps({
+        path = os.path.join(folder, "engine_stamp.json")
+        stamps = {}
+        if os.path.exists(path):
+            try:
+                existing = json.loads(read_file(path))
+                if isinstance(existing, dict):
+                    # Legacy flat stamp {"engine":..,"sha1":..}: no output name
+                    # was recorded, so it can only be kept as-is or replaced.
+                    stamps = {} if "engine" in existing else existing
+            except (ValueError, OSError):
+                pass
+        stamps[os.path.basename(output_path)] = {
             "engine": os.path.relpath(engine_path, REPO_ROOT),
             "sha1": _engine_file_sha1(engine_path),
-        }, indent=2))
+        }
+        write_file(path, json.dumps(stamps, indent=2))
     except OSError:
         pass  # stamping is best-effort; never fail a render over it
 
@@ -651,7 +691,14 @@ def grounding_check(config, research, copy_text, sender_facts=""):
                    or "(none provided - verify every claim against the research only)"})
     _, data = cli_json(prompt, model_for(config, "p4b"))
     issues = data.get("unsupported") or []
-    grounded = bool(data.get("grounded", True)) and not issues
+    if not isinstance(data.get("grounded"), bool):
+        # Wrong-schema reply (empty block, copy JSON echoed back): fail CLOSED.
+        # Ungated copy must never proceed because the gate mumbled; the attempt
+        # loop retries and then halts.
+        return False, issues or [{"claim": "(gate reply unusable)",
+                                  "issue": "no boolean 'grounded' verdict in the "
+                                           "gate's JSON; treating as not grounded"}]
+    grounded = data["grounded"] and not issues
     return grounded, issues
 
 
@@ -781,7 +828,10 @@ def research_gate(config, research, name, title, company, fmt):
     verdict = str(data.get("verdict", "")).upper().replace(" ", "_")
     gaps = structural + [str(g) for g in (data.get("gaps") or [])]
     if not verdict:
-        verdict = "NOT_READY" if structural else "READY"
+        # No verdict in the gate's JSON: fail closed, never assume READY.
+        gaps.append("research gate returned no verdict (wrong-schema reply) — "
+                    "treated as NOT_READY; re-run or review manually")
+        verdict = "NOT_READY"
     elif structural and verdict == "READY":
         verdict = "READY_WITH_GAPS"
     return verdict, gaps, data.get("fact_count_estimate")
@@ -1553,12 +1603,41 @@ def _generate_claymation(args, config, folder, base_values, brief, meta):
 # --- QC (Prompts 6 + 6B) and follow-up (Prompt 7): shared steps -------------
 # These run both standalone (cmd_qc / cmd_followup) and chained from generate.
 
+_6B_PHRASES = ("WOULD TAKE THE MEETING", "WOULD ENGAGE IF FOLLOWED UP WELL",
+               "WOULD ADMIRE AND IGNORE", "WOULD BIN")
+
+
 def extract_6b_verdict(text):
-    for phrase in ("WOULD TAKE THE MEETING", "WOULD ENGAGE IF FOLLOWED UP WELL",
-                   "WOULD ADMIRE AND IGNORE", "WOULD BIN"):
-        if phrase in text:
-            return phrase
-    return None
+    """The 6B verdict, robust to prose that DISCUSSES other verdict options.
+    Never scan in fixed phrase-priority order: comparative prose ('narrowly
+    avoids WOULD ADMIRE AND IGNORE territory... VERDICT: WOULD BIN') would let
+    a mention of a better verdict mask the real one, and this parser drives the
+    chain stop, ship-check's WOULD BIN hold and calibration. Preference:
+    the structured JSON tail (authoritative), then the earliest phrase after
+    the LAST 'VERDICT' marker, then the phrase mentioned last in the text."""
+    s = extract_6b_structured(text)
+    if s:
+        v = str(s.get("verdict", "")).upper()
+        for phrase in _6B_PHRASES:
+            if phrase in v:
+                return phrase
+    up = text.upper()
+    i = up.rfind("VERDICT")
+    if i != -1:
+        seg = up[i:]
+        best = None
+        for phrase in _6B_PHRASES:
+            p = seg.find(phrase)
+            if p != -1 and (best is None or p < best[0]):
+                best = (p, phrase)
+        if best:
+            return best[1]
+    best = None
+    for phrase in _6B_PHRASES:
+        p = up.rfind(phrase)
+        if p != -1 and (best is None or p > best[0]):
+            best = (p, phrase)
+    return best[1] if best else None
 
 
 def extract_6b_structured(text):
@@ -1617,6 +1696,7 @@ def _p6(config, folder, image_path, meta, brief, research):
     review = vision_call(config, fill(load_template("prompt6_review.md"), values),
                          model_for(config, "p6"), image_path)
     write_file(os.path.join(folder, "qc_review.md"), review)
+    _stamp_qc(folder, "qc_review.md", image_path)
     return review, extract_p6_verdict(review)
 
 
@@ -1680,7 +1760,9 @@ def _p6b(config, folder, image_path, meta, research, package=False):
     print(f"[{label}] simulating the recipient ({model_for(config, 'p6b')}, vision)...")
     sixb = vision_call(config, fill(load_template("prompt6b_recipient.md"), values),
                        model_for(config, "p6b"), image_path)
-    write_file(os.path.join(folder, "qc_package.md" if package else "qc_recipient.md"), sixb)
+    qc_name = "qc_package.md" if package else "qc_recipient.md"
+    write_file(os.path.join(folder, qc_name), sixb)
+    _stamp_qc(folder, qc_name, image_path)
     return sixb, extract_6b_verdict(sixb)
 
 
@@ -2192,6 +2274,8 @@ def _copy_lint(folder, fmt):
             data = json.loads(read_file(data_path))
         except (ValueError, OSError):
             data = None
+            holds.append("lint: data.json exists but cannot be parsed — every "
+                         "data lint is blind until it is fixed")
         if data:
             strings = list(_strings_in(data))
             if any("—" in s for s in strings):
@@ -2316,14 +2400,47 @@ def _ship_status(folder):
                 "pkg": None, "holds": [f"no render found ({slug}.png)"], "warns": []}
 
     png_m = os.path.getmtime(render)
+
+    # QC freshness: prefer the qc_stamp.json hash (which render the verdict
+    # actually saw) over mtime ordering; fall back to mtimes for QC files that
+    # predate stamping.
+    qc_stamps = {}
+    qsp = os.path.join(folder, "qc_stamp.json")
+    if os.path.exists(qsp):
+        try:
+            s = json.loads(read_file(qsp))
+            if isinstance(s, dict):
+                qc_stamps = s
+        except (ValueError, OSError):
+            pass
+    render_sha = _engine_file_sha1(render) if qc_stamps else None
+
+    def qc_stale(qc_path, qc_name):
+        st = qc_stamps.get(qc_name) or {}
+        if st.get("image_sha1"):
+            return st["image_sha1"] != render_sha
+        return os.path.getmtime(qc_path) <= png_m
+
+    # Copy staleness: data.json newer than the render means the printed file no
+    # longer matches the copy (post-QC edit, forgotten re-render) AND the edited
+    # copy never re-passed the grounding gate (P4b runs inside generate only).
+    dj = os.path.join(folder, "data.json")
+    if os.path.exists(dj) and os.path.getmtime(dj) >= png_m:
+        holds.append("data.json is NEWER than the render — the copy changed after "
+                     "rendering; re-render and re-QC (edited copy has not "
+                     "re-passed the grounding gate)")
+
     if not os.path.exists(review):
         holds.append("no qc_review.md — P6 craft QC never ran")
     else:
         p6 = extract_p6_verdict(read_file(review))
-        if os.path.getmtime(review) < png_m:
-            holds.append("render is NEWER than qc_review.md — re-QC required "
-                         "(P6 has not seen the delivered file)")
-        if p6 == "FAIL":
+        if qc_stale(review, "qc_review.md"):
+            holds.append("qc_review.md did not see the delivered render — "
+                         "re-QC required")
+        if p6 is None:
+            holds.append("qc_review.md exists but no P6 verdict is readable — "
+                         "an unreadable verdict must not pass; re-run `qc`")
+        elif p6 == "FAIL":
             holds.append("P6 verdict is FAIL")
         elif p6 == "BORDERLINE":
             warns.append("P6 verdict is BORDERLINE — review craft notes before print")
@@ -2332,10 +2449,13 @@ def _ship_status(folder):
         holds.append("no qc_recipient.md — P6B recipient sim never ran")
     else:
         p6b = extract_6b_verdict(read_file(recipient))
-        if os.path.getmtime(recipient) < png_m:
-            holds.append("render is NEWER than qc_recipient.md — re-QC required "
-                         "(P6B has not seen the delivered file)")
-        if p6b == "WOULD BIN":
+        if qc_stale(recipient, "qc_recipient.md"):
+            holds.append("qc_recipient.md did not see the delivered render — "
+                         "re-QC required")
+        if p6b is None:
+            holds.append("qc_recipient.md exists but no 6B verdict is readable — "
+                         "an unreadable verdict must not pass; re-run `qc`")
+        elif p6b == "WOULD BIN":
             holds.append("P6B verdict is WOULD BIN — do not print")
 
     # Package pass (piece + companion card judged together). Optional: pieces
@@ -2347,13 +2467,16 @@ def _ship_status(folder):
     card_json = os.path.join(folder, slug + "-card.json")
     if os.path.exists(package):
         pkg = extract_6b_verdict(read_file(package))
-        if os.path.getmtime(package) < png_m:
-            holds.append("render is NEWER than qc_package.md — re-run `package-qc` "
-                         "(the package pass has not seen the delivered file)")
+        if qc_stale(package, "qc_package.md"):
+            holds.append("qc_package.md did not see the delivered render — "
+                         "re-run `package-qc`")
         if os.path.exists(card_json) and \
-                os.path.getmtime(card_json) > os.path.getmtime(package):
+                os.path.getmtime(card_json) >= os.path.getmtime(package):
             holds.append("card copy changed after the package pass — re-run `package-qc`")
-        if pkg == "WOULD BIN":
+        if pkg is None:
+            holds.append("qc_package.md exists but no 6B verdict is readable — "
+                         "an unreadable verdict must not pass; re-run `package-qc`")
+        elif pkg == "WOULD BIN":
             holds.append("6B package verdict is WOULD BIN — the full send fails; "
                          "revise the card copy and re-run `package-qc`")
     elif os.path.exists(card_json):
@@ -2377,6 +2500,17 @@ def _ship_status(folder):
     else:
         warns.append("no followup.md — P7 never ran (run `followup` before the piece lands)")
 
+    # A follow-up that failed its grounding gate three times still writes
+    # followup.md; the failure must hold here, not scroll past in a build log.
+    fg = os.path.join(folder, "followup_gate.json")
+    if os.path.exists(fg):
+        try:
+            if json.loads(read_file(fg)).get("grounded") is not True:
+                holds.append("follow-up failed its grounding gate "
+                             "(followup_gate.json) — revise and re-run `followup`")
+        except (ValueError, OSError):
+            holds.append("followup_gate.json unreadable — re-run `followup`")
+
     lint_holds, lint_warns = _copy_lint(folder, fmt)
     holds += lint_holds
     warns += lint_warns
@@ -2388,10 +2522,18 @@ def _ship_status(folder):
     if os.path.exists(stamp_path):
         try:
             stamp = json.loads(read_file(stamp_path))
-            ep = os.path.join(REPO_ROOT, stamp.get("engine", ""))
-            if os.path.exists(ep) and _engine_file_sha1(ep) != stamp.get("sha1"):
-                warns.append("engine has changed since this render — re-render "
-                             "recommended (delivered file may predate an engine fix)")
+            # Legacy flat stamp {"engine":..,"sha1":..} vs the keyed form
+            # {"<output>.png": {...}}: the card render used to clobber the
+            # artefact's flat stamp, which neutralised this check entirely.
+            entries = {slug + ".png": stamp} if "engine" in stamp else stamp
+            for out_name, s in entries.items():
+                if not isinstance(s, dict):
+                    continue
+                ep = os.path.join(REPO_ROOT, s.get("engine", ""))
+                if os.path.exists(ep) and _engine_file_sha1(ep) != s.get("sha1"):
+                    warns.append(f"engine has changed since {out_name} was rendered "
+                                 "— re-render recommended (delivered file may "
+                                 "predate an engine fix)")
         except (ValueError, OSError):
             pass
 
@@ -2585,9 +2727,14 @@ def cmd_birch_csv(args):
         # CONFIRM_FIRST to CONFIRMED, or a remote worker downgrades to BLOCKED).
         # The manifest is committed, so overrides carry status/notes only;
         # addresses stay in the gitignored research files unless corrected.
-        status = (override.get("status") or res.get("status") or "").upper()
-        address = (override.get("address") or res.get("address") or "").strip()
-        notes = (override.get("notes") or res.get("notes") or "").strip()
+        # Presence-checked so an override can deliberately BLANK a field, not
+        # just replace it (`{"address": ""}` must clear, not fall through).
+        status = str(override["status"] if "status" in override
+                     else res.get("status", "") or "").upper()
+        address = str(override["address"] if "address" in override
+                      else res.get("address", "") or "").strip()
+        notes = str(override["notes"] if "notes" in override
+                    else res.get("notes", "") or "").strip()
         flagged = False
         if status == "BLOCKED":
             address = ""
@@ -2598,6 +2745,14 @@ def cmd_birch_csv(args):
             notes = ("CONFIRM ADDRESS BEFORE SHIPPING" + (f" — {notes}" if notes else "")).strip()
             flags.append(f"{slug}: CONFIRM_FIRST")
             flagged = True
+        elif status != "CONFIRMED" and address:
+            # Unknown or missing status with an address present must never ship
+            # blind: the fail-safe only bit on the two exact spellings before.
+            label = "missing" if not status else f"unrecognised: {status}"
+            notes = (f"CONFIRM ADDRESS BEFORE SHIPPING — DELIVERY_STATUS {label}"
+                     + (f" — {notes}" if notes else ""))
+            flags.append(f"{slug}: status {label} — treated as CONFIRM_FIRST")
+            flagged = True
         if not address and not flagged:
             missing.append(slug)
         file_stem = f"{code}_{_surname(recipient)}_{_company_condensed(company)}"
@@ -2607,12 +2762,17 @@ def cmd_birch_csv(args):
 
     out = args.output or os.path.join(
         mdir, os.path.splitext(os.path.basename(args.manifest))[0] + "-birch.csv")
+    def cell(v):
+        # Excel executes a leading =+-@ as a formula; a recipient-submitted
+        # address must never run code in the supplier's spreadsheet.
+        return "'" + v if str(v)[:1] in ("=", "+", "-", "@") else v
+
     with open(out, "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow(["code", "recipient", "company", "delivery_address", "notes", "file_stem"])
         for r in rows:
-            w.writerow([r["code"], r["recipient"], r["company"],
-                        r["delivery_address"], r["notes"], r["file_stem"]])
+            w.writerow([r["code"], cell(r["recipient"]), cell(r["company"]),
+                        cell(r["delivery_address"]), cell(r["notes"]), r["file_stem"]])
 
     staged = cards_staged = 0
     if args.stage_pngs:
@@ -3245,12 +3405,15 @@ def cmd_printed(args):
     if not name and os.path.exists(meta_path):
         name = json.loads(read_file(meta_path)).get("recipient_name", "")
     if not name:
-        name = entry.get("recipient", "")
+        name = entry.get("recipient", "") or entry.get("first_name", "")
     if not name:
         die("no recipient name found (no piece folder in this container): "
             "pass --name \"First Last\"")
-    entry.update({"recipient": name, "first_name": name.split()[0],
-                  "printed": _capture_today()})
+    # Ledger contract: first name only. The committed file's documented contents
+    # are enumerated (token hash, first name, dates, statuses); the full name
+    # lives in meta.json/research, not here.
+    entry.pop("recipient", None)
+    entry.update({"first_name": name.split()[0], "printed": _capture_today()})
     entry.setdefault("status", "printed")
     ledger[args.piece] = entry
     _capture_save(ledger)
@@ -3349,12 +3512,20 @@ def cmd_nudge(args):
 
 
 def cmd_swap(args):
+    config = load_config(args.config)
     ledger = _capture_ledger()
     entry = _capture_entry(ledger, args.piece)
+    # Kill the live token BEFORE recording the swap: the token stays valid in
+    # the store for up to 30 days, and a post-swap submission would land in a
+    # record that nothing ever pulls or purges — an address silently waiting
+    # out the 90-day TTL. If the purge call fails, the swap is not recorded.
+    result = _capture_call(config, {"action": "purge", "piece_id": args.piece})
     entry["status"] = "swapped-after-silence"
     entry["swap_date"] = _capture_today()
     _capture_save(ledger)
-    print(f"[capture] {args.piece}: marked swapped-after-silence. "
+    tok = ("the tease link is dead" if result.get("purged")
+           else "no live store record existed")
+    print(f"[capture] {args.piece}: marked swapped-after-silence ({tok}). "
           f"The piece is free to re-target; run tease again once re-marked printed.")
 
 
@@ -3421,9 +3592,25 @@ def cmd_capture(args):
         for rec in records:
             slug = rec.get("piece_id", "")
             entry = ledger.get(slug)
-            if not entry or entry.get("status") in ("swapped-after-silence",):
+            submitted = rec.get("state") == "submitted"
+            # Never skip a submitted address silently: the sync is the fallback
+            # for missed notifications, and a dropped one waits out the 90-day
+            # TTL unshipped and unpurged.
+            if not entry:
+                if submitted:
+                    print(f"[capture] WARNING: the store holds a SUBMITTED address "
+                          f"for '{slug}', which is not in this ledger (teased from "
+                          f"another container, or ledger not pulled?). Ship it, or "
+                          f"run `delivered --piece {slug}` to purge it.")
                 continue
-            if rec.get("state") == "submitted" and entry.get("status") != "address-received":
+            if entry.get("status") == "swapped-after-silence":
+                if submitted:
+                    print(f"[capture] WARNING: {slug} was swapped but the store "
+                          f"holds a submitted address (token pre-dates the swap "
+                          f"purge). Decide whether to ship, then run `delivered "
+                          f"--piece {slug}` to purge it.")
+                continue
+            if submitted and entry.get("status") != "address-received":
                 entry["status"] = "address-received"
                 entry["submission_date"] = str(rec.get("submitted_at", ""))[:10]
                 entry["address_type"] = rec.get("address_type", "")
@@ -4234,6 +4421,254 @@ def _finish_gate_probe(failures):
     _print_usage("gate-probe")
 
 
+# --- engine-probe: regression harness for the layout engines ------------------
+# The third probe leg: gate-probe covers the copy gates, capture-probe the
+# address flow, engine-probe the deterministic render contract every engine
+# promises (--check exits non-zero on oversized copy without rendering, renders
+# carry the right print size, DPI metadata and sRGB tag, a failed render
+# quarantines as *.FAILED.png with no clean output, a re-render is
+# byte-identical) plus the runner's own pure logic: slug/verdict parsing, the
+# ungated-field lint, the DELIVERY block parser and snapshot idempotence in a
+# throwaway git repo. No model calls; free to run. Run after any edit to an
+# engine, a run_*_engine helper, or the snapshot/CSV code.
+
+def _probe_break_data(fmt, data):
+    """Mutate a copy of a known-good data dict so the engine must refuse it."""
+    if fmt == "newspaper":
+        data["lead_article"] = " ".join([data["lead_article"]] * 3)
+    elif fmt == "crossword":
+        data["subtitle"] = ("An interminable subtitle that cannot possibly be "
+                            "shrunk onto the line ") * 20
+    elif fmt == "email":
+        filler = {"type": "p",
+                  "text": "This paragraph repeats far past the sheet. " * 30}
+        data["body"] = data["body"] + [dict(filler) for _ in range(30)]
+    elif fmt == "card":
+        data["body"] = [p + (" and the point keeps going on" * 40)
+                        for p in data["body"]]
+    return data
+
+
+def _engine_probe_specs(config):
+    """(fmt, engine, template, bundled test data, print size in mm) per engine.
+    Sizes: production formats print at A2, the companion card at A6."""
+    return [
+        ("newspaper", config.get("engine"), config.get("newspaper_template"),
+         os.path.join(REPO_ROOT, "newspaper", "cognism.json"), (420, 594)),
+        ("crossword", config.get("crossword_engine"), config.get("crossword_template"),
+         os.path.join(REPO_ROOT, "crossword", "test_cognism.json"), (420, 594)),
+        ("email", config.get("email_engine"), None,
+         os.path.join(REPO_ROOT, "email", "test_qflow.json"), (420, 594)),
+        ("card", config.get("card_engine"), None,
+         os.path.join(REPO_ROOT, "card", "samples", "chris.json"), (105, 148)),
+    ]
+
+
+def _probe_engine_cmd(engine, template, data_path, output=None, check=False, dpi=None):
+    """Invoke an engine exactly as the run_*_engine helpers do (same
+    interpreter, cwd, flag shape), with a --print-dpi override for fast probes."""
+    cmd = [sys.executable, engine, "--data", data_path]
+    if template:
+        cmd += ["--template", template]
+    if check:
+        cmd.append("--check")
+    if output:
+        cmd += ["--output", output, "--print-dpi", str(dpi or 360)]
+    r = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
+    return r.returncode, (r.stdout or "") + (r.stderr or "")
+
+
+def _probe_png_report(path, dpi, size_mm):
+    """Problems with a rendered PNG's print contract; empty list means clean."""
+    from PIL import Image
+    problems = []
+    with Image.open(path) as img:
+        w, h = img.size
+        if img.mode != "RGB":
+            problems.append(f"mode {img.mode}, expected RGB")
+        if not img.info.get("icc_profile"):
+            problems.append("no ICC profile (sRGB tag missing)")
+        meta = img.info.get("dpi")
+        if not meta or abs(meta[0] - dpi) > 1 or abs(meta[1] - dpi) > 1:
+            problems.append(f"dpi metadata {meta}, expected {dpi}")
+        want = sorted(round(m / 25.4 * dpi) for m in size_mm)
+        got = sorted((w, h))
+        tol = max(2, dpi // 10)          # ~2.5mm: rounding, never a wrong size
+        if any(abs(a - b) > tol for a, b in zip(got, want)):
+            problems.append(f"size {w}x{h}px, expected ~{want[0]}x{want[1]} at {dpi}dpi")
+    return problems
+
+
+def _probe_runner_units(check):
+    check("slugify collapses punctuation runs",
+          slugify("Jane O'Brien @ Acme!") == "jane-o-brien-acme")
+    check("slugify never returns empty", slugify("!!!") == "x")
+    j = extract_last_json('x ```json\n{"a": 1}\n``` y ```json\n{"b": 2}\n```')
+    check("extract_last_json takes the last block", j == {"b": 2})
+    check("extract_last_json tolerates malformed JSON",
+          extract_last_json("```json\n{oops\n```") is None)
+    check("P6 verdict read through markdown wrap",
+          extract_p6_verdict("**VERDICT: BORDERLINE**") == "BORDERLINE")
+    check("P6 verdict takes the earliest keyword on the line",
+          extract_p6_verdict("VERDICT: FAIL (would otherwise PASS)") == "FAIL")
+    check("P6 verdict absent reads as None",
+          extract_p6_verdict("no verdict anywhere") is None)
+    check("6B verdict phrase scan",
+          extract_6b_verdict("blah WOULD ADMIRE AND IGNORE blah")
+          == "WOULD ADMIRE AND IGNORE")
+    check("surname drops honours and punctuation",
+          _surname("Jane van Helsing OBE") == "Helsing"
+          and _surname("Amy Smith-Jones") == "SmithJones")
+    check("company condensed keeps casing, drops punctuation",
+          _company_condensed("Verizon Business, Inc.") == "VerizonBusinessInc")
+    email_data = json.loads(read_file(os.path.join(REPO_ROOT, "email",
+                                                   "test_qflow.json")))
+    check("ungated-field lint: bundled email data fully gated",
+          ungated_copy_fields(email_data, "email") == [])
+    email_data["promo_line"] = "Printed in Milton Keynes since 1962"
+    check("ungated-field lint flags a field the builder omits",
+          ungated_copy_fields(email_data, "email") == ["promo_line"])
+
+
+def _probe_delivery(check):
+    global PIECES_DIR
+    saved = PIECES_DIR
+    td = tempfile.mkdtemp(prefix="engine-probe-pieces-")
+    PIECES_DIR = td
+    try:
+        os.makedirs(os.path.join(td, "p1"))
+        write_file(os.path.join(td, "p1", "research.md"),
+                   "prose...\nDELIVERY_STATUS: confirmed\n"
+                   "DELIVERY_ADDRESS: 1 High St, London EC1A 1AA\n"
+                   "DELIVERY_NOTES: reception, ask for the post room\n")
+        d = _delivery_from_research("p1")
+        check("DELIVERY block parsed from research.md",
+              d == {"status": "CONFIRMED", "address": "1 High St, London EC1A 1AA",
+                    "notes": "reception, ask for the post room"})
+        os.makedirs(os.path.join(td, "p2"))
+        write_file(os.path.join(td, "p2", "research.md"),
+                   "DELIVERY_STATUS: BLOCKED\nDELIVERY_ADDRESS: <office address>\n"
+                   "DELIVERY_NOTES:\n")
+        d = _delivery_from_research("p2")
+        check("unfilled address placeholder reads as empty",
+              d["address"] == "" and d["status"] == "BLOCKED" and d["notes"] == "")
+        check("missing research.md reads as empty",
+              _delivery_from_research("nope")
+              == {"status": "", "address": "", "notes": ""})
+    finally:
+        PIECES_DIR = saved
+        shutil.rmtree(td, ignore_errors=True)
+
+
+def _probe_snapshot(check):
+    """Prove _deliverables_snapshot's promises against a throwaway origin:
+    a new render is pushed, an identical re-run is skipped (idempotence), and
+    the file lands under batch-<label>/ on the deliverables branch."""
+    global REPO_ROOT
+    saved = REPO_ROOT
+    base = tempfile.mkdtemp(prefix="engine-probe-git-")
+    try:
+        origin = os.path.join(base, "origin.git")
+        work = os.path.join(base, "work")
+        for cmd, cwd in ((["git", "init", "--bare", origin], base),
+                         (["git", "init", work], base),
+                         (["git", "remote", "add", "origin", origin], work)):
+            r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+            if r.returncode != 0:
+                check("snapshot: throwaway git repo builds", False)
+                return
+        src = os.path.join(base, "x.png")
+        with open(src, "wb") as fh:
+            fh.write(b"\x89PNG\r\n\x1a\nprobe-bytes")
+        REPO_ROOT = work
+        r1 = _deliverables_snapshot([(src, "x.png")], "probe", push=True)
+        check("snapshot pushes a new render to deliverables",
+              r1.get("staged") == 1 and r1.get("pushed") == 1
+              and not r1.get("failed"))
+        r2 = _deliverables_snapshot([(src, "x.png")], "probe", push=True)
+        check("snapshot is idempotent (identical file skipped)",
+              r2.get("skipped") == 1 and r2.get("staged") == 0)
+        ls = subprocess.run(["git", "ls-tree", "-r", "--name-only", "deliverables"],
+                            cwd=origin, capture_output=True, text=True)
+        check("deliverables branch holds batch-probe/x.png",
+              "batch-probe/x.png" in (ls.stdout or ""))
+    finally:
+        REPO_ROOT = saved
+        shutil.rmtree(base, ignore_errors=True)
+
+
+def cmd_engine_probe(args):
+    config = load_config(args.config)
+    only = {e.strip() for e in (args.engines or "").split(",") if e.strip()}
+    results = []
+
+    def check(label, ok, detail=""):
+        results.append((label, ok))
+        line = ("  PASS  " if ok else "  FAIL  ") + label
+        if detail and not ok:
+            line += "\n          " + detail.strip().replace("\n", "\n          ")
+        print(line)
+
+    print("\n" + "=" * 70)
+    print("ENGINE PROBE — render contract + runner logic (no model calls)")
+    print("=" * 70)
+    td = tempfile.mkdtemp(prefix="engine-probe-")
+    try:
+        for fmt, engine, template, data_path, size_mm in _engine_probe_specs(config):
+            if only and fmt not in only:
+                continue
+            print(f"\n[{fmt}]")
+            if not engine or not os.path.exists(os.path.join(REPO_ROOT, engine)):
+                check(f"{fmt}: engine present in config and on disk", False)
+                continue
+            rc, out = _probe_engine_cmd(engine, template, data_path, check=True)
+            check(f"{fmt}: --check passes the bundled data", rc == 0, out[-400:])
+            broken = _probe_break_data(fmt, json.loads(read_file(data_path)))
+            bpath = os.path.join(td, fmt + "-broken.json")
+            write_file(bpath, json.dumps(broken))
+            rc, out = _probe_engine_cmd(engine, template, bpath, check=True)
+            check(f"{fmt}: --check refuses oversized copy (non-zero exit)", rc != 0)
+            if args.skip_render:
+                continue
+            out1 = os.path.join(td, fmt + "-a.png")
+            rc, out = _probe_engine_cmd(engine, template, data_path,
+                                        output=out1, dpi=args.dpi)
+            ok = rc == 0 and os.path.exists(out1)
+            check(f"{fmt}: renders the bundled data", ok, out[-400:])
+            if ok:
+                problems = _probe_png_report(out1, args.dpi, size_mm)
+                check(f"{fmt}: render carries print size, DPI and sRGB tag",
+                      not problems, "; ".join(problems))
+                out2 = os.path.join(td, fmt + "-b.png")
+                rc2, _ = _probe_engine_cmd(engine, template, data_path,
+                                           output=out2, dpi=args.dpi)
+                check(f"{fmt}: re-render is byte-identical (deterministic)",
+                      rc2 == 0 and os.path.exists(out2)
+                      and filecmp.cmp(out1, out2, shallow=False))
+            qout = os.path.join(td, fmt + "-broken.png")
+            rc, out = _probe_engine_cmd(engine, template, bpath,
+                                        output=qout, dpi=args.dpi)
+            qpath = os.path.join(td, fmt + "-broken.FAILED.png")
+            check(f"{fmt}: failed render quarantines as *.FAILED.png, no clean "
+                  "output", rc != 0 and not os.path.exists(qout)
+                  and os.path.exists(qpath))
+        print("\n[runner logic]")
+        _probe_runner_units(check)
+        _probe_delivery(check)
+        print("\n[snapshot]")
+        _probe_snapshot(check)
+    finally:
+        shutil.rmtree(td, ignore_errors=True)
+    fails = [label for label, ok in results if not ok]
+    print("-" * 70)
+    if fails:
+        print(f"{len(fails)} probe(s) FAILED. Do not trust renders (or the "
+              "snapshot path) until fixed.")
+        sys.exit(1)
+    print(f"All {len(results)} probes passed. Engines honour the render "
+          "contract; runner logic intact.")
+
+
 # --- harness: the grounding-gate exam ----------------------------------------
 # A committed library of real cases (research + gate-visible copy + expected
 # verdict) that the CURRENT 4b template is run over, one grounding call per
@@ -4888,6 +5323,7 @@ def main():
                         help="mark a silent piece swapped-after-silence (your decision; "
                              "the runner only ever recommends)")
     sw.add_argument("--piece", required=True, help="the piece slug")
+    sw.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     sw.set_defaults(func=cmd_swap)
 
     ad = sub.add_parser("address",
@@ -4920,6 +5356,21 @@ def main():
                               "capture commands")
     cpr.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     cpr.set_defaults(func=cmd_capture_probe)
+
+    ep = sub.add_parser("engine-probe",
+                        help="regression-test the layout engines' render contract "
+                             "(--check refusal, print size/DPI/sRGB, *.FAILED "
+                             "quarantine, deterministic re-render) plus the "
+                             "runner's pure logic and snapshot idempotence; free "
+                             "(no model calls), run after any engine or runner edit")
+    ep.add_argument("--engines", default="",
+                    help="comma-separated subset (newspaper,crossword,email,card)")
+    ep.add_argument("--skip-render", action="store_true",
+                    help="contract checks only, no renders (fast)")
+    ep.add_argument("--dpi", type=int, default=96,
+                    help="probe render DPI (default 96 for speed; 360 = full print size)")
+    ep.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    ep.set_defaults(func=cmd_engine_probe)
 
     bc = sub.add_parser("birch-csv",
                         help="emit the print supplier's shipping CSV (code, recipient, "

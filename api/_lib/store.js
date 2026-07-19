@@ -63,6 +63,10 @@ async function setPointer(pieceId, token, ttlSeconds = SAFETY_TTL_SECONDS) {
   await redis("SET", `piece:${pieceId}`, token, "EX", ttlSeconds);
 }
 
+async function getPointer(pieceId) {
+  return pieceId ? await redis("GET", `piece:${pieceId}`) : null;
+}
+
 const TOKEN_RE = /^[A-Za-z0-9_-]{16,64}$/;
 
 function isExpired(record) {
@@ -120,6 +124,6 @@ function clean(value, max = 200) {
     .slice(0, max);
 }
 
-module.exports = { redis, getRecord, setRecord, setPointer, TOKEN_RE, isExpired,
-  publicState, noindex, clean, clientIp, withinRateLimit,
+module.exports = { redis, getRecord, setRecord, setPointer, getPointer, TOKEN_RE,
+  isExpired, publicState, noindex, clean, clientIp, withinRateLimit,
   SAFETY_TTL_DAYS, SAFETY_TTL_SECONDS };

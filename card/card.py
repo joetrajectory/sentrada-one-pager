@@ -218,6 +218,11 @@ def load_text(path):
         raise SystemExit("[fatal] text card needs salutation, body and a sign-off block")
     sign = blocks[-1]
     keys = ["name", "company", "email", "phone"]
+    if len(sign) > len(keys):
+        raise SystemExit(
+            "[fatal] sign-off block has %d lines; the card renders at most %d "
+            "(name, company, email, phone). Trim it — sender copy is never "
+            "silently dropped." % (len(sign), len(keys)))
     contact = {k: sign[i] for i, k in enumerate(keys) if i < len(sign)}
     return _normalise({
         "salutation": " ".join(blocks[0]),
@@ -525,9 +530,14 @@ _SRGB_ICC = None
 
 
 def srgb_icc_bytes():
+    # Header datetime + profile ID zeroed: LittleCMS stamps generation time,
+    # which would make byte-identical re-renders impossible.
     global _SRGB_ICC
     if _SRGB_ICC is None:
-        _SRGB_ICC = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        raw = bytearray(ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes())
+        raw[24:36] = bytes(12)
+        raw[84:100] = bytes(16)
+        _SRGB_ICC = bytes(raw)
     return _SRGB_ICC
 
 
