@@ -1,0 +1,25 @@
+{
+  "format": "email",
+  "run": [
+    "p6"
+  ],
+  "data": "email/test_qflow.json",
+  "meta": {
+    "recipient_name": "Leo Quinn",
+    "recipient_title": "Group Chief Executive",
+    "recipient_company": "Balfour Beatty",
+    "format": "email"
+  },
+  "brief": {
+    "core_problem": "Site data promises made at group level that delivery teams cannot yet evidence",
+    "key_metric": "sustainability reporting hours per project",
+    "problem_label": "Evidence Gap",
+    "operational_details": "Build to Last programme; group-level ESG targets"
+  },
+  "expected": {
+    "p6_must_not": [
+      "FAIL"
+    ]
+  },
+  "note": "A known-good email render must never FAIL craft QC."
+}

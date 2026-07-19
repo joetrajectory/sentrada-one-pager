@@ -8,8 +8,8 @@
 
 "use strict";
 
-const { getRecord, setRecord, TOKEN_RE, isExpired, noindex, clean,
-  withinRateLimit } = require("./_lib/store.js");
+const { getRecord, setRecord, setPointer, getPointer, TOKEN_RE, isExpired,
+  noindex, clean, withinRateLimit } = require("./_lib/store.js");
 
 // Same-day notification via Resend (https://resend.com). Optional: if the key
 // is missing or the send fails, the submission still lands in the store and
@@ -65,6 +65,13 @@ module.exports = async (req, res) => {
     const record = await getRecord(token);
     if (!record || isExpired(record)) return res.status(400).json({ error: "expired" });
     if (record.state === "submitted") return res.status(200).json({ ok: true });
+    // A rotated token: register flips the piece pointer to the new token
+    // before deleting the old record, so a token the pointer no longer names
+    // is a dead link — refuse it rather than store an address about to be
+    // deleted. (A missing pointer just means its TTL lapsed; the refresh
+    // below restores it.)
+    const pointed = await getPointer(record.piece_id);
+    if (pointed && pointed !== token) return res.status(400).json({ error: "expired" });
 
     record.state = "submitted";
     record.submitted_at = new Date().toISOString();
@@ -74,6 +81,10 @@ module.exports = async (req, res) => {
     // the address can never be stored without an expiry and the self-delete
     // clock restarts from submission even if `delivered` is never run.
     await setRecord(token, record);
+    // Refresh the piece pointer's TTL alongside the record's: its clock runs
+    // from register, and if it expired first the address would be stored but
+    // unreachable — pull 404s and purge no-ops until the record TTL fires.
+    await setPointer(record.piece_id, token);
 
     let notified = "failed";
     try {

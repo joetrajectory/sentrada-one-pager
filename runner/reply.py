@@ -409,12 +409,6 @@ def run(args):
     (reply_dir / "classification.json").write_text(
         json.dumps(classification, indent=2) + "\n")
 
-    # ---- record keeping: first reply ----
-    if not meta.get("first_reply_date"):
-        meta["first_reply_date"] = reply_date
-        meta["reply_language"] = language
-        (piece / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
-
     if intent == "auto_reply":
         print("\nClassification: %s language, %s. Branch: %s." %
               (language, intent.replace("_", " "), branch))
@@ -422,6 +416,15 @@ def run(args):
         (reply_dir / "result.json").write_text(json.dumps(
             {"intent": intent, "action": "no draft"}, indent=2) + "\n")
         return
+
+    # ---- record keeping: first reply ----
+    # After the auto-reply branch on purpose: an out-of-office is not a reply,
+    # and stamping it would poison first_reply_date/reply_language in the
+    # doctrine cuts that `outcome` harvests.
+    if not meta.get("first_reply_date"):
+        meta["first_reply_date"] = reply_date
+        meta["reply_language"] = language
+        (piece / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
 
     # ---- Step 2 + 3: draft, then gate; one retry, then HALT ----
     touches = touches_sent_summary(meta, args.touches_sent)

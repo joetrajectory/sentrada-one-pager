@@ -1,0 +1,19 @@
+{
+  "format": "newspaper",
+  "run": [
+    "p6b"
+  ],
+  "data": "data.json",
+  "meta": {
+    "recipient_name": "Chris Evans",
+    "recipient_title": "Chief Revenue Officer",
+    "recipient_company": "Cognism",
+    "format": "newspaper"
+  },
+  "expected": {
+    "p6b_must_not": [
+      "WOULD TAKE THE MEETING"
+    ]
+  },
+  "note": "Could-have-been-made-for-anyone piece: the sim must never predict a meeting from it."
+}
