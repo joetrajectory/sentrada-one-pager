@@ -39,7 +39,9 @@ def discover(fetch_fn, sources):
     for feed in sources:
         xml = fetch_fn(feed)
         for url in _LINK_RE.findall(xml):
-            if "news.google.com/rss" in url:  # the feed's own <link>
+            # Skip only the feed's own self/search links. Modern item links
+            # are news.google.com/rss/articles/... and must pass through.
+            if url == feed or "/rss/search" in url:
                 continue
             if url in seen:
                 continue

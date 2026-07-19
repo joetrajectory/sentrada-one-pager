@@ -361,8 +361,12 @@ python sourcing/sourcing.py ...
               and offline; freeform text goes through claude -p (subscription)
   shortlist   ranked candidates: score, distinct signal count, every evidence
               line with its link. UK VIEW BY DEFAULT (the person's desk, not
-              company HQ; unknown-location names show flagged; --world shows
-              banked non-UK names). Marks HOLD and CURRENCY CHECK per name.
+              company HQ). Only KNOWN-foreign locations bank a name
+              (foreign_location_terms in config.json); a location matching
+              neither list shows flagged as unclassified, so an unlisted UK
+              town never silently disappears; --world shows banked non-UK
+              names. Marks HOLD and CURRENCY CHECK per name, and flags a
+              score leaning on >2 signals of one type (volume, not breadth).
               Approval decisions are ALWAYS Joe's
   approve / reject   per-name decisions, recorded with date. approve REFUSES
               names whose dated story is >12 months old until a currency
@@ -381,14 +385,25 @@ python sourcing/sourcing.py ...
   status      store counts
   enrich      FullEnrich Enrich API on APPROVED names only. Stub without
               FULLENRICH_API_KEY (prints the exact request, spends nothing).
-              Default work emails (1 credit); --phones adds mobiles (10)
+              Default work emails (1 credit); --phones adds mobiles (10).
+              The enrichment_id is persisted to the store BEFORE polling; if
+              polling dies, resume with `enrich --poll <id>` (re-submits
+              nothing, never double-spends). Records with a pending_id are
+              refused/skipped until polled; --re-enrich re-spends on a done
+              record on purpose
   desk-check  office evidence for an approved name: --gather fetches company
               site pages + Companies House (key or manual URL); record with
               --evidence/--source, verdict office-confirmed | hybrid-likely |
               remote-likely. Remote-likely is NOT a rejection: it routes to
               the address-capture play
   dump/import durability while the repo is public: dump prints the full
-              store, import --file [--replace] restores/merges it
+              store, import --file [--replace] restores/merges it (merge is
+              strongest-wins: decisions/enrichment in the dump survive)
+  probe       regression-test the sourcing logic: holds (slug-keyed closes,
+              capture-slug resolution, suffix-blind company keys), currency
+              gate (unparseable dates fail closed, checks expire), scoring
+              ageing, merges, parsers, enrich guards. Free (no model or
+              network calls, temp stores only); run after any sourcing edit
   export      approved + enriched + desk-checked -> research/sourcing-<date>/
               (gitignored): manifest skeleton + per-candidate signals file as
               P1 input. source_signals ride the manifest into each piece's
