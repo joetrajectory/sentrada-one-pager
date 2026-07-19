@@ -1,0 +1,32 @@
+{
+  "format": "newspaper",
+  "run": [
+    "p6"
+  ],
+  "data": "newspaper/cognism.json",
+  "mutate": {
+    "type": "blackout",
+    "box": [
+      0.7,
+      0.05,
+      0.99,
+      0.33
+    ]
+  },
+  "meta": {
+    "recipient_name": "Chris Evans",
+    "recipient_title": "Chief Revenue Officer",
+    "recipient_company": "Cognism",
+    "format": "newspaper"
+  },
+  "brief": {
+    "core_problem": "An outbound machine built on call volume is hitting the ceiling of what volume can buy as the enterprise pivot demands relevance over reps",
+    "key_metric": "449,933 cold calls made by Cognism SDRs in 2025",
+    "problem_label": "Volume Ceiling",
+    "operational_details": "Diamond Data verified-mobile asset; SDR call targets tracked weekly; enterprise pivot announced internally"
+  },
+  "expected": {
+    "p6_must": "FAIL"
+  },
+  "note": "Key metric obliterated by a black block: quality criterion 2 (metric readable) must FAIL."
+}

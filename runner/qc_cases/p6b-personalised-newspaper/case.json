@@ -1,0 +1,19 @@
+{
+  "format": "newspaper",
+  "run": [
+    "p6b"
+  ],
+  "data": "newspaper/cognism.json",
+  "meta": {
+    "recipient_name": "Chris Evans",
+    "recipient_title": "Chief Revenue Officer",
+    "recipient_company": "Cognism",
+    "format": "newspaper"
+  },
+  "expected": {
+    "p6b_must_not": [
+      "WOULD BIN"
+    ]
+  },
+  "note": "A researched, personalised piece for the right person must not be predicted straight to the bin."
+}

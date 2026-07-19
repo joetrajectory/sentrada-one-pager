@@ -304,6 +304,12 @@ python runner/sentrada_runner.py ...
                 from every shipped/near-shipped incident), one Opus call per
                 case, scorecard vs the last saved run. batch-build warns when a
                 gate template changed after the last harness run
+  qc-harness    the vision-QC exam: run the CURRENT P6/6B templates over
+                runner/qc_cases/ (deterministic render recipes, some deliberately
+                defaced) and assert verdict DIRECTIONS (a clean render must not
+                FAIL, a defaced one must, a generic piece never earns WOULD TAKE
+                THE MEETING); one vision call per prompt per case. Run after any
+                edit to prompt6_review.md or prompt6b_recipient.md
   flag          archive a piece's research + copy + your note as a new must-flag
                 harness case and log it for the next retro (put the offending
                 phrase in "quotes" to seed the match terms)

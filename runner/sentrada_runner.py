@@ -4669,6 +4669,137 @@ def cmd_engine_probe(args):
           "contract; runner logic intact.")
 
 
+# --- qc-harness: the vision-QC exam -------------------------------------------
+# What `harness` is to the P4b text gate, qc-harness is to the P6/6B vision
+# verdicts: a committed library of cases (deterministic render recipe + optional
+# defacement + expected-verdict constraints) run against the CURRENT prompt6/6b
+# templates, one vision call per prompt per case. Because vision verdicts are
+# judgment calls, cases assert DIRECTIONS, not exact matches: a clean render
+# must not FAIL craft QC, a defaced/illegible one must, a generic piece must
+# never earn WOULD TAKE THE MEETING. Case folder: runner/qc_cases/<id>/ with
+# case.json ({format, run, data, mutate?, meta, brief?, expected}) and
+# research.md. Renders build from engine data at run time (engines are
+# deterministic), so no PNGs are committed.
+
+QC_CASES_DIR = os.path.join(RUNNER_DIR, "qc_cases")
+QC_SCORECARD_PATH = os.path.join(QC_CASES_DIR, "scorecard.json")
+QC_TEMPLATES = ("prompt6_review.md", "prompt6b_recipient.md")
+
+
+def _qc_case_render(case_dir, spec, config, out_png):
+    """Render the case's engine data (repo-relative or case-local ref) and apply
+    the optional defacement mutation. Raises on a failed render."""
+    specs = {s[0]: s for s in _engine_probe_specs(config)}
+    fmt, engine, template = spec["format"], None, None
+    if fmt not in specs:
+        raise RuntimeError(f"unknown format {fmt!r}")
+    _, engine, template, _, _ = specs[fmt]
+    ref = spec.get("data", "data.json")
+    local = os.path.join(case_dir, ref)
+    data_path = local if os.path.exists(local) else os.path.join(REPO_ROOT, ref)
+    rc, out = _probe_engine_cmd(engine, template, data_path,
+                                output=out_png, dpi=150)
+    if rc != 0 or not os.path.exists(out_png):
+        raise RuntimeError(f"case render failed: {out[-300:]}")
+    mut = spec.get("mutate")
+    if mut:
+        from PIL import Image, ImageDraw, ImageFilter
+        img = Image.open(out_png)
+        w, h = img.size
+        if mut["type"] == "blackout":
+            x0, y0, x1, y1 = mut["box"]
+            ImageDraw.Draw(img).rectangle(
+                [x0 * w, y0 * h, x1 * w, y1 * h], fill=(12, 12, 12))
+        elif mut["type"] == "blur":
+            img = img.filter(ImageFilter.GaussianBlur(
+                mut.get("radius_frac", 0.004) * h))
+        else:
+            raise RuntimeError(f"unknown mutation {mut['type']!r}")
+        img.save(out_png)
+
+
+def _qc_case_judge(outcome, expected):
+    """Compare verdicts against the case's constraints. Returns (ok, reasons)."""
+    ok, why = True, []
+    for key, verdict in outcome.items():
+        if verdict is None:
+            ok = False
+            why.append(f"{key}: verdict unreadable")
+            continue
+        must = expected.get(key + "_must")
+        if must and verdict != must:
+            ok = False
+            why.append(f"{key}={verdict}, expected {must}")
+        if verdict in (expected.get(key + "_must_not") or []):
+            ok = False
+            why.append(f"{key}={verdict} is forbidden for this case")
+    return ok, why
+
+
+def cmd_qc_harness(args):
+    _usage_reset()
+    config = load_config(args.config)
+    only = {c.strip() for c in (args.cases or "").split(",") if c.strip()}
+    if not os.path.isdir(QC_CASES_DIR):
+        die(f"no vision-QC cases at {QC_CASES_DIR}")
+    case_ids = sorted(d for d in os.listdir(QC_CASES_DIR)
+                      if os.path.isdir(os.path.join(QC_CASES_DIR, d)))
+    if only:
+        case_ids = [c for c in case_ids if c in only]
+    if not case_ids:
+        die("no matching cases")
+
+    print("\n" + "=" * 70)
+    print("QC HARNESS — the vision-QC exam (P6 craft / 6B recipient sim)")
+    print("=" * 70)
+    results, failures = {}, 0
+    for cid in case_ids:
+        case_dir = os.path.join(QC_CASES_DIR, cid)
+        spec = json.loads(read_file(os.path.join(case_dir, "case.json")))
+        rp = os.path.join(case_dir, "research.md")
+        research = read_file(rp) if os.path.exists(rp) else "(no research on file)"
+        outcome = {}
+        with tempfile.TemporaryDirectory(prefix="qc-harness-") as td:
+            png = os.path.join(td, cid + ".png")
+            try:
+                _qc_case_render(case_dir, spec, config, png)
+            except RuntimeError as e:
+                results[cid] = {"ok": False, "why": [str(e)]}
+                failures += 1
+                print(f"  BROKEN  {cid:30} ({e})")
+                continue
+            if "p6" in spec.get("run", []):
+                _, v = _p6(config, td, png, spec["meta"], spec.get("brief", {}),
+                           research)
+                outcome["p6"] = v
+            if "p6b" in spec.get("run", []):
+                _, v = _p6b(config, td, png, spec["meta"], research)
+                outcome["p6b"] = v
+        ok, why = _qc_case_judge(outcome, spec.get("expected", {}))
+        failures += 0 if ok else 1
+        got = ", ".join(f"{k}={v}" for k, v in outcome.items())
+        print(f"  {'PASS' if ok else 'FAIL':7} {cid:30} {got}"
+              + ("" if ok else "  [" + "; ".join(why) + "]"))
+        results[cid] = {"ok": ok, "outcome": outcome, "why": why}
+
+    write_file(QC_SCORECARD_PATH, json.dumps({
+        "run_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "templates": {t: _engine_file_sha1(os.path.join(RUNNER_DIR, "templates", t))
+                      for t in QC_TEMPLATES},
+        "cases": len(results), "failed": failures,
+        "results": results,
+    }, indent=2))
+    print("-" * 70)
+    if failures:
+        print(f"{failures} case(s) FAILED. A vision prompt has drifted (or a case "
+              "expectation needs recalibrating — check the verdicts above).")
+        _print_usage("qc-harness")
+        sys.exit(1)
+    print(f"All {len(results)} vision-QC cases hold. Scorecard: "
+          f"{os.path.relpath(QC_SCORECARD_PATH, REPO_ROOT)}")
+    _print_usage("qc-harness")
+
+
 # --- harness: the grounding-gate exam ----------------------------------------
 # A committed library of real cases (research + gate-visible copy + expected
 # verdict) that the CURRENT 4b template is run over, one grounding call per
@@ -5371,6 +5502,17 @@ def main():
                     help="probe render DPI (default 96 for speed; 360 = full print size)")
     ep.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
     ep.set_defaults(func=cmd_engine_probe)
+
+    qh = sub.add_parser("qc-harness",
+                        help="the vision-QC exam: run the CURRENT P6/6B templates "
+                             "over runner/qc_cases/ (deterministic renders, some "
+                             "deliberately defaced) and assert the verdict "
+                             "constraints; one vision call per prompt per case. "
+                             "Run after any edit to prompt6/prompt6b")
+    qh.add_argument("--cases", default="",
+                    help="comma-separated case ids to run (default: all)")
+    qh.add_argument("--config", default=DEFAULT_CONFIG, help="path to config.json")
+    qh.set_defaults(func=cmd_qc_harness)
 
     bc = sub.add_parser("birch-csv",
                         help="emit the print supplier's shipping CSV (code, recipient, "
