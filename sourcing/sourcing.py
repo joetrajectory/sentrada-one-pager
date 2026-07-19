@@ -920,16 +920,41 @@ def _split_name(person):
     return parts[0], " ".join(parts[1:])
 
 
-def _fullenrich_request(path, payload, api_key, config, method="POST"):
-    fe = config.get("fullenrich", {})
-    url = fe.get("base_url", "https://app.fullenrich.com/api/v1") + path
+def _fullenrich_call(url, payload, api_key, method="POST"):
+    """One authenticated FullEnrich call with readable failures: an HTTP
+    error shows FullEnrich's response body (that is how a wrong request
+    shape gets diagnosed on the first keyed run), a transport error points
+    at the egress policy instead of dumping a traceback. No credits are
+    spent on a failed call."""
     req = urllib.request.Request(
         url, method=method,
         data=json.dumps(payload).encode() if payload is not None else None,
         headers={"Authorization": f"Bearer {api_key}",
                  "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        body = ""
+        try:
+            body = exc.read().decode(errors="replace")[:400]
+        except OSError:
+            pass
+        die(f"FullEnrich answered HTTP {exc.code} for {url}:\n{body}\n"
+            "If this is a 400, the request shape needs adjusting against "
+            "docs.fullenrich.com (it was reconstructed from snippets); a "
+            "401 means the API key is wrong or the plan lacks API access.")
+    except urllib.error.URLError as exc:
+        die(f"could not reach {url}: {exc.reason}. From this container that "
+            "usually means the egress policy blocks app.fullenrich.com — "
+            "add it to the environment's allowed domains, or run this "
+            "command from a machine with open egress. Nothing was spent.")
+
+
+def _fullenrich_request(path, payload, api_key, config, method="POST"):
+    fe = config.get("fullenrich", {})
+    url = fe.get("base_url", "https://app.fullenrich.com/api/v1") + path
+    return _fullenrich_call(url, payload, api_key, method=method)
 
 
 def _harvest_enrich_result(store, result, enrichment_id):
@@ -1125,12 +1150,7 @@ def _search_people(filters, config, limit=None):
               "exported. Verify the request shape against docs.fullenrich.com "
               "on the first keyed run.")
         return None, "stub"
-    req = urllib.request.Request(
-        url, data=json.dumps(payload).encode(),
-        headers={"Authorization": f"Bearer {api_key}",
-                 "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        body = json.loads(resp.read().decode())
+    body = _fullenrich_call(url, payload, api_key)
     for key in ("datas", "data", "people", "results", "items"):
         if isinstance(body.get(key), list):
             return body[key], ""
