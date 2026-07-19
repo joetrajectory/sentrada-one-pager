@@ -273,13 +273,17 @@ def score(rec, scoring):
 
 
 def needs_currency_check(rec, scoring, config):
-    """True when the record's evidence is old enough (any DATED signal past
-    currency_check_after_days) that the person must be confirmed still in
-    the seat before approval. Undated signals do not trigger this (their age
-    is unknowable here; P1 research re-verifies everyone regardless), but a
-    PRESENT-yet-unparseable date fails closed: 'March 2023' is a claim of
-    age, not an absence of one. A recorded currency check itself expires
-    after currency_check_after_days."""
+    """True when the person must be confirmed still in the seat before
+    approval: any DATED signal past currency_check_after_days, or any
+    UNDATED signal whose type sets undated_requires_currency_check in
+    scoring.json (an undated case study's age is unknowable, and the first
+    currency sweep found 14 of 24 named people had moved). A PRESENT-yet-
+    unparseable date fails closed: 'March 2023' is a claim of age, not an
+    absence of one. A recorded currency check itself expires after
+    currency_check_after_days. Person-less records skip the gate: there is
+    no seat-holder to verify until resolution names one."""
+    if not rec.get("person"):
+        return False
     limit = int(config.get("currency_check_after_days", 365))
     checked = (rec.get("currency") or {}).get("checked")
     if checked:
@@ -292,7 +296,10 @@ def needs_currency_check(rec, scoring, config):
             return False
         # An expired check no longer satisfies the gate: fall through.
     for sig in rec["signals"]:
+        entry = scoring["signals"].get(sig["type"]) or {}
         if not sig.get("signal_date"):
+            if entry.get("undated_requires_currency_check"):
+                return True
             continue
         eff = signal_effective_date(sig, scoring)
         if eff is None:
@@ -814,8 +821,9 @@ def cmd_shortlist(args):
         if hold:
             print(f"     ** HOLD until that thread resolves — {hold} **")
         if needs_currency_check(r, scoring, config):
-            print("     ** CURRENCY CHECK — story older than 12 months; "
-                  "confirm still in seat before approving (see `verify`) **")
+            print("     ** CURRENCY CHECK — story dated >12 months or "
+                  "undated; confirm still in seat before approving "
+                  "(see `verify`) **")
         by_type = {}
         for s in r["signals"]:
             if signal_points(s, scoring) > 0:
@@ -852,8 +860,8 @@ def _set_status(args, new_status):
         if new_status == "approved":
             if needs_currency_check(rec, scoring, config):
                 print(f"  ! {cid}: REFUSED — the story behind this name is "
-                      "older than 12 months; confirm they are still in the "
-                      "seat first:\n"
+                      "dated >12 months or undated; confirm they are still "
+                      "in the seat first:\n"
                       f"      python sourcing/sourcing.py verify --id {cid} "
                       "[--in-seat | --moved ...]")
                 continue
@@ -1382,6 +1390,13 @@ def cmd_verify(args):
         seat = store["candidates"][seat_id]
         if "successor-seat" not in seat.setdefault("tags", []):
             seat["tags"].append("successor-seat")
+        if args.successor and not (seat.get("currency") or {}).get("checked"):
+            # A named successor was just identified as the current holder:
+            # that IS a currency check, done at recording time.
+            seat["currency"] = {"checked": today(), "in_seat": True,
+                                "method": "successor-recording",
+                                "note": "identified as current seat-holder "
+                                        "when the move was recorded"}
         # Record 2: the champion at the new company, signals travelling along.
         mover_id, _, _ = upsert(
             store, rec["person"], args.new_title or None, args.new_company,
@@ -1612,9 +1627,13 @@ def cmd_export(args):
     manifest = []
     for r, missing in ready:
         slug = f"{slugify(r['person'] or 'unresolved')}-{slugify(r['company'])}"
+        # Record tags ride on every signal entry so the outcome ledger can
+        # separate e.g. champion-moved from in-seat stories when cutting
+        # response rate by signal source.
         signals = [{"type": s["type"], "evidence": s["evidence"],
                     "source_url": s["source_url"],
-                    "signal_date": s.get("signal_date")}
+                    "signal_date": s.get("signal_date"),
+                    "tags": sorted(r.get("tags") or [])}
                    for s in r["signals"]]
         manifest.append({
             "name": r["person"] or "",
@@ -1693,13 +1712,15 @@ def cmd_export(args):
 # any edit to sourcing.py, its modules or config/scoring.
 
 def cmd_probe(args):
-    global STORE_PATH, ENRICHED_PATH, OUTCOMES_PATH, CAPTURE_PATH, PIECES_DIR
+    global STORE_PATH, ENRICHED_PATH, OUTCOMES_PATH, CAPTURE_PATH, \
+        PIECES_DIR, RESEARCH_DIR
     td = tempfile.mkdtemp(prefix="sourcing-probe-")
     STORE_PATH = os.path.join(td, "candidates.json")
     ENRICHED_PATH = os.path.join(td, "enriched.json")
     OUTCOMES_PATH = os.path.join(td, "outcomes.json")
     CAPTURE_PATH = os.path.join(td, "capture.json")
     PIECES_DIR = os.path.join(td, "pieces")
+    RESEARCH_DIR = os.path.join(td, "research")  # export guard target
     real_load_env_key = globals()["load_env_key"]
     globals()["load_env_key"] = lambda name: ""  # stub mode, never keyed
 
@@ -1757,8 +1778,9 @@ def cmd_probe(args):
                            json.dumps(meta))
 
     scoring = {"signals": {"abm-hiring": {"points": 3, "max_age_days": 90},
-                           "gifting-case-studies": {"points": 3,
-                                                    "max_age_days": 730}},
+                           "gifting-case-studies": {
+                               "points": 3, "max_age_days": 730,
+                               "undated_requires_currency_check": True}},
                "undated_signals_use_discovery_date": True}
     cfg = {"thread_hold": {"live_results": ["replied", "opportunity"],
                            "followup_window_days": 14},
@@ -1838,8 +1860,10 @@ def cmd_probe(args):
         check("empty ledgers mean no holds", threads == {}, str(threads))
 
         print("\n[needs_currency_check A1/A2]")
-        def cur_rec(sig_date, currency=None):
-            return {"signals": [{"type": "abm-hiring", "evidence": "",
+        def cur_rec(sig_date, currency=None, sig_type="abm-hiring",
+                    person="Pat Doe"):
+            return {"person": person,
+                    "signals": [{"type": sig_type, "evidence": "",
                                  "source_url": "u", "signal_date": sig_date,
                                  "date_added": today()}],
                     "currency": currency}
@@ -1849,8 +1873,19 @@ def cmd_probe(args):
               needs_currency_check(cur_rec("2023-01-01"), scoring, cfg))
         check("364d-old date does not",
               not needs_currency_check(cur_rec(days_ago(364)), scoring, cfg))
-        check("undated does not",
+        check("undated abm-hiring does not (no undated flag on the type)",
               not needs_currency_check(cur_rec(None), scoring, cfg))
+        check("undated GIFTING story gates approval (age unknowable; "
+              "undated_requires_currency_check)",
+              needs_currency_check(
+                  cur_rec(None, sig_type="gifting-case-studies"),
+                  scoring, cfg))
+        check("person-less record skips the gate (no seat to verify "
+              "until resolution)",
+              not needs_currency_check(
+                  cur_rec(None, person=None,
+                          sig_type="gifting-case-studies"),
+                  scoring, cfg))
         stale = {"checked": days_ago(400), "in_seat": True}
         check("a currency check EXPIRES after currency_check_after_days",
               needs_currency_check(cur_rec("2023-01-01", stale),
@@ -2073,6 +2108,32 @@ def cmd_probe(args):
         got = load_store()["candidates"]["r4-initech"]
         check("stub run leaves no pending_id behind",
               not (got.get("enrichment") or {}).get("pending_id"))
+
+        print("\n[export tags -> learning loop]")
+        rec = base_rec("tag-probe-newco", status="approved",
+                       person="Tag Probe", company="NewCo",
+                       tags=["champion-moved"],
+                       currency={"checked": today(), "in_seat": True,
+                                 "method": "probe", "note": ""})
+        rec["signals"] = [{"type": "gifting-case-studies", "evidence": "e",
+                           "source_url": "https://u", "signal_date": None,
+                           "date_added": today()}]
+        write_file(STORE_PATH, json.dumps(
+            {"version": 1, "updated": today(),
+             "candidates": {rec["id"]: rec}}))
+        out_dir = os.path.join(RESEARCH_DIR, "export-probe")
+        _, out = quiet(lambda: cmd_export(
+            argparse.Namespace(out=out_dir, force=True)))
+        manifest = json.loads(read_file(os.path.join(out_dir,
+                                                     "manifest.json")))
+        check("record tags ride export's source_signals (champion-moved "
+              "stays separable in the outcome ledger)",
+              bool(manifest) and "champion-moved"
+              in (manifest[0]["source_signals"][0].get("tags") or []), out)
+        check("real scoring.json keeps undated_requires_currency_check on "
+              "gifting-case-studies (fixture drift guard)",
+              (load_scoring()["signals"]["gifting-case-studies"]
+               .get("undated_requires_currency_check")) is True)
     finally:
         globals()["load_env_key"] = real_load_env_key
         shutil.rmtree(td, ignore_errors=True)
