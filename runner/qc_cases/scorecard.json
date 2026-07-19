@@ -1,0 +1,53 @@
+{
+  "run_at": "2026-07-19 13:33:27",
+  "templates": {
+    "prompt6_review.md": "d06c141557eadd8d4c4b0ef979d0bfa0794deb82",
+    "prompt6b_recipient.md": "ab3d8c149e1c2a389dbca4501585247e7dc6d9e7"
+  },
+  "cases": 6,
+  "failed": 0,
+  "results": {
+    "p6-blur-illegible": {
+      "ok": true,
+      "outcome": {
+        "p6": "FAIL"
+      },
+      "why": []
+    },
+    "p6-clean-email": {
+      "ok": true,
+      "outcome": {
+        "p6": "PASS"
+      },
+      "why": []
+    },
+    "p6-clean-newspaper": {
+      "ok": true,
+      "outcome": {
+        "p6": "PASS"
+      },
+      "why": []
+    },
+    "p6-defaced-stat": {
+      "ok": true,
+      "outcome": {
+        "p6": "FAIL"
+      },
+      "why": []
+    },
+    "p6b-generic-newspaper": {
+      "ok": true,
+      "outcome": {
+        "p6b": "WOULD BIN"
+      },
+      "why": []
+    },
+    "p6b-personalised-newspaper": {
+      "ok": true,
+      "outcome": {
+        "p6b": "WOULD ENGAGE IF FOLLOWED UP WELL"
+      },
+      "why": []
+    }
+  }
+}
