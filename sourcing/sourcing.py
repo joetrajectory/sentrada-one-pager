@@ -244,15 +244,22 @@ def score(rec, scoring):
 
 
 def needs_currency_check(rec, scoring, config):
-    """True when the record's evidence is old enough (any DATED signal past
-    currency_check_after_days) that the person must be confirmed still in
-    the seat before approval. Undated signals do not trigger this (their age
-    is unknowable here; P1 research re-verifies everyone regardless)."""
+    """True when the person must be confirmed still in the seat before
+    approval: any DATED signal past currency_check_after_days, or any
+    UNDATED signal whose type sets undated_requires_currency_check in
+    scoring.json (an undated case study's age is unknowable, and the first
+    currency sweep found 14 of 24 named people had moved). Person-less
+    records skip this: there is no seat-holder to verify until resolution."""
+    if not rec.get("person"):
+        return False
     if (rec.get("currency") or {}).get("checked"):
         return False
     limit = int(config.get("currency_check_after_days", 365))
     for sig in rec["signals"]:
+        entry = scoring["signals"].get(sig["type"]) or {}
         if not sig.get("signal_date"):
+            if entry.get("undated_requires_currency_check"):
+                return True
             continue
         eff = signal_effective_date(sig, scoring)
         if eff and (datetime.date.today() - eff).days > limit:
@@ -643,8 +650,9 @@ def cmd_shortlist(args):
         if hold:
             print(f"     ** HOLD until that thread resolves — {hold} **")
         if needs_currency_check(r, scoring, config):
-            print("     ** CURRENCY CHECK — story older than 12 months; "
-                  "confirm still in seat before approving (see `verify`) **")
+            print("     ** CURRENCY CHECK — story dated >12 months or "
+                  "undated; confirm still in seat before approving "
+                  "(see `verify`) **")
         for s in r["signals"]:
             pts = signal_points(s, scoring)
             date = s.get("signal_date") or f"found {s['date_added']}"
@@ -673,8 +681,8 @@ def _set_status(args, new_status):
         if new_status == "approved":
             if needs_currency_check(rec, scoring, config):
                 print(f"  ! {cid}: REFUSED — the story behind this name is "
-                      "older than 12 months; confirm they are still in the "
-                      "seat first:\n"
+                      "dated >12 months or undated; confirm they are still "
+                      "in the seat first:\n"
                       f"      python sourcing/sourcing.py verify --id {cid} "
                       "[--in-seat | --moved ...]")
                 continue
@@ -1033,6 +1041,13 @@ def cmd_verify(args):
         seat = store["candidates"][seat_id]
         if "successor-seat" not in seat.setdefault("tags", []):
             seat["tags"].append("successor-seat")
+        if args.successor and not (seat.get("currency") or {}).get("checked"):
+            # A named successor was just identified as the current holder:
+            # that IS a currency check, done at recording time.
+            seat["currency"] = {"checked": today(), "in_seat": True,
+                                "method": "successor-recording",
+                                "note": "identified as current seat-holder "
+                                        "when the move was recorded"}
         # Record 2: the champion at the new company, signals travelling along.
         mover_id, _, _ = upsert(
             store, rec["person"], args.new_title or None, args.new_company,
@@ -1045,6 +1060,13 @@ def cmd_verify(args):
             mover["tags"].append("champion-moved")
         if rec.get("location") and not mover.get("location"):
             mover["location"] = rec["location"]
+        if not (mover.get("currency") or {}).get("checked"):
+            # Recording the move required confirming where they are now, so
+            # the mover record is currency-checked by construction.
+            mover["currency"] = {"checked": today(), "in_seat": True,
+                                 "method": "move-recording",
+                                 "note": "new seat confirmed when the move "
+                                         "was recorded"}
         rec["superseded_by"] = [seat_id, mover_id]
         save_store(store)
         print(f"[verify] {args.id}: moved. Created/updated:\n"
@@ -1081,6 +1103,167 @@ def cmd_verify(args):
         print("Record the move (creates successor + champion-moved records):\n"
               f"  verify --id {args.id} --moved --new-company \"X\" "
               "[--new-title T] [--successor \"Name\" --successor-title T]")
+
+
+def cmd_probe(args):
+    """Regression harness (the sourcing equivalent of gate-probe and
+    capture-probe): drives the paste parse, scoring, currency gate, thread
+    holds, move recording, dump/import and export against fixtures in a
+    temp store. Run after any edit to sourcing.py, scoring.json or a
+    module. Exits non-zero on any failure; touches nothing real."""
+    import contextlib
+    import io
+    import shutil
+    import tempfile as tf
+
+    global STORE_PATH, ENRICHED_PATH, OUTCOMES_PATH, CAPTURE_PATH, PIECES_DIR
+    saved = (STORE_PATH, ENRICHED_PATH, OUTCOMES_PATH, CAPTURE_PATH,
+             PIECES_DIR)
+    tmp = tf.mkdtemp(prefix="sourcing-probe-")
+    STORE_PATH = os.path.join(tmp, "candidates.json")
+    ENRICHED_PATH = os.path.join(tmp, "enriched.json")
+    OUTCOMES_PATH = os.path.join(tmp, "outcomes.json")
+    CAPTURE_PATH = os.path.join(tmp, "capture.json")
+    PIECES_DIR = os.path.join(tmp, "pieces")
+
+    failures = []
+
+    def check(name, cond, detail=""):
+        print(f"  {'PASS' if cond else 'FAIL'}  {name}"
+              + (f"  ({detail})" if detail and not cond else ""))
+        if not cond:
+            failures.append(name)
+
+    def quiet(fn, *a, **kw):
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                fn(*a, **kw)
+        except SystemExit:
+            pass
+        return buf.getvalue()
+
+    NS = argparse.Namespace
+    scoring = load_scoring()
+    config = load_config()
+    today_d = datetime.date.today()
+    d100 = (today_d - datetime.timedelta(days=100)).isoformat()
+    d400 = (today_d - datetime.timedelta(days=400)).isoformat()
+
+    try:
+        print("[probe] 1. paste parse, dedupe, cross-module stacking")
+        blocks = ("COMPANY: ProbeCo\nPERSON: Pat Probe\nROLE: VP Marketing\n"
+                  "EVIDENCE: \"probe quote\"\nURL: https://x.test/story\n"
+                  "LOCATION: London, United Kingdom\n---\n"
+                  "COMPANY: HoldCo\nEVIDENCE: co-level\nURL: https://x.test/h\n")
+        xs = parse_structured(blocks)
+        check("structured parse finds 2 blocks", len(xs) == 2)
+        check("location key parsed", xs[0].get("location") == "London, United Kingdom")
+        store = load_store()
+        quiet(ingest_extractions, store, "gifting-case-studies", xs, "")
+        quiet(ingest_extractions, store, "gifting-case-studies", xs, "")
+        rec = store["candidates"].get("pat-probe-probeco")
+        check("dedupe: re-paste adds no signal", rec and len(rec["signals"]) == 1)
+        quiet(ingest_extractions, store, "abm-hiring",
+              [dict(xs[0], quote_or_evidence="Hiring: ABM Manager",
+                    source_url="https://x.test/job", date=d100)], "")
+        check("signals stack across modules", len(rec["signals"]) == 2)
+        save_store(store)
+
+        print("[probe] 2. per-type ageing")
+        gift_undated = rec["signals"][0]
+        hire_100d = rec["signals"][1]
+        check("undated gifting scores full points (discovery fallback)",
+              signal_points(gift_undated, scoring)
+              == scoring["signals"]["gifting-case-studies"]["points"])
+        check("abm-hiring dated 100d ago scores zero (90d window)",
+              signal_points(hire_100d, scoring) == 0)
+        check("gifting dated 100d ago scores full points (730d window)",
+              signal_points(dict(gift_undated, signal_date=d100), scoring)
+              == scoring["signals"]["gifting-case-studies"]["points"])
+        check("gifting dated 400d ago still scores (inside 730d)",
+              signal_points(dict(gift_undated, signal_date=d400), scoring) > 0)
+
+        print("[probe] 3. currency gate")
+        check("undated gifting signal requires currency check",
+              needs_currency_check(rec, scoring, config))
+        quiet(cmd_approve, NS(ids=["pat-probe-probeco"]))
+        check("approve REFUSES before verify",
+              load_store()["candidates"]["pat-probe-probeco"]["status"] == "new")
+        quiet(cmd_verify, NS(id="pat-probe-probeco", in_seat=True, moved=False,
+                             new_company="", new_title="", successor="",
+                             successor_title="", note="probe"))
+        quiet(cmd_approve, NS(ids=["pat-probe-probeco"]))
+        check("approve passes after verify --in-seat",
+              load_store()["candidates"]["pat-probe-probeco"]["status"]
+              == "approved")
+        check("person-less record never needs currency check",
+              not needs_currency_check(
+                  load_store()["candidates"]["co--holdco"], scoring, config))
+
+        print("[probe] 4. thread holds")
+        write_file(OUTCOMES_PATH, json.dumps({
+            "a": {"company": "HoldCo", "result": "replied", "date": "2026-07"},
+            "b": {"company": "DoneCo", "result": "declined"},
+            "c": {"company": "QuietCo", "result": "no_response",
+                  "date": (today_d - datetime.timedelta(days=40)).isoformat()},
+        }))
+        os.makedirs(os.path.join(PIECES_DIR, "CP-99_Test_FlightCo"),
+                    exist_ok=True)
+        th = live_threads(config)
+        check("replied outcome holds the company", "holdco" in th)
+        check("declined outcome does not hold", "doneco" not in th)
+        check("stale no_response does not hold", "quietco" not in th)
+        check("piece folder with no outcome holds", "flightco" in th)
+
+        print("[probe] 5. move recording (successor + champion-moved)")
+        quiet(cmd_verify, NS(id="pat-probe-probeco", in_seat=False, moved=True,
+                             new_company="NewCo", new_title="CMO",
+                             successor="Sam Seat", successor_title="VP Marketing",
+                             note="probe"))
+        st = load_store()["candidates"]
+        check("original superseded",
+              st["pat-probe-probeco"]["status"] == "superseded")
+        check("successor record tagged",
+              "successor-seat" in st.get("sam-seat-probeco", {}).get("tags", []))
+        check("mover record tagged champion-moved",
+              "champion-moved" in st.get("pat-probe-newco", {}).get("tags", []))
+        check("mover currency stamped at recording",
+              (st["pat-probe-newco"].get("currency") or {}).get("checked")
+              is not None)
+        check("mover inherits location",
+              st["pat-probe-newco"].get("location") == "London, United Kingdom")
+
+        print("[probe] 6. dump/import roundtrip")
+        before = load_store()["candidates"]
+        dump_file = os.path.join(tmp, "dump.json")
+        write_file(dump_file, json.dumps(load_store()))
+        os.remove(STORE_PATH)
+        quiet(cmd_import, NS(file=dump_file, replace=True))
+        check("import --replace restores every record",
+              set(load_store()["candidates"]) == set(before))
+
+        print("[probe] 7. export carries tags into source_signals")
+        quiet(cmd_approve, NS(ids=["pat-probe-newco"]))
+        out_dir = os.path.join(tmp, "export")
+        quiet(cmd_export, NS(out=out_dir, force=True))
+        manifest = json.loads(read_file(os.path.join(out_dir,
+                                                     "manifest.json")))
+        mover_entry = next((e for e in manifest
+                            if e.get("name") == "Pat Probe"
+                            and e.get("company") == "NewCo"), None)
+        check("mover exported", mover_entry is not None)
+        check("champion-moved tag rides the signal",
+              mover_entry and "champion-moved"
+              in (mover_entry["source_signals"][0].get("tags") or []))
+    finally:
+        (STORE_PATH, ENRICHED_PATH, OUTCOMES_PATH, CAPTURE_PATH,
+         PIECES_DIR) = saved
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    if failures:
+        die(f"probe FAILED: {len(failures)} check(s): " + ", ".join(failures))
+    print("[probe] all checks passed")
 
 
 def cmd_dump(args):
@@ -1227,9 +1410,13 @@ def cmd_export(args):
     manifest = []
     for r, missing in ready:
         slug = f"{slugify(r['person'] or 'unresolved')}-{slugify(r['company'])}"
+        # Record tags ride on every signal entry so the outcome ledger can
+        # separate e.g. champion-moved from in-seat stories when cutting
+        # response rate by signal source.
         signals = [{"type": s["type"], "evidence": s["evidence"],
                     "source_url": s["source_url"],
-                    "signal_date": s.get("signal_date")}
+                    "signal_date": s.get("signal_date"),
+                    "tags": sorted(r.get("tags") or [])}
                    for s in r["signals"]]
         manifest.append({
             "name": r["person"] or "",
@@ -1367,6 +1554,11 @@ def main():
     p.add_argument("--successor-title", default="")
     p.add_argument("--note", default="")
     p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("probe",
+                       help="regression harness over a temp store; run after "
+                            "any edit to sourcing.py, scoring.json or a module")
+    p.set_defaults(func=cmd_probe)
 
     p = sub.add_parser("dump", help="print the full store (durability copy)")
     p.set_defaults(func=cmd_dump)

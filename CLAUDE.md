@@ -350,6 +350,10 @@ python sourcing/sourcing.py ...
               the address-capture play
   dump/import durability while the repo is public: dump prints the full
               store, import --file [--replace] restores/merges it
+  probe       regression harness over a temp store (paste parse, scoring,
+              currency gate, thread holds, move recording, dump/import,
+              export tags). Run after any edit to sourcing.py, scoring.json
+              or a module, exactly as gate-probe/capture-probe are run
   export      approved + enriched + desk-checked -> research/sourcing-<date>/
               (gitignored): manifest skeleton + per-candidate signals file as
               P1 input. source_signals ride the manifest into each piece's
@@ -381,8 +385,15 @@ api_ingest() for API-backed sources.
 Scoring: points AND ageing live ONLY in sourcing/scoring.json, per signal
 type: hiring/new-in-role signals stale in 90 days, gifting-case-studies
 stays meaningful for 24 months (730 days). Undated signals fall back to
-their discovery date (case studies are rarely dated; an undated study is
-live evidence the day it is found). Simple sum, no decimals, no multipliers.
+their discovery date for SCORING (an undated study is live evidence the day
+it is found) but an undated gifting story REQUIRES a currency check before
+approval (undated_requires_currency_check in scoring.json): its age is
+unknowable, and the first currency sweep found 14 of 24 named people had
+left the seat. Record tags (champion-moved, successor-seat...) ride export's
+source_signals into the outcome ledger, where they fold into the
+source_signal string (e.g. gifting-case-studies+champion-moved) so
+monthly-review separates them from in-seat stories automatically. Simple
+sum, no decimals, no multipliers.
 
 Storage: sourcing/candidates.json is GITIGNORED WHILE THE REPO IS PUBLIC (it
 is the sender's target list; the repo must stay public for GitHub Pages

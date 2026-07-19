@@ -2936,10 +2936,19 @@ def cmd_outcome(args):
         # source is computable from the ledger alone.
         if meta.get("source_signals"):
             rec.setdefault("source_signals", meta["source_signals"])
-            types = sorted({s.get("type", "") for s in meta["source_signals"]
-                            if s.get("type")})
+            # Tags (champion-moved, successor-seat...) fold into the type
+            # string so monthly-review's source_signal cut separates them
+            # from plain in-seat signals automatically.
+            types = set()
+            for s in meta["source_signals"]:
+                if not s.get("type"):
+                    continue
+                t = s["type"]
+                if s.get("tags"):
+                    t += "+" + "+".join(sorted(s["tags"]))
+                types.add(t)
             if types:
-                rec.setdefault("source_signal", ", ".join(types))
+                rec.setdefault("source_signal", ", ".join(sorted(types)))
     sixb_path = os.path.join(folder, "qc_recipient.md")
     if os.path.exists(sixb_path):
         v = extract_6b_verdict(read_file(sixb_path))
