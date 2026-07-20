@@ -1330,7 +1330,7 @@ No subject line. Shorter and more casual, still references the piece.
 2. One sentence on the hook or problem
 3. CTA in your own words for this recipient (the register of "if it landed, happy to compare notes", never that exact line if it would fit another recipient's message)
 
-Also write a CONNECTION NOTE variant for when the sender is not connected to the recipient on LinkedIn: the same idea compressed to 280 characters or fewer (LinkedIn truncates connection notes around 300), self-contained, no assumed reply thread. Count the characters before finalising.
+Also write a CONNECTION NOTE variant. This is the DEFAULT LinkedIn entry point (the sender is usually not yet connected), NOT the Touch 2 message compressed. Its only job is to link the connection request to the physical object so the recipient accepts; the conversation happens after they connect. One sentence, this shape: "[First name], that massive [object] on your desk was from me. [Sender first name]" (e.g. "Grace, that massive crossword on your desk was from me. Joe"; "Chris, that massive cold email on your desk was from me. Joe"). Name the object plainly with its size ("massive"/"giant") and per format (crossword / newspaper front page / cold email). No value proposition, no CTA, no pitch: the connection request itself is the ask. Match the location to the real delivery ("on your desk", or reception/tease wording when it did not land on the desk). Well under the 280-character LinkedIn limit by design; count the characters before finalising.
 
 ### Touch 3: Second email (LinkedIn skipped; the sender's second and usually final email)
 
