@@ -13,7 +13,8 @@
     "constraints": "",
     "custom_card": false,
     "sender_email": "joe@sentrada.io",
-    "card_phone": "+44 7815 814855"
+    "card_phone": "+44 7815 814855",
+    "sells_outreach": true
   },
   "models": {
     "p2": "opus",

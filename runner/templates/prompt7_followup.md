@@ -27,6 +27,10 @@ What they sell: {{sender_what}}
 Proof points: {{sender_proof}}
 Booking link: {{booking_link}}
 Sender writes their own companion card: {{custom_card}}
+Sender writes their own follow-up sequence: {{custom_followup}}
+Sender sells the outreach channel itself: {{sender_sells_outreach}}
+
+**SENDER TYPE (authoritative — obey this over any inference from the company name):** {{sender_type_directive}}
 
 **Delivery date:** {{delivery_date}}
 
@@ -241,7 +245,9 @@ If 6B verdict is WOULD BIN, output only the suppression flag from Step 0 and sto
 Otherwise:
 
 **COMPANION CARD (in the box, finalise before print):**
-[150 words maximum, or note that sender will provide their own]
+[150 words maximum. If "Sender writes their own companion card" is yes, write no card copy and output exactly: Sender will provide custom companion card]
+
+If "Sender writes their own follow-up sequence" is yes: output exactly the single line **Sender will provide their own follow-up sequence**, write NONE of the Touch 1 / Touch 2 / Touch 3 / reception-nudge sections below, and still output the FACT CHECK LIST for any card copy. Otherwise write the full sequence:
 
 **TOUCH 1 EMAIL (24-48h after confirmed delivery):**
 Subject: [six words or fewer, names the artefact]

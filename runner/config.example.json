@@ -12,7 +12,10 @@
       "Second sender problem.",
       "Optional third sender problem."
     ],
-    "measurement_capabilities": ""
+    "measurement_capabilities": "",
+    "sells_outreach": true,
+    "custom_card": false,
+    "custom_followup": false
   },
   "models": {
     "p2": "opus",

@@ -106,7 +106,14 @@ python runner/sentrada_runner.py batch-build --manifest research/<batch>.json
    This is the verdict P7 builds the card and follow-up from
 7. FOLLOW-UP (Prompt 7): companion card copy + 3-touch sequence, generated now,
    held until delivery confirmation. Card copy skipped when the sender writes
-   their own (config sender "custom_card": true). Output passes the same Prompt
+   their own (config sender "custom_card": true); the whole follow-up is skipped
+   when "custom_followup": true. SENDER-AWARE: config sender "sells_outreach"
+   (true = Sentrada selling the channel, so the copy may pitch the channel/format
+   menu; false = a client, so the copy sells only the client's own proposition)
+   drives an explicit SENDER TYPE directive into P7, never inferred from the
+   company name. For a client sender the runner CONFIRMS whether to write
+   follow-up copy at all (interactive prompt; skips with a notice when
+   non-interactive and "custom_followup" is unset). Output passes the same Prompt
    4b grounding gate as printed copy (max 3 attempts; result in followup_gate.json)
 8b. CARD: card/card.py renders the card copy to a print-ready A6 PNG at
    runner/pieces/{slug}/{slug}-card.png. Skipped if sender provided custom copy.

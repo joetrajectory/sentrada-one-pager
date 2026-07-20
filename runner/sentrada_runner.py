@@ -1148,7 +1148,18 @@ def run_chain_after_render(config, folder, image_path, delivery_date):
         _print_usage("this piece")
         return
 
-    reply = _p7(config, folder, delivery_date)
+    sender = config["sender"]
+    want_followup = _resolve_followup(sender)
+    if sender.get("custom_card") and not want_followup:
+        # Client provides both the card and the follow-up: nothing for P7 to write.
+        write_file(os.path.join(folder, "followup.md"),
+                   "Sender will provide custom companion card.\n\n"
+                   "Sender will provide their own follow-up sequence.\n")
+        print("[prompt 7] skipped: sender provides their own card and follow-up.")
+        _print_package(image_path, review, v6, sixb, v6b,
+                       "(sender provides their own card and follow-up)")
+        return
+    reply = _p7(config, folder, delivery_date, want_followup=want_followup)
     card_png = _generate_card(config, folder, reply)   # step 8b: companion card
     if card_png:
         # Step 8c: the package pass. The piece-stage 6B above judged the artefact
@@ -1790,7 +1801,42 @@ def _piece_reference(folder, meta):
     return meta.get("piece_reference", "")
 
 
-def _p7(config, folder, delivery_date):
+def _sender_type_directive(sender):
+    """The authoritative, explicit sender-identity instruction injected into P7,
+    so the Sentrada-vs-client copy branches key off a config flag rather than the
+    model inferring identity from the company name."""
+    if sender.get("sells_outreach"):
+        return ("This sender IS Sentrada, selling the physical-outreach channel "
+                "itself: the piece doubles as a product demo and the recipient is a "
+                "prospective client of the channel. Apply the Sentrada-as-sender "
+                "branches; the channel pitch, the format menu and Sentrada's own "
+                "results are all in scope.")
+    return ("This sender is a CLIENT; Sentrada built the piece for them. The "
+            "recipient is the client's own prospect. Apply the client-send "
+            "branches: sell only the CLIENT'S proposition, and never pitch the "
+            "outreach channel, the format menu, or Sentrada's own results.")
+
+
+def _resolve_followup(sender):
+    """Decide whether the pipeline generates follow-up copy. Sentrada-as-sender
+    generates by default (the follow-up is the product). For a client sender it
+    is opt-in: an explicit sender.custom_followup wins; otherwise the runner
+    confirms interactively, and skips (with a notice) when there is no TTY."""
+    if sender.get("custom_followup") is not None:
+        return not sender.get("custom_followup")
+    if sender.get("sells_outreach"):
+        return True
+    if sys.stdin.isatty():
+        ans = input("\n[followup] Client send. Generate follow-up copy for the "
+                    "client? [y/N] ").strip().lower()
+        return ans in ("y", "yes")
+    print("[followup] client sender with no \"custom_followup\" set and no "
+          "interactive prompt; SKIPPING follow-up. Set \"custom_followup\": false "
+          "in the sender profile to generate it.")
+    return False
+
+
+def _p7(config, folder, delivery_date, want_followup=True):
     meta = json.loads(read_file(os.path.join(folder, "meta.json")))
     brief = json.loads(read_file(os.path.join(folder, "brief.json")))
     research = read_file(os.path.join(folder, "research.md"))
@@ -1886,6 +1932,9 @@ def _p7(config, folder, delivery_date):
         "sender_what": sender.get("what_they_sell", ""), "sender_proof": sender.get("proof_points", ""),
         "booking_link": sender.get("booking_link", ""), "delivery_date": delivery_date,
         "custom_card": "yes" if sender.get("custom_card") else "no",
+        "custom_followup": "no" if want_followup else "yes",
+        "sender_sells_outreach": "yes" if sender.get("sells_outreach") else "no",
+        "sender_type_directive": _sender_type_directive(sender),
     }
     base_prompt = fill(load_template("prompt7_followup.md"), values)
     # The follow-up goes out under the sender's name carrying factual and proof
@@ -2307,6 +2356,8 @@ def _copy_lint(folder, fmt):
         text = read_file(fu_path)
         if "WOULD BIN" in text and "suppressed" in text:
             return holds, warns          # suppression notice, nothing to lint
+        if "provide their own follow-up sequence" in text.lower():
+            return holds, warns          # client writes their own touches, nothing to lint
         body = _followup_body(text)
         low = body.lower()
         for phrase in _BANNED_FOLLOWUP_LINES:
@@ -3023,7 +3074,15 @@ def cmd_followup(args):
     _usage_reset()
     config = load_config(args.config)
     folder = args.folder
-    reply = _p7(config, folder, args.delivery_date)
+    sender = config["sender"]
+    want_followup = _resolve_followup(sender)
+    if sender.get("custom_card") and not want_followup:
+        write_file(os.path.join(folder, "followup.md"),
+                   "Sender will provide custom companion card.\n\n"
+                   "Sender will provide their own follow-up sequence.\n")
+        print("[prompt 7] skipped: sender provides their own card and follow-up.")
+        return
+    reply = _p7(config, folder, args.delivery_date, want_followup=want_followup)
     # Mirror the chain's conversion tail: render the card (skipped for
     # custom-card senders) and, when one exists, refresh the package pass so
     # the regenerated card copy never ships judged only in its previous form.
