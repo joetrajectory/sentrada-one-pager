@@ -272,8 +272,10 @@ h1.display {
   margin: clamp(28px, 4vw, 44px) auto 0;
 }
 
-/* Proof: campaign two, secondary to campaign one */
-.results-second { margin-top: clamp(32px, 4vw, 52px); }
+/* Proof: campaign two, secondary to campaign one.
+   Scoped under .results so it beats the later `.prose { margin: 0 auto }`
+   shorthand, which would otherwise zero the top margin. */
+.results .results-second { margin-top: clamp(44px, 6vw, 72px); }
 .results-second p { color: var(--stone-dim); }
 
 /* What it unlocks: divider rhythm and spacing for the pipeline statement */
