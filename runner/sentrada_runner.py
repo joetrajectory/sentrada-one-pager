@@ -945,60 +945,81 @@ def _generate_newspaper(args, config, folder, base_values, brief, meta):
 
     model = model_for(config, "p4")
     research = base_values["research"]
-    attempt, feedback_block = 0, ""
-    while True:
-        attempt += 1
-        prompt = fill(template, dict(brief_values, feedback_block=feedback_block))
-        print(f"\n[prompt 4] writing newspaper copy ({model}, attempt {attempt})...")
-        reply, data = cli_json(prompt, model)
-        copy_part, factcheck = split_factcheck(reply)
-
-        problems = list(newspaper_violations(data))
-        print(f"[prompt 4b] factual grounding check ({model_for(config, 'p4b')})...")
-        grounded, issues = grounding_check(config, research, newspaper_copy_text(data))
-        problems += [f"unsupported claim \"{i.get('claim', '')}\": {i.get('issue', '')}"
-                     for i in issues]
-
-        if not problems:
-            break
-        if attempt >= 3:
-            die("Prompt 4 newspaper failed the gates after 3 attempts (word count "
-                "and/or factual grounding):\n  - " + "\n  - ".join(problems))
-        print("[gate] violations found, rerunning Prompt 4 once:")
-        for x in problems:
-            print(f"  - {x}")
-        feedback_block = ("YOUR PREVIOUS DRAFT FAILED THESE HARD CHECKS. Fix every "
-                          "one and keep everything else. Any 'unsupported claim' below "
-                          "is a fact the research does not support: remove it or "
-                          "replace it with a fact the research does support.\n- "
-                          + "\n- ".join(problems))
-
-    write_file(os.path.join(folder, "copy.md"), copy_part)
-    write_file(os.path.join(folder, "factcheck.md"), factcheck or "(none returned)")
-
-    engine_data = engine_data_only(data)
     data_path = os.path.join(folder, "data.json")
-    write_file(data_path, json.dumps(engine_data, indent=2))
+    brief_path = os.path.join(folder, "brief.json")
+    # Stage checkpoint. On the newspaper path data.json is written only AFTER
+    # the copy has passed every gate, so a data.json newer than the approved
+    # brief is a completed copy stage. The container this runs in can be
+    # recycled mid-build; a resumed run must not re-spend a Prompt 4 loop that
+    # already succeeded. (A data.json OLDER than the brief is a stale leftover
+    # from a previous brief and is ignored: the loop runs.)
+    if (os.path.exists(data_path)
+            and os.path.getmtime(data_path) > os.path.getmtime(brief_path)):
+        print("[checkpoint] gated copy already on disk (data.json newer than "
+              "brief.json); skipping Prompt 4 and the copy gates")
+        engine_data = json.loads(read_file(data_path))
+    else:
+        attempt, feedback_block = 0, ""
+        while True:
+            attempt += 1
+            prompt = fill(template, dict(brief_values, feedback_block=feedback_block))
+            print(f"\n[prompt 4] writing newspaper copy ({model}, attempt {attempt})...")
+            reply, data = cli_json(prompt, model)
+            copy_part, factcheck = split_factcheck(reply)
+
+            problems = list(newspaper_violations(data))
+            print(f"[prompt 4b] factual grounding check ({model_for(config, 'p4b')})...")
+            grounded, issues = grounding_check(config, research, newspaper_copy_text(data))
+            problems += [f"unsupported claim \"{i.get('claim', '')}\": {i.get('issue', '')}"
+                         for i in issues]
+
+            if not problems:
+                break
+            if attempt >= 3:
+                die("Prompt 4 newspaper failed the gates after 3 attempts (word count "
+                    "and/or factual grounding):\n  - " + "\n  - ".join(problems))
+            print("[gate] violations found, rerunning Prompt 4 once:")
+            for x in problems:
+                print(f"  - {x}")
+            feedback_block = ("YOUR PREVIOUS DRAFT FAILED THESE HARD CHECKS. Fix every "
+                              "one and keep everything else. Any 'unsupported claim' below "
+                              "is a fact the research does not support: remove it or "
+                              "replace it with a fact the research does support.\n- "
+                              + "\n- ".join(problems))
+
+        write_file(os.path.join(folder, "copy.md"), copy_part)
+        write_file(os.path.join(folder, "factcheck.md"), factcheck or "(none returned)")
+
+        engine_data = engine_data_only(data)
+        write_file(data_path, json.dumps(engine_data, indent=2))
 
     engine_path = os.path.join(REPO_ROOT, config.get("engine", "newspaper/newspaper.py"))
     template_path = os.path.join(
         REPO_ROOT, config.get("newspaper_template",
                               "newspaper/Newspaper Template - Upscaled - 25mb.jpg"))
 
-    print("\n[engine] running --check on data.json...")
-    rc, out = run_engine(engine_path, template_path, data_path, check=True)
-    print(out.strip())
-    if rc != 0:
-        die("the layout engine's --check FAILED. Nothing rendered. Fix the copy "
-            "or template and re-run. See the engine output above.")
-
     output_path = os.path.join(folder, f"{slugify(args.name)}-{slugify(args.company)}.png")
-    print("\n[engine] rendering the print-ready newspaper...")
-    rc, out = run_engine(engine_path, template_path, data_path, output_path=output_path)
-    print(out.strip())
-    if rc != 0 or not os.path.exists(output_path):
-        die("the render failed (see engine output above). A *.FAILED file may have "
-            "been written for inspection.")
+    # Stage checkpoint: a render newer than the gated copy is a completed
+    # render stage (the engine is deterministic, so re-rendering identical
+    # data.json wastes nothing but time we may not have before a recycle).
+    if (os.path.exists(output_path)
+            and os.path.getmtime(output_path) > os.path.getmtime(data_path)):
+        print("[checkpoint] render already on disk and newer than data.json; "
+              "skipping the engine, resuming at QC")
+    else:
+        print("\n[engine] running --check on data.json...")
+        rc, out = run_engine(engine_path, template_path, data_path, check=True)
+        print(out.strip())
+        if rc != 0:
+            die("the layout engine's --check FAILED. Nothing rendered. Fix the copy "
+                "or template and re-run. See the engine output above.")
+
+        print("\n[engine] rendering the print-ready newspaper...")
+        rc, out = run_engine(engine_path, template_path, data_path, output_path=output_path)
+        print(out.strip())
+        if rc != 0 or not os.path.exists(output_path):
+            die("the render failed (see engine output above). A *.FAILED file may have "
+                "been written for inspection.")
 
     meta["piece_reference"] = (
         f'the front page of "{engine_data.get("masthead_name", "")}", '
