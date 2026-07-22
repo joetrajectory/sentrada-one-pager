@@ -4240,7 +4240,8 @@ def cmd_batch_build(args):
     # branch immediately. runner/pieces/ does not survive a container restart;
     # the deliverables branch does. Guarded so a snapshot failure only warns.
     if not getattr(args, "no_snapshot", False):
-        _auto_snapshot([r["slug"] for r in results if r["status"] == "complete"],
+        _auto_snapshot([r["slug"] for r in results
+                        if r["status"] in ("complete", "already built (skipped)")],
                        _batch_label(args.manifest))
 
 
