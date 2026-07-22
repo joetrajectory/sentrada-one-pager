@@ -603,6 +603,38 @@ account clicks. Generate a fresh RUNNER_SECRET at deployment time; treat any
 secret that ever appeared in a conversation as burned. Delete this paragraph
 once deployed and logged in the runbook.
 
+## Build runs need a LIVE session (no unattended/overnight promises)
+
+Two environment facts, learned the hard way on 21-22 July 2026, that bind every
+session in this repo:
+
+- The remote container pauses when the session goes idle and is sometimes
+  recreated. A backgrounded build does NOT keep running while the sender is
+  away: the overnight orchestrator froze mid model call at 23:53 with the
+  usage limit untouched, produced nothing for 6.5 hours, and never errored.
+  Background jobs freeze silently; they do not fail loudly. NEVER promise the
+  sender an unattended or overnight run. Builds progress only while the
+  session is active.
+- The sender's subscription usage comes in 5-HOUR rolling windows (sender
+  confirmed, 22 July 2026). A spent window returns 429 "session limit ·
+  resets <time>"; the runner halts cleanly. Do not describe window length,
+  billing, or credits from guesswork: this paragraph and the sender are the
+  sources.
+
+The resume procedure (one tested path, no custom orchestration scripts):
+1. After a container restart: `restore --batch-label <YYYY-MM-DD>` (or rely on
+   the SessionStart self-heal hook).
+2. Re-run the SAME `batch-build --manifest <m>` command. It skips any piece
+   whose final artefact already exists ("already built (skipped)", $0.00), so
+   "continue" after a limit or interruption is safe and costs nothing for
+   finished work. `--rebuild` forces a re-roll on purpose.
+3. Completed pieces are already durable (auto-snapshot pushes each render +
+   card to `deliverables` the moment a piece finishes).
+
+Do not wrap the runner in ad-hoc per-piece build scripts: the 21 July freeze
+happened inside exactly such a wrapper, and the wrapper is also what a restart
+deletes. batch-build IS the orchestrator.
+
 ## Durability: gitignored output does NOT survive a container restart
 
 The remote container is ephemeral: on restart it re-clones the repo, so ONLY

@@ -4218,6 +4218,19 @@ def cmd_batch_build(args):
             results.append({"slug": slug, "status": "error",
                             "detail": "slug not in manifest", "credit": 0.0})
             continue
+        # Resume guard: an interrupted batch is re-run with the same command, so
+        # a piece that already has its final artefact must not be rebuilt (it
+        # would re-spend model calls and re-roll approved output). --rebuild
+        # forces. The artefact check is the render PNG (image_prompt.txt for
+        # the parked claymation path).
+        done_marker = (os.path.join(PIECES_DIR, slug, "image_prompt.txt")
+                       if entry["format"].lower() == "claymation"
+                       else os.path.join(PIECES_DIR, slug, slug + ".png"))
+        if os.path.exists(done_marker) and not getattr(args, "rebuild", False):
+            print(f"[batch-build] {slug}: already built, skipping (use --rebuild to force)")
+            results.append({"slug": slug, "status": "already built (skipped)",
+                            "credit": 0.0})
+            continue
         print(f"[batch-build] {slug} ({entry['format']}) ...")
         rc, out, err = _run_piece(entry, "build", args.config)
         results.append(_assess_build(slug, entry, rc, out, err))
@@ -4251,7 +4264,8 @@ def _assess_build(slug, entry, rc, out, err):
 
 def _write_batch_summary(manifest_path, results):
     total = sum(r.get("credit", 0.0) for r in results)
-    done = sum(1 for r in results if r["status"] in ("complete", "claymation prompt ready"))
+    done = sum(1 for r in results if r["status"] in
+               ("complete", "claymation prompt ready", "already built (skipped)"))
     held = sum(1 for r in results if str(r["status"]).startswith("HELD"))
     errs = sum(1 for r in results if r["status"] == "error")
     out = ["# Sentrada batch — build summary", "",
@@ -5630,6 +5644,9 @@ def main():
     bd.add_argument("--no-snapshot", action="store_true", dest="no_snapshot",
                     help="skip auto-pushing built renders to the deliverables "
                          "branch (they will not survive a container restart)")
+    bd.add_argument("--rebuild", action="store_true",
+                    help="rebuild pieces whose final artefact already exists "
+                         "(default: an interrupted batch resumes by skipping them)")
     bd.set_defaults(func=cmd_batch_build)
 
     sn = sub.add_parser("snapshot",
