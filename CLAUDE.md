@@ -395,7 +395,9 @@ python sourcing/sourcing.py ...
               site pages + Companies House (key or manual URL); record with
               --evidence/--source, verdict office-confirmed | hybrid-likely |
               remote-likely. Remote-likely is NOT a rejection: it routes to
-              the address-capture play
+              the address-capture play (export stamps delivery_route:
+              address-capture; a manual route-address-capture tag forces the
+              same)
   dump/import durability while the repo is public: dump prints the full
               store, import --file [--replace] restores/merges it (merge is
               strongest-wins: decisions/enrichment in the dump survive)
@@ -403,15 +405,19 @@ python sourcing/sourcing.py ...
               capture-slug resolution, suffix-blind company keys), currency
               gate (unparseable dates fail closed, checks expire, undated
               gifting stories gate approval), scoring ageing, merges,
-              parsers, enrich guards, export tags. Free (no model or
-              network calls, temp stores only); run after any sourcing edit
+              parsers, enrich guards, export tags + delivery route. Free (no
+              model or network calls, temp stores only); run after any
+              sourcing edit
   export      approved + enriched + desk-checked -> research/sourcing-<date>/
               (gitignored): manifest skeleton + per-candidate signals file as
-              P1 input. source_signals ride the manifest into each piece's
-              meta.json (generate --source-signals) and the outcome ledger
-              harvests them, so response rate per signal source is computable
-              later. The weights in scoring.json eventually get set by that
-              data, not opinion
+              P1 input. Each manifest entry carries delivery_route (standard |
+              address-capture) so batch-build routes remote-likely / flagged
+              recipients through the tease flow without parsing prose.
+              source_signals ride the manifest into each piece's meta.json
+              (generate --source-signals) and the outcome ledger harvests
+              them, so response rate per signal source is computable later.
+              The weights in scoring.json eventually get set by that data,
+              not opinion
 
 THREAD HOLDS: one live thread per company, ever (multithreading accounts is
 fine, two simultaneous threads into one company is not). Computed live from

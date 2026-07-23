@@ -1655,6 +1655,15 @@ def cmd_export(args):
                     "signal_date": s.get("signal_date"),
                     "tags": sorted(r.get("tags") or [])}
                    for s in r["signals"]]
+        # Delivery route is machine-actionable so batch-build never has to
+        # parse prose: remote-likely desks (or an explicit route-address-
+        # capture tag) go through the tease/capture flow at pilot time, not
+        # the standard Birch delivery path.
+        verdict = (r.get("desk_check") or {}).get("verdict") or ""
+        route = ("address-capture"
+                 if verdict == "remote-likely"
+                 or "route-address-capture" in (r.get("tags") or [])
+                 else "standard")
         manifest.append({
             "name": r["person"] or "",
             "title": r.get("title") or "",
@@ -1664,7 +1673,8 @@ def cmd_export(args):
             "format": "",
             "research": f"{slug}.md",
             "source_signals": signals,
-            "desk_check": (r.get("desk_check") or {}).get("verdict") or "",
+            "desk_check": verdict,
+            "delivery_route": route,
         })
         lines = [f"# P1 candidate: {r['person'] or 'UNRESOLVED'} — "
                  f"{r['company']}", ""]
@@ -1696,9 +1706,14 @@ def cmd_export(args):
         lines += ["", f"## Desk check: {dc.get('verdict') or 'NOT DONE'}"]
         for src in dc.get("sources", []):
             lines += [f"- {src['evidence']}", f"  - {src['url']}"]
-        if dc.get("verdict") == "remote-likely":
-            lines += ["", "Routing: remote-likely -> address-capture play "
-                      "(tease link, not a rejection)."]
+        if route == "address-capture":
+            why = ("remote-likely desk" if verdict == "remote-likely"
+                   else "flagged route-address-capture")
+            lines += ["", f"## Delivery route: ADDRESS-CAPTURE ({why})",
+                      "At pilot time this recipient goes through the tease/"
+                      "capture flow (printed piece, one-off sentrada.io/for/"
+                      "<token> link collects the desk address), NOT the "
+                      "standard Birch delivery path. Not a rejection."]
         contact = enriched.get(r["id"], {}).get("raw")
         lines += ["", "## Contact data (from FullEnrich; this file lives in "
                   "gitignored research/, never commit contact data elsewhere)"]
@@ -1707,9 +1722,14 @@ def cmd_export(args):
                   if contact else "(not enriched)"]
         write_file(os.path.join(out_dir, f"{slug}-signals.md"),
                    "\n".join(lines) + "\n")
-        r["status"] = "exported"
-        r["piece_slug"] = slug
-        print(f"[export] {r['id']} -> {slug}-signals.md")
+        # A --force run is a preview of INCOMPLETE records: it must not flip
+        # status to exported (that would strand a name as handed-off when it
+        # was only glimpsed). Only genuinely complete records are marked.
+        if not missing:
+            r["status"] = "exported"
+            r["piece_slug"] = slug
+        print(f"[export] {r['id']} -> {slug}-signals.md"
+              + ("  (preview only, status unchanged)" if missing else ""))
 
     write_file(os.path.join(out_dir, "manifest.json"),
                json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
@@ -2150,6 +2170,38 @@ def cmd_probe(args):
               "stays separable in the outcome ledger)",
               bool(manifest) and "champion-moved"
               in (manifest[0]["source_signals"][0].get("tags") or []), out)
+        check("standard desk defaults to the standard delivery route",
+              bool(manifest)
+              and manifest[0].get("delivery_route") == "standard", out)
+        check("a --force preview of an incomplete record does NOT mark it "
+              "exported (status stays approved)",
+              load_store()["candidates"]["tag-probe-newco"]["status"]
+              == "approved", out)
+
+        # A remote-likely desk and a route-address-capture tag both drive the
+        # capture flow so batch-build never parses prose.
+        for cid, dc, tags in (("rl-probe", {"verdict": "remote-likely",
+                                            "sources": [], "date": today()},
+                               []),
+                              ("tag-probe", None, ["route-address-capture"])):
+            rr = base_rec(cid, status="approved", person="R L",
+                          company="RouteCo" + cid, tags=tags,
+                          desk_check=dc,
+                          currency={"checked": today(), "in_seat": True,
+                                    "method": "probe", "note": ""})
+            rr["signals"] = [{"type": "gifting-case-studies", "evidence": "e",
+                              "source_url": "https://u", "signal_date": None,
+                              "date_added": today()}]
+            write_file(STORE_PATH, json.dumps(
+                {"version": 1, "updated": today(),
+                 "candidates": {rr["id"]: rr}}))
+            od = os.path.join(RESEARCH_DIR, "route-" + cid)
+            _, o = quiet(lambda: cmd_export(
+                argparse.Namespace(out=od, force=True)))
+            m = json.loads(read_file(os.path.join(od, "manifest.json")))
+            check(f"{cid}: routes to address-capture",
+                  bool(m) and m[0].get("delivery_route") == "address-capture",
+                  o)
         check("real scoring.json keeps undated_requires_currency_check on "
               "gifting-case-studies (fixture drift guard)",
               (load_scoring()["signals"]["gifting-case-studies"]
