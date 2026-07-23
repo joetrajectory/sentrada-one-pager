@@ -27,6 +27,10 @@ What they sell: {{sender_what}}
 Proof points: {{sender_proof}}
 Booking link: {{booking_link}}
 Sender writes their own companion card: {{custom_card}}
+Sender writes their own follow-up sequence: {{custom_followup}}
+Sender sells the outreach channel itself: {{sender_sells_outreach}}
+
+**SENDER TYPE (authoritative — obey this over any inference from the company name):** {{sender_type_directive}}
 
 **Delivery date:** {{delivery_date}}
 
@@ -218,11 +222,15 @@ No subject line. Shorter and more casual, still references the piece.
 2. One sentence on the hook or problem
 3. CTA in your own words for this recipient (the register of "if it landed, happy to compare notes", never that exact line if it would fit another recipient's message)
 
-Also write a CONNECTION NOTE variant for when the sender is not connected to the recipient on LinkedIn: the same idea compressed to 280 characters or fewer (LinkedIn truncates connection notes around 300), self-contained, no assumed reply thread. Count the characters before finalising.
+Also write a CONNECTION NOTE variant. This is the DEFAULT LinkedIn entry point (the sender is usually not yet connected), NOT the Touch 2 message compressed. Its only job is to link the connection request to the physical object so the recipient accepts; the conversation happens after they connect. One sentence, this shape: "[First name], that massive [object] on your desk was from me. [Sender first name]" (e.g. "Grace, that massive crossword on your desk was from me. Joe"; "Chris, that massive cold email on your desk was from me. Joe"). Name the object plainly with its size ("massive"/"giant") and per format (crossword / newspaper front page / cold email). No value proposition, no CTA, no pitch: the connection request itself is the ask. Match the location to the real delivery ("on your desk", or reception/tease wording when it did not land on the desk). Well under the 280-character LinkedIn limit by design; count the characters before finalising.
 
-### Touch 3: Bump email (day 7, if no reply)
+### Touch 3: Second email (LinkedIn skipped; the sender's second and usually final email)
 
-No subject line (it replies in the Touch 1 thread). 2-3 sentences. Never a generic opener. Lead with the Reserve research detail as a fresh observation, date-anchored if it is time-sensitive. Do not restate the key metric. Under WOULD ADMIRE AND IGNORE, frame the reserve detail as the reason to act now. End with the lowest-friction CTA of the sequence, phrased for this recipient; do not default to "Worth 15 minutes?" (see batch collision rule).
+Replies in the Touch 1 thread, so no new subject line. Even shorter than Touch 1: 3 to 5 one-line sentences plus the CTA. Assumes the recipient has already seen Touch 1 and the piece, so it does NOT re-describe the object or restate the key metric.
+
+1. Open on a fresh, fully one-to-one observation from the recipient's own world: their report, their homepage line, their public teaching, a view they have stated ("Your own report says C-level buyers have stopped responding to volume plays"; "Your homepage says deals happen between meetings"; "You talk publicly about what good ABM looks like"). Never a generic opener, never the fact of arrival. The held-back Reserve research detail is one good source for this line; date-anchor it if it is time-sensitive.
+2. One value argument, one line. A genuinely strong line MAY repeat across recipients (e.g. the un-scalability / effort argument) ONLY when the opening and CTA are fully one-to-one for this recipient. The strategic point that the piece cannot be scaled or templated is allowed and encouraged; narrating your own craft labour is not (see the Touch 1 craft-meta ban). SENDER-AWARE: reusable lines that name Sentrada's own channel ("effort is the one signal senior buyers still trust", "our A2 pieces open the door", the 40% stat) are Sentrada-as-sender only; a client send makes the client's own proposition the value argument.
+3. Low-friction CTA, per the three-way CTA rule (buyer / connector / recognised authority). Do not default to a stock ask like "Worth 15 minutes?" (see batch collision rule).
 
 ### Reception nudge variant (delivery confirmed to building, not desk)
 
@@ -237,7 +245,9 @@ If 6B verdict is WOULD BIN, output only the suppression flag from Step 0 and sto
 Otherwise:
 
 **COMPANION CARD (in the box, finalise before print):**
-[150 words maximum, or note that sender will provide their own]
+[150 words maximum. If "Sender writes their own companion card" is yes, write no card copy and output exactly: Sender will provide custom companion card]
+
+If "Sender writes their own follow-up sequence" is yes: output exactly the single line **Sender will provide their own follow-up sequence**, write NONE of the Touch 1 / Touch 2 / Touch 3 / reception-nudge sections below, and still output the FACT CHECK LIST for any card copy. Otherwise write the full sequence:
 
 **TOUCH 1 EMAIL (24-48h after confirmed delivery):**
 Subject: [six words or fewer, names the artefact]

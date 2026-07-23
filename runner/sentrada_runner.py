@@ -945,60 +945,81 @@ def _generate_newspaper(args, config, folder, base_values, brief, meta):
 
     model = model_for(config, "p4")
     research = base_values["research"]
-    attempt, feedback_block = 0, ""
-    while True:
-        attempt += 1
-        prompt = fill(template, dict(brief_values, feedback_block=feedback_block))
-        print(f"\n[prompt 4] writing newspaper copy ({model}, attempt {attempt})...")
-        reply, data = cli_json(prompt, model)
-        copy_part, factcheck = split_factcheck(reply)
-
-        problems = list(newspaper_violations(data))
-        print(f"[prompt 4b] factual grounding check ({model_for(config, 'p4b')})...")
-        grounded, issues = grounding_check(config, research, newspaper_copy_text(data))
-        problems += [f"unsupported claim \"{i.get('claim', '')}\": {i.get('issue', '')}"
-                     for i in issues]
-
-        if not problems:
-            break
-        if attempt >= 3:
-            die("Prompt 4 newspaper failed the gates after 3 attempts (word count "
-                "and/or factual grounding):\n  - " + "\n  - ".join(problems))
-        print("[gate] violations found, rerunning Prompt 4 once:")
-        for x in problems:
-            print(f"  - {x}")
-        feedback_block = ("YOUR PREVIOUS DRAFT FAILED THESE HARD CHECKS. Fix every "
-                          "one and keep everything else. Any 'unsupported claim' below "
-                          "is a fact the research does not support: remove it or "
-                          "replace it with a fact the research does support.\n- "
-                          + "\n- ".join(problems))
-
-    write_file(os.path.join(folder, "copy.md"), copy_part)
-    write_file(os.path.join(folder, "factcheck.md"), factcheck or "(none returned)")
-
-    engine_data = engine_data_only(data)
     data_path = os.path.join(folder, "data.json")
-    write_file(data_path, json.dumps(engine_data, indent=2))
+    brief_path = os.path.join(folder, "brief.json")
+    # Stage checkpoint. On the newspaper path data.json is written only AFTER
+    # the copy has passed every gate, so a data.json newer than the approved
+    # brief is a completed copy stage. The container this runs in can be
+    # recycled mid-build; a resumed run must not re-spend a Prompt 4 loop that
+    # already succeeded. (A data.json OLDER than the brief is a stale leftover
+    # from a previous brief and is ignored: the loop runs.)
+    if (os.path.exists(data_path)
+            and os.path.getmtime(data_path) > os.path.getmtime(brief_path)):
+        print("[checkpoint] gated copy already on disk (data.json newer than "
+              "brief.json); skipping Prompt 4 and the copy gates")
+        engine_data = json.loads(read_file(data_path))
+    else:
+        attempt, feedback_block = 0, ""
+        while True:
+            attempt += 1
+            prompt = fill(template, dict(brief_values, feedback_block=feedback_block))
+            print(f"\n[prompt 4] writing newspaper copy ({model}, attempt {attempt})...")
+            reply, data = cli_json(prompt, model)
+            copy_part, factcheck = split_factcheck(reply)
+
+            problems = list(newspaper_violations(data))
+            print(f"[prompt 4b] factual grounding check ({model_for(config, 'p4b')})...")
+            grounded, issues = grounding_check(config, research, newspaper_copy_text(data))
+            problems += [f"unsupported claim \"{i.get('claim', '')}\": {i.get('issue', '')}"
+                         for i in issues]
+
+            if not problems:
+                break
+            if attempt >= 3:
+                die("Prompt 4 newspaper failed the gates after 3 attempts (word count "
+                    "and/or factual grounding):\n  - " + "\n  - ".join(problems))
+            print("[gate] violations found, rerunning Prompt 4 once:")
+            for x in problems:
+                print(f"  - {x}")
+            feedback_block = ("YOUR PREVIOUS DRAFT FAILED THESE HARD CHECKS. Fix every "
+                              "one and keep everything else. Any 'unsupported claim' below "
+                              "is a fact the research does not support: remove it or "
+                              "replace it with a fact the research does support.\n- "
+                              + "\n- ".join(problems))
+
+        write_file(os.path.join(folder, "copy.md"), copy_part)
+        write_file(os.path.join(folder, "factcheck.md"), factcheck or "(none returned)")
+
+        engine_data = engine_data_only(data)
+        write_file(data_path, json.dumps(engine_data, indent=2))
 
     engine_path = os.path.join(REPO_ROOT, config.get("engine", "newspaper/newspaper.py"))
     template_path = os.path.join(
         REPO_ROOT, config.get("newspaper_template",
                               "newspaper/Newspaper Template - Upscaled - 25mb.jpg"))
 
-    print("\n[engine] running --check on data.json...")
-    rc, out = run_engine(engine_path, template_path, data_path, check=True)
-    print(out.strip())
-    if rc != 0:
-        die("the layout engine's --check FAILED. Nothing rendered. Fix the copy "
-            "or template and re-run. See the engine output above.")
-
     output_path = os.path.join(folder, f"{slugify(args.name)}-{slugify(args.company)}.png")
-    print("\n[engine] rendering the print-ready newspaper...")
-    rc, out = run_engine(engine_path, template_path, data_path, output_path=output_path)
-    print(out.strip())
-    if rc != 0 or not os.path.exists(output_path):
-        die("the render failed (see engine output above). A *.FAILED file may have "
-            "been written for inspection.")
+    # Stage checkpoint: a render newer than the gated copy is a completed
+    # render stage (the engine is deterministic, so re-rendering identical
+    # data.json wastes nothing but time we may not have before a recycle).
+    if (os.path.exists(output_path)
+            and os.path.getmtime(output_path) > os.path.getmtime(data_path)):
+        print("[checkpoint] render already on disk and newer than data.json; "
+              "skipping the engine, resuming at QC")
+    else:
+        print("\n[engine] running --check on data.json...")
+        rc, out = run_engine(engine_path, template_path, data_path, check=True)
+        print(out.strip())
+        if rc != 0:
+            die("the layout engine's --check FAILED. Nothing rendered. Fix the copy "
+                "or template and re-run. See the engine output above.")
+
+        print("\n[engine] rendering the print-ready newspaper...")
+        rc, out = run_engine(engine_path, template_path, data_path, output_path=output_path)
+        print(out.strip())
+        if rc != 0 or not os.path.exists(output_path):
+            die("the render failed (see engine output above). A *.FAILED file may have "
+                "been written for inspection.")
 
     meta["piece_reference"] = (
         f'the front page of "{engine_data.get("masthead_name", "")}", '
@@ -1148,7 +1169,18 @@ def run_chain_after_render(config, folder, image_path, delivery_date):
         _print_usage("this piece")
         return
 
-    reply = _p7(config, folder, delivery_date)
+    sender = config["sender"]
+    want_followup = _resolve_followup(sender)
+    if sender.get("custom_card") and not want_followup:
+        # Client provides both the card and the follow-up: nothing for P7 to write.
+        write_file(os.path.join(folder, "followup.md"),
+                   "Sender will provide custom companion card.\n\n"
+                   "Sender will provide their own follow-up sequence.\n")
+        print("[prompt 7] skipped: sender provides their own card and follow-up.")
+        _print_package(image_path, review, v6, sixb, v6b,
+                       "(sender provides their own card and follow-up)")
+        return
+    reply = _p7(config, folder, delivery_date, want_followup=want_followup)
     card_png = _generate_card(config, folder, reply)   # step 8b: companion card
     if card_png:
         # Step 8c: the package pass. The piece-stage 6B above judged the artefact
@@ -1790,7 +1822,42 @@ def _piece_reference(folder, meta):
     return meta.get("piece_reference", "")
 
 
-def _p7(config, folder, delivery_date):
+def _sender_type_directive(sender):
+    """The authoritative, explicit sender-identity instruction injected into P7,
+    so the Sentrada-vs-client copy branches key off a config flag rather than the
+    model inferring identity from the company name."""
+    if sender.get("sells_outreach"):
+        return ("This sender IS Sentrada, selling the physical-outreach channel "
+                "itself: the piece doubles as a product demo and the recipient is a "
+                "prospective client of the channel. Apply the Sentrada-as-sender "
+                "branches; the channel pitch, the format menu and Sentrada's own "
+                "results are all in scope.")
+    return ("This sender is a CLIENT; Sentrada built the piece for them. The "
+            "recipient is the client's own prospect. Apply the client-send "
+            "branches: sell only the CLIENT'S proposition, and never pitch the "
+            "outreach channel, the format menu, or Sentrada's own results.")
+
+
+def _resolve_followup(sender):
+    """Decide whether the pipeline generates follow-up copy. Sentrada-as-sender
+    generates by default (the follow-up is the product). For a client sender it
+    is opt-in: an explicit sender.custom_followup wins; otherwise the runner
+    confirms interactively, and skips (with a notice) when there is no TTY."""
+    if sender.get("custom_followup") is not None:
+        return not sender.get("custom_followup")
+    if sender.get("sells_outreach"):
+        return True
+    if sys.stdin.isatty():
+        ans = input("\n[followup] Client send. Generate follow-up copy for the "
+                    "client? [y/N] ").strip().lower()
+        return ans in ("y", "yes")
+    print("[followup] client sender with no \"custom_followup\" set and no "
+          "interactive prompt; SKIPPING follow-up. Set \"custom_followup\": false "
+          "in the sender profile to generate it.")
+    return False
+
+
+def _p7(config, folder, delivery_date, want_followup=True):
     meta = json.loads(read_file(os.path.join(folder, "meta.json")))
     brief = json.loads(read_file(os.path.join(folder, "brief.json")))
     research = read_file(os.path.join(folder, "research.md"))
@@ -1886,6 +1953,9 @@ def _p7(config, folder, delivery_date):
         "sender_what": sender.get("what_they_sell", ""), "sender_proof": sender.get("proof_points", ""),
         "booking_link": sender.get("booking_link", ""), "delivery_date": delivery_date,
         "custom_card": "yes" if sender.get("custom_card") else "no",
+        "custom_followup": "no" if want_followup else "yes",
+        "sender_sells_outreach": "yes" if sender.get("sells_outreach") else "no",
+        "sender_type_directive": _sender_type_directive(sender),
     }
     base_prompt = fill(load_template("prompt7_followup.md"), values)
     # The follow-up goes out under the sender's name carrying factual and proof
@@ -2307,6 +2377,8 @@ def _copy_lint(folder, fmt):
         text = read_file(fu_path)
         if "WOULD BIN" in text and "suppressed" in text:
             return holds, warns          # suppression notice, nothing to lint
+        if "provide their own follow-up sequence" in text.lower():
+            return holds, warns          # client writes their own touches, nothing to lint
         body = _followup_body(text)
         low = body.lower()
         for phrase in _BANNED_FOLLOWUP_LINES:
@@ -3023,7 +3095,15 @@ def cmd_followup(args):
     _usage_reset()
     config = load_config(args.config)
     folder = args.folder
-    reply = _p7(config, folder, args.delivery_date)
+    sender = config["sender"]
+    want_followup = _resolve_followup(sender)
+    if sender.get("custom_card") and not want_followup:
+        write_file(os.path.join(folder, "followup.md"),
+                   "Sender will provide custom companion card.\n\n"
+                   "Sender will provide their own follow-up sequence.\n")
+        print("[prompt 7] skipped: sender provides their own card and follow-up.")
+        return
+    reply = _p7(config, folder, args.delivery_date, want_followup=want_followup)
     # Mirror the chain's conversion tail: render the card (skipped for
     # custom-card senders) and, when one exists, refresh the package pass so
     # the regenerated card copy never ships judged only in its previous form.
@@ -4159,6 +4239,19 @@ def cmd_batch_build(args):
             results.append({"slug": slug, "status": "error",
                             "detail": "slug not in manifest", "credit": 0.0})
             continue
+        # Resume guard: an interrupted batch is re-run with the same command, so
+        # a piece that already has its final artefact must not be rebuilt (it
+        # would re-spend model calls and re-roll approved output). --rebuild
+        # forces. The artefact check is the render PNG (image_prompt.txt for
+        # the parked claymation path).
+        done_marker = (os.path.join(PIECES_DIR, slug, "image_prompt.txt")
+                       if entry["format"].lower() == "claymation"
+                       else os.path.join(PIECES_DIR, slug, slug + ".png"))
+        if os.path.exists(done_marker) and not getattr(args, "rebuild", False):
+            print(f"[batch-build] {slug}: already built, skipping (use --rebuild to force)")
+            results.append({"slug": slug, "status": "already built (skipped)",
+                            "credit": 0.0})
+            continue
         print(f"[batch-build] {slug} ({entry['format']}) ...")
         rc, out, err = _run_piece(entry, "build", args.config)
         results.append(_assess_build(slug, entry, rc, out, err))
@@ -4168,7 +4261,8 @@ def cmd_batch_build(args):
     # branch immediately. runner/pieces/ does not survive a container restart;
     # the deliverables branch does. Guarded so a snapshot failure only warns.
     if not getattr(args, "no_snapshot", False):
-        _auto_snapshot([r["slug"] for r in results if r["status"] == "complete"],
+        _auto_snapshot([r["slug"] for r in results
+                        if r["status"] in ("complete", "already built (skipped)")],
                        _batch_label(args.manifest))
 
 
@@ -4192,7 +4286,8 @@ def _assess_build(slug, entry, rc, out, err):
 
 def _write_batch_summary(manifest_path, results):
     total = sum(r.get("credit", 0.0) for r in results)
-    done = sum(1 for r in results if r["status"] in ("complete", "claymation prompt ready"))
+    done = sum(1 for r in results if r["status"] in
+               ("complete", "claymation prompt ready", "already built (skipped)"))
     held = sum(1 for r in results if str(r["status"]).startswith("HELD"))
     errs = sum(1 for r in results if r["status"] == "error")
     out = ["# Sentrada batch — build summary", "",
@@ -5571,6 +5666,9 @@ def main():
     bd.add_argument("--no-snapshot", action="store_true", dest="no_snapshot",
                     help="skip auto-pushing built renders to the deliverables "
                          "branch (they will not survive a container restart)")
+    bd.add_argument("--rebuild", action="store_true",
+                    help="rebuild pieces whose final artefact already exists "
+                         "(default: an interrupted batch resumes by skipping them)")
     bd.set_defaults(func=cmd_batch_build)
 
     sn = sub.add_parser("snapshot",
