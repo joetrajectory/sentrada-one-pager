@@ -603,27 +603,40 @@ account clicks. Generate a fresh RUNNER_SECRET at deployment time; treat any
 secret that ever appeared in a conversation as burned. Delete this paragraph
 once deployed and logged in the runbook.
 
-## Build runs need a LIVE session (no unattended/overnight promises)
+## Build runs: persistent Hetzner server (migrated 24 July 2026)
 
-Two environment facts, learned the hard way on 21-22 July 2026, that bind every
-session in this repo:
+The runner now executes on a persistent Hetzner server, driven by a Claude Code
+session inside a detached tmux session and steered via Remote Control (the
+Claude app/web is a window onto that server, not the machine doing the work).
+This removes the failure that defined the old setup: the Anthropic cloud
+container that hosted earlier sessions paused when it went idle and froze the
+`claude` process mid model call (the 21-22 July overnight build produced nothing
+for 6.5 hours and never errored -- background jobs on that container froze
+silently, they did not fail loudly). tmux keeps the process alive when the app
+or terminal detaches, and Hetzner does not suspend-on-idle, so a build now
+continues while the sender is away. Unattended runs are therefore possible
+again, within the limits below. This setup is newly migrated (24 July 2026):
+watch the first long build to confirm it holds before trusting it fully.
 
-- The remote container pauses when the session goes idle and is sometimes
-  recreated. A backgrounded build does NOT keep running while the sender is
-  away: the overnight orchestrator froze mid model call at 23:53 with the
-  usage limit untouched, produced nothing for 6.5 hours, and never errored.
-  Background jobs freeze silently; they do not fail loudly. NEVER promise the
-  sender an unattended or overnight run. Builds progress only while the
-  session is active.
-- The sender's subscription usage comes in 5-HOUR rolling windows (sender
-  confirmed, 22 July 2026). A spent window returns 429 "session limit ·
-  resets <time>"; the runner halts cleanly. Do not describe window length,
-  billing, or credits from guesswork: this paragraph and the sender are the
-  sources.
+What can still stop a long build, neither an environment bug:
+- The subscription usage window: 5-HOUR rolling windows (sender confirmed, 22
+  July 2026). A spent window returns 429 "session limit · resets <time>" and the
+  runner halts cleanly. This is unchanged by the server move; it is now the most
+  likely reason a long batch stops, and it is normal behaviour, not a fault. Do
+  not describe window length, billing or credits from guesswork: this paragraph
+  and the sender are the sources.
+- A server reboot: tmux does NOT survive a Hetzner reboot on its own, so the
+  session and any in-flight build die with it. Reboots are rare (mostly only
+  when the box is deliberately updated); do not reboot mid-batch. Auto-starting
+  tmux on boot via systemd would make even this recoverable, but is NOT yet
+  configured.
+- Extended network loss on the server (>~10 min) times out Remote Control and
+  exits the process. Rare on Hetzner datacentre network.
 
 The resume procedure (one tested path, no custom orchestration scripts):
-1. After a container restart: `restore --batch-label <YYYY-MM-DD>` (or rely on
-   the SessionStart self-heal hook).
+1. If the server was rebooted or the session was lost and runner/pieces/ was
+   cleared, restore renders with `restore --batch-label <YYYY-MM-DD>` (on a
+   persistent server it usually survives; see Durability below).
 2. Re-run the SAME `batch-build --manifest <m>` command. It skips any piece
    whose final artefact already exists ("already built (skipped)", $0.00), so
    "continue" after a limit or interruption is safe and costs nothing for
@@ -632,19 +645,22 @@ The resume procedure (one tested path, no custom orchestration scripts):
    card to `deliverables` the moment a piece finishes).
 
 Do not wrap the runner in ad-hoc per-piece build scripts: the 21 July freeze
-happened inside exactly such a wrapper, and the wrapper is also what a restart
-deletes. batch-build IS the orchestrator.
+happened inside exactly such a wrapper on the old container, and such wrappers
+add fragility without benefit. batch-build IS the orchestrator.
 
-## Durability: gitignored output does NOT survive a container restart
+## Durability: renders live on one server now -- back them up anyway
 
-The remote container is ephemeral: on restart it re-clones the repo, so ONLY
-committed-and-pushed files come back. `runner/pieces/` and `research/` are
-gitignored (they hold personal data), so a restart wipes every render, card,
-follow-up, data.json and research input that was not pushed somewhere durable.
-This is not hypothetical: batch-2026-07-09's ten print-ready renders were lost
-to exactly this on 14 July.
+On the persistent Hetzner server, `runner/pieces/` and `research/` (both
+gitignored, they hold personal data) survive between sessions -- they are no
+longer wiped on every restart the way they were on the old ephemeral container,
+where batch-2026-07-09's ten print-ready renders were lost on 14 July. That
+removes the day-to-day loss risk but NOT the tail risk: a single server's disk
+is one point of failure (server rebuild or replacement, disk loss, an accidental
+delete, or re-cloning the repo fresh elsewhere all still lose anything not
+pushed somewhere durable). Renders are expensive to regenerate, so they still
+get backed up.
 
-The fix is mechanical, not a habit to remember:
+The backup is mechanical, not a habit to remember:
 - `batch-build` auto-pushes every completed piece's render + card PNG to the
   `deliverables` branch the instant the build finishes (`_auto_snapshot`);
   within seconds of existing, a render lives in git. The push is guarded: a
@@ -653,18 +669,18 @@ The fix is mechanical, not a habit to remember:
   pushes on demand; it is idempotent (byte-identical files already on the branch
   are skipped) and pushes file by file so a batch never builds a >100MB pack.
 - `restore --batch-label <YYYY-MM-DD>` (or `--manifest <m>`) pulls a batch's
-  renders + cards back into `runner/pieces/` after a restart. It restores the
-  expensive, hard-to-regenerate outputs only; data.json / research / QC are
-  rebuilt from research (system of record: the Notion Sentrada Claude Project)
-  if the chain must be re-run.
+  renders + cards back into `runner/pieces/` if the server ever loses them. It
+  restores the expensive, hard-to-regenerate outputs only; data.json / research
+  / QC are rebuilt from research (system of record: the Notion Sentrada Claude
+  Project) if the chain must be re-run.
 - What is NOT made durable, by design: research inputs and data.json (they carry
   personal data and cannot go to a code or print branch) and the delivery CSV.
-  After a restart, re-paste research from Notion to rebuild those; the renders
-  themselves come back from `deliverables`.
+  Re-paste research from Notion to rebuild those; the renders themselves come
+  back from `deliverables`.
 
-Rule of thumb: if a container restart would lose it and it was expensive to
-make, it must be on a branch before you move on. Renders are; treat everything
-in `runner/pieces/` as disposable working state between snapshots.
+Rule of thumb: if losing the server would lose it and it was expensive to make,
+it must be on a branch before you move on. Renders are covered by auto-snapshot;
+treat everything else in `runner/pieces/` as working state.
 
 ## Print-ready deliverables (the `deliverables` branch)
 
